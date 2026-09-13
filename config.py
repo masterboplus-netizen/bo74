@@ -1,9 +1,36 @@
-"""Application configuration."""
+"""Конфигурация БО 7.2"""
+import os
+from dotenv import load_dotenv
 
-from pathlib import Path
+load_dotenv()
 
-from core.settings import Settings
+# === TELEGRAM ===
+TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
+
+# === БАЗА ДАННЫХ ===
+DB_PATH = os.getenv("DB_PATH", "bo72.db")
+
+# === СИСТЕМНЫЕ ===
+DEFAULT_LANGUAGE = "ru"
+DEFAULT_MODE = "brief"
+TIMEZONE = "Europe/Moscow"
+VERSION = "7.2"
 
 
-BASE_DIR = Path(__file__).resolve().parent
-settings = Settings.from_environment(BASE_DIR)
+def validate_config() -> bool:
+    errors = []
+    if TOKEN == "YOUR_BOT_TOKEN_HERE":
+        errors.append("❌ BOT_TOKEN не задан в .env")
+    if not ADMIN_IDS:
+        errors.append("⚠️ ADMIN_IDS пуст")
+    if errors:
+        for e in errors:
+            print(e)
+        return False
+    print(f"✅ Конфиг БО {VERSION} валиден")
+    return True
+
+
+if __name__ == "__main__":
+    validate_config()
