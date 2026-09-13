@@ -3,4 +3,4 @@ run = "python main.py"
 
 [nix]
 channel = "stable-25_05"
-packages = ["python313Packages.python-dotenv"]
+packages = ["python313Packages.python-dotenv", "python313Packages.python-telegram-bot"]
