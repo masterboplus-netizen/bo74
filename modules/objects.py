@@ -4,7 +4,6 @@ from datetime import datetime
 
 
 def create_object(name: str, address: str = None, budget: int = 0, user_id: int = None) -> int:
-    """Создаёт объект, возвращает ID"""
     conn = get_connection()
     c = conn.cursor()
     code = f"OBJ-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -19,43 +18,28 @@ def create_object(name: str, address: str = None, budget: int = 0, user_id: int 
 
 
 def get_object(object_id: int) -> dict:
-    """Возвращает объект по ID"""
     conn = get_connection()
     c = conn.cursor()
-    c.execute(
-        "SELECT id, code, name, address, status, budget FROM objects WHERE id = ?",
-        (object_id,)
-    )
+    c.execute("SELECT id, code, name, address, status, budget FROM objects WHERE id = ?", (object_id,))
     row = c.fetchone()
     conn.close()
     if row:
-        return {
-            'id': row[0], 'code': row[1], 'name': row[2],
-            'address': row[3], 'status': row[4], 'budget': row[5]
-        }
+        return {'id': row[0], 'code': row[1], 'name': row[2], 'address': row[3], 'status': row[4], 'budget': row[5]}
     return None
 
 
 def get_object_by_name(name: str) -> dict:
-    """Ищет объект по частичному имени"""
     conn = get_connection()
     c = conn.cursor()
-    c.execute(
-        "SELECT id, code, name, address, status, budget FROM objects WHERE name LIKE ? AND status != 'archived'",
-        (f'%{name}%',)
-    )
+    c.execute("SELECT id, code, name, address, status, budget FROM objects WHERE name LIKE ? AND status != 'archived'", (f'%{name}%',))
     row = c.fetchone()
     conn.close()
     if row:
-        return {
-            'id': row[0], 'code': row[1], 'name': row[2],
-            'address': row[3], 'status': row[4], 'budget': row[5]
-        }
+        return {'id': row[0], 'code': row[1], 'name': row[2], 'address': row[3], 'status': row[4], 'budget': row[5]}
     return None
 
 
 def get_all_objects() -> list:
-    """Возвращает все активные объекты"""
     conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT id, code, name, status FROM objects WHERE status != 'archived' ORDER BY created_at DESC")
@@ -65,7 +49,6 @@ def get_all_objects() -> list:
 
 
 def update_object_status(object_id: int, status: str):
-    """Меняет статус объекта"""
     conn = get_connection()
     c = conn.cursor()
     c.execute("UPDATE objects SET status = ? WHERE id = ?", (status, object_id))
