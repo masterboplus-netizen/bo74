@@ -1,8 +1,5 @@
-"""Конфигурация БО 7.2"""
+"""Конфигурация БО 7.2 — без dotenv"""
 import os
-from dotenv import load_dotenv
-
-load_dotenv()
 
 # === TELEGRAM ===
 TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
@@ -21,7 +18,7 @@ VERSION = "7.2"
 def validate_config() -> bool:
     errors = []
     if TOKEN == "YOUR_BOT_TOKEN_HERE":
-        errors.append("❌ BOT_TOKEN не задан в .env")
+        errors.append("❌ BOT_TOKEN не задан")
     if not ADMIN_IDS:
         errors.append("⚠️ ADMIN_IDS пуст")
     if errors:
