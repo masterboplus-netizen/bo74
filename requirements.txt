@@ -1,1 +1,2 @@
-# This project currently uses only Python's standard library.
+# Project dependencies
+python-dotenv
