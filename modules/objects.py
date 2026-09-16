@@ -6,7 +6,7 @@ from datetime import datetime
 def create_object(name: str, address: str = None, budget: int = 0, user_id: int = None) -> int:
     conn = get_connection()
     c = conn.cursor()
-    code = f"OBJ-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    import uuid; code = f"OBJ-{uuid.uuid4().hex[:8].upper()}"
     c.execute(
         "INSERT INTO objects (code, name, address, budget, created_by) VALUES (?, ?, ?, ?, ?)",
         (code, name, address, budget, user_id)
@@ -31,7 +31,7 @@ def get_object(object_id: int) -> dict:
 def get_object_by_name(name: str) -> dict:
     conn = get_connection()
     c = conn.cursor()
-    c.execute("SELECT id, code, name, address, status, budget FROM objects WHERE name LIKE ? AND status != 'archived'", (f'%{name}%',))
+    c.execute("SELECT id, code, name, address, status, budget FROM objects WHERE LOWER(name) LIKE LOWER(?) AND status != 'archived'", (f'%{name}%',))
     row = c.fetchone()
     conn.close()
     if row:
@@ -42,7 +42,7 @@ def get_object_by_name(name: str) -> dict:
 def get_all_objects() -> list:
     conn = get_connection()
     c = conn.cursor()
-    c.execute("SELECT id, code, name, status FROM objects WHERE status != 'archived' ORDER BY created_at DESC")
+    c.execute("SELECT id, code, name, status FROM objects WHERE status IN ('active', 'paused', 'waiting') ORDER BY created_at DESC")
     rows = c.fetchall()
     conn.close()
     return [{'id': r[0], 'code': r[1], 'name': r[2], 'status': r[3]} for r in rows]

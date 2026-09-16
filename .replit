@@ -3,7 +3,7 @@ run = "python main.py"
 
 [nix]
 channel = "stable-25_05"
-packages = ["python313Packages.python-dotenv", "python313Packages.python-telegram-bot"]
+packages = ["nano", "python313Packages.python-dotenv", "python313Packages.python-telegram-bot"]
 
 [workflows]
 runButton = "Project"

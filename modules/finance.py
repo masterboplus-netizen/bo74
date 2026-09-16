@@ -46,3 +46,44 @@ def get_personal_expenses() -> int:
     total = c.fetchone()[0] or 0
     conn.close()
     return total
+
+def get_all_finance_summary():
+    """Возвращает финансы по всем объектам"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT o.id, o.name,
+               COALESCE(SUM(CASE WHEN f.type = 'income' THEN f.amount ELSE 0 END), 0) as income,
+               COALESCE(SUM(CASE WHEN f.type = 'expense' THEN f.amount ELSE 0 END), 0) as expense
+        FROM objects o
+        LEFT JOIN finance f ON f.object_id = o.id
+        WHERE o.status != 'archived'
+        GROUP BY o.id, o.name
+        ORDER BY o.name
+    """)
+    rows = c.fetchall()
+
+    # Общая сводка
+    c.execute("SELECT COALESCE(SUM(amount), 0) FROM finance WHERE type = 'income'")
+    total_income = c.fetchone()[0] or 0
+    c.execute("SELECT COALESCE(SUM(amount), 0) FROM finance WHERE type = 'expense'")
+    total_expense = c.fetchone()[0] or 0
+
+    conn.close()
+
+    objects = []
+    for r in rows:
+        objects.append({
+            'id': r[0],
+            'name': r[1],
+            'income': r[2],
+            'expense': r[3],
+            'balance': r[2] - r[3]
+        })
+
+    return {
+        'total_income': total_income,
+        'total_expense': total_expense,
+        'total_balance': total_income - total_expense,
+        'objects': objects
+    }
