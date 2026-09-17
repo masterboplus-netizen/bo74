@@ -5,6 +5,21 @@ from modules.tasks import create_task, close_task, get_tasks_by_object, get_acti
 from modules.finance import add_expense, add_income, get_finance_summary
 
 
+def parse_amount(text: str):
+    """Парсит сумму: 5000, 5к, 5 к, 5К, 5 кк"""
+    text_lower = text.lower().replace(',', '.')
+    m = re.search(r'(\d+)\s*кк', text_lower)
+    if m:
+        return int(m.group(1)) * 1000000
+    m = re.search(r'(\d+)\s*к(?!к)', text_lower)
+    if m:
+        return int(m.group(1)) * 1000
+    m = re.search(r'(\d{3,})', text_lower)
+    if m:
+        return int(m.group(1))
+    return None
+
+
 def find_all_objects_in_text(text: str):
     """Возвращает ВСЕ найденные объекты (список)"""
     text_lower = text.lower()
@@ -143,27 +158,3 @@ def parse_message(text: str) -> dict:
             return {'action': 'add_task', 'object': obj, 'title': title}
 
     return {'action': 'unknown', 'text': text}
-
-
-def parse_amount(text: str):
-    """Парсит сумму: 450, 5000, 5к, 5 к, 5К, 5 кк"""
-    import re
-    text_lower = text.lower().replace(',', '.')
-
-    m = re.search(r'(\d+)\s*кк', text_lower)
-    if m:
-        return int(m.group(1)) * 1000000
-
-    m = re.search(r'(\d+)\s*к(?!к)', text_lower)
-    if m:
-        return int(m.group(1)) * 1000
-
-    m = re.search(r'(\d[\d\s]*\d|\d)', text_lower)
-    if m:
-        digits = re.sub(r'\s+', '', m.group(1))
-        if digits.isdigit():
-            amount = int(digits)
-            if 0 < amount <= 100_000_000:
-                return amount
-
-    return None

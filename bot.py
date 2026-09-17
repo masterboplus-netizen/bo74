@@ -1,10 +1,11 @@
 """Точка сборки БО 7.2"""
 import logging
+from telegram import BotCommand
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from config import TOKEN, validate_config
 from db import init_db
 from handlers.commands import (
-    handle_task_action, handle_confirm_date,
+    handle_task_action, handle_add_menu, handle_confirm_date,
     handle_choose_object, handle_category,
     start, help_command, add_object_command, objects_command,
     add_task_command, tasks_command, done_command,
@@ -25,6 +26,19 @@ def main():
 
     app = Application.builder().token(TOKEN).build()
 
+    # Настройка постоянного меню команд
+    async def post_init(app):
+        await app.bot.set_my_commands([
+            BotCommand("start", "🏠 Главное меню"),
+            BotCommand("objects", "🏗️ Объекты"),
+            BotCommand("tasks", "📋 Задачи"),
+            BotCommand("finance", "💰 Финансы"),
+            BotCommand("add", "➕ Добавить"),
+            BotCommand("help", "⚙️ Помощь"),
+        ])
+
+    app.post_init = post_init
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("add_object", add_object_command))
@@ -40,7 +54,8 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_category, pattern="^cat_"))
     app.add_handler(CallbackQueryHandler(handle_choose_object, pattern="^choose_obj_"))
     app.add_handler(CallbackQueryHandler(handle_confirm_date, pattern="^confirmdate_"))
-    app.add_handler(CallbackQueryHandler(handle_task_action, pattern="^(task_|taskdone_|taskdel_|setdate_|taskdate_|taskprio_|setprio_|taskrename_)"))
+    app.add_handler(CallbackQueryHandler(handle_add_menu, pattern="^(menu_add|add_object|add_task|add_expense|newtask_obj_|newexp_obj_)"))
+    app.add_handler(CallbackQueryHandler(handle_task_action, pattern="^(task_|taskdone_|taskdel_|setdate_|taskdate_|tasknodate_|taskprio_|setprio_|taskrename_)"))
     app.add_handler(CallbackQueryHandler(handle_callback, pattern="^(?!cat_|choose_obj_|task_|taskdone_|taskdel_|setdate_|taskdate_|taskprio_|setprio_|taskrename_).*"))
     app.run_polling()
 
