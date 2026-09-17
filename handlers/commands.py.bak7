@@ -296,33 +296,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sections = []
         today_tasks = [r for r in rows if r['deadline'] and datetime.strptime(r['deadline'], '%Y-%m-%d').date() == today]
         tomorrow_tasks = [r for r in rows if r['deadline'] and datetime.strptime(r['deadline'], '%Y-%m-%d').date() == tomorrow]
-        later_tasks = sorted(
-            [r for r in rows if r['deadline'] and datetime.strptime(r['deadline'], '%Y-%m-%d').date() > tomorrow],
-            key=lambda x: x['deadline']
-        )
         no_deadline = [r for r in rows if not r['deadline']]
 
-        def format_block(title, items):
-            lines = [f"**{title}:**"]
-            for r in items:
-                d = ""
-                if r['deadline']:
-                    try:
-                        d = " (" + datetime.strptime(r['deadline'], '%Y-%m-%d').strftime('%d.%m') + ")"
-                    except Exception:
-                        pass
-                obj = r['object_name'] or "без объекта"
-                lines.append(f"#{r['id']} {r['title']}{d} — {obj}")
-            return "\n".join(lines)
-
         if today_tasks:
-            sections.append(format_block(f"СЕГОДНЯ — {today.strftime('%d.%m.%Y')}", today_tasks))
+            sections.append(f"СЕГОДНЯ — {today.strftime('%d.%m.%Y')}")
         if tomorrow_tasks:
-            sections.append(format_block(f"ЗАВТРА — {tomorrow.strftime('%d.%m.%Y')}", tomorrow_tasks))
-        if later_tasks:
-            sections.append(format_block("ПОЗЖЕ", later_tasks))
+            sections.append(f"ЗАВТРА — {tomorrow.strftime('%d.%m.%Y')}")
         if no_deadline:
-            sections.append(format_block("БЕЗ СРОКА", no_deadline))
+            sections.append("БЕЗ СРОКА")
 
         text = "📋 ЗАДАЧИ\n\n" + "\n".join(sections)
         if len(text) > 4000:

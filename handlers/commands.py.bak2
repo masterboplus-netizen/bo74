@@ -296,33 +296,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sections = []
         today_tasks = [r for r in rows if r['deadline'] and datetime.strptime(r['deadline'], '%Y-%m-%d').date() == today]
         tomorrow_tasks = [r for r in rows if r['deadline'] and datetime.strptime(r['deadline'], '%Y-%m-%d').date() == tomorrow]
-        later_tasks = sorted(
-            [r for r in rows if r['deadline'] and datetime.strptime(r['deadline'], '%Y-%m-%d').date() > tomorrow],
-            key=lambda x: x['deadline']
-        )
         no_deadline = [r for r in rows if not r['deadline']]
 
-        def format_block(title, items):
-            lines = [f"**{title}:**"]
-            for r in items:
-                d = ""
-                if r['deadline']:
-                    try:
-                        d = " (" + datetime.strptime(r['deadline'], '%Y-%m-%d').strftime('%d.%m') + ")"
-                    except Exception:
-                        pass
-                obj = r['object_name'] or "без объекта"
-                lines.append(f"#{r['id']} {r['title']}{d} — {obj}")
-            return "\n".join(lines)
-
         if today_tasks:
-            sections.append(format_block(f"СЕГОДНЯ — {today.strftime('%d.%m.%Y')}", today_tasks))
+            sections.append(f"СЕГОДНЯ — {today.strftime('%d.%m.%Y')}")
         if tomorrow_tasks:
-            sections.append(format_block(f"ЗАВТРА — {tomorrow.strftime('%d.%m.%Y')}", tomorrow_tasks))
-        if later_tasks:
-            sections.append(format_block("ПОЗЖЕ", later_tasks))
+            sections.append(f"ЗАВТРА — {tomorrow.strftime('%d.%m.%Y')}")
         if no_deadline:
-            sections.append(format_block("БЕЗ СРОКА", no_deadline))
+            sections.append("БЕЗ СРОКА")
 
         text = "📋 ЗАДАЧИ\n\n" + "\n".join(sections)
         if len(text) > 4000:
@@ -461,47 +442,24 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get('waiting_for') == 'new_expense_text':
         obj = context.user_data.get('pending_expense_object')
         if obj:
-            amount = parse_amount(text)
+            result = parse_message(text)
+            amount = result.get('amount')
+            category = result.get('category', 'прочее')
             if amount:
-                category = None
-                _tl = text.lower()
-                for _c in ["материалы", "еда", "транспорт", "инструмент"]:
-                    if _c in _tl:
-                        category = _c
-                        break
-                if category:
-                    add_expense(obj['id'], amount, category)
-                    context.user_data['waiting_for'] = None
-                    context.user_data['pending_expense_object'] = None
-                    await update.message.reply_text(
-                        f"\u2705 Расход {amount} \u20bd ({category}) добавлен в \u00ab{obj['name']}\u00bb",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("\U0001F4B0 К финансам", callback_data="menu_finance")],
-                            [InlineKeyboardButton("\U0001F3E0 Меню", callback_data="menu_back")],
-                        ])
-                    )
-                    return
-                else:
-                    context.user_data['pending_expense'] = {
-                        'object_id': obj['id'],
-                        'object_name': obj['name'],
-                        'amount': amount
-                    }
-                    context.user_data['waiting_for'] = 'new_expense_category'
-                    await update.message.reply_text(
-                        f"\U0001F4B0 {amount} \u20bd в \u00ab{obj['name']}\u00bb. За что?",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("\U0001F9F1 Материалы", callback_data="cat_материалы")],
-                            [InlineKeyboardButton("\U0001F354 Еда", callback_data="cat_еда")],
-                            [InlineKeyboardButton("\U0001F697 Транспорт", callback_data="cat_транспорт")],
-                            [InlineKeyboardButton("\U0001F527 Инструмент", callback_data="cat_инструмент")],
-                            [InlineKeyboardButton("\U0001F4E6 Прочее", callback_data="cat_прочее")],
-                        ])
-                    )
-                    return
+                add_expense(obj['id'], amount, category)
+                context.user_data['waiting_for'] = None
+                context.user_data['pending_expense_object'] = None
+                await update.message.reply_text(
+                    f"✅ Расход {amount} ₽ ({category}) добавлен в «{obj['name']}»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("💰 К финансам", callback_data="menu_finance")],
+                        [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+                    ])
+                )
+                return
             else:
                 await update.message.reply_text(
-                    "\u274c Не понял сумму. Попробуй: \u00ab500\u00bb"
+                    "❌ Не понял сумму. Попробуй: «5000 материалы»"
                 )
                 return
 
@@ -869,17 +827,15 @@ def task_card_keyboard(task_id, deadline=None):
     """Клавиатура карточки задачи"""
     buttons = [
         [InlineKeyboardButton("📅 Срок", callback_data=f"taskdate_{task_id}")],
-    ]
-    if deadline:
-        buttons.append([InlineKeyboardButton("🚫 Убрать срок", callback_data=f"tasknodate_{task_id}")])
-    buttons += [
         [InlineKeyboardButton("🔴 Приоритет", callback_data=f"taskprio_{task_id}")],
         [InlineKeyboardButton("✏️ Название", callback_data=f"taskrename_{task_id}")],
         [InlineKeyboardButton("✅ Выполнить", callback_data=f"taskdone_{task_id}")],
         [InlineKeyboardButton("❌ Удалить", callback_data=f"taskdel_{task_id}")],
-        [InlineKeyboardButton("⬅ К задачам", callback_data="menu_tasks")],
+        [InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")],
     ]
     return InlineKeyboardMarkup(buttons)
+
+
 def task_date_keyboard(task_id):
     """Клавиатура выбора срока"""
     from datetime import date, timedelta
@@ -1012,23 +968,6 @@ async def handle_task_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return
 
-
-    # Убрать срок
-    if data.startswith("tasknodate_"):
-        task_id = int(data.replace("tasknodate_", ""))
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("UPDATE tasks SET deadline = NULL WHERE id = ?", (task_id,))
-        conn.commit()
-        c.execute("SELECT t.title, o.name as obj FROM tasks t LEFT JOIN objects o ON t.object_id = o.id WHERE t.id = ?", (task_id,))
-        row = c.fetchone()
-        conn.close()
-        title = row['title'] if row else '?'
-        obj = row['obj'] if row and row['obj'] else 'Без объекта'
-        await query.edit_message_text(
-            f"🚫 Срок убран у задачи «{title}» ({obj})"
-        )
-        return
     # Установка срока
     if data.startswith("setdate_"):
         parts = data.split("_")

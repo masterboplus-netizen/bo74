@@ -296,33 +296,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sections = []
         today_tasks = [r for r in rows if r['deadline'] and datetime.strptime(r['deadline'], '%Y-%m-%d').date() == today]
         tomorrow_tasks = [r for r in rows if r['deadline'] and datetime.strptime(r['deadline'], '%Y-%m-%d').date() == tomorrow]
-        later_tasks = sorted(
-            [r for r in rows if r['deadline'] and datetime.strptime(r['deadline'], '%Y-%m-%d').date() > tomorrow],
-            key=lambda x: x['deadline']
-        )
         no_deadline = [r for r in rows if not r['deadline']]
 
-        def format_block(title, items):
-            lines = [f"**{title}:**"]
-            for r in items:
-                d = ""
-                if r['deadline']:
-                    try:
-                        d = " (" + datetime.strptime(r['deadline'], '%Y-%m-%d').strftime('%d.%m') + ")"
-                    except Exception:
-                        pass
-                obj = r['object_name'] or "без объекта"
-                lines.append(f"#{r['id']} {r['title']}{d} — {obj}")
-            return "\n".join(lines)
-
         if today_tasks:
-            sections.append(format_block(f"СЕГОДНЯ — {today.strftime('%d.%m.%Y')}", today_tasks))
+            sections.append(f"СЕГОДНЯ — {today.strftime('%d.%m.%Y')}")
         if tomorrow_tasks:
-            sections.append(format_block(f"ЗАВТРА — {tomorrow.strftime('%d.%m.%Y')}", tomorrow_tasks))
-        if later_tasks:
-            sections.append(format_block("ПОЗЖЕ", later_tasks))
+            sections.append(f"ЗАВТРА — {tomorrow.strftime('%d.%m.%Y')}")
         if no_deadline:
-            sections.append(format_block("БЕЗ СРОКА", no_deadline))
+            sections.append("БЕЗ СРОКА")
 
         text = "📋 ЗАДАЧИ\n\n" + "\n".join(sections)
         if len(text) > 4000:
@@ -869,17 +850,15 @@ def task_card_keyboard(task_id, deadline=None):
     """Клавиатура карточки задачи"""
     buttons = [
         [InlineKeyboardButton("📅 Срок", callback_data=f"taskdate_{task_id}")],
-    ]
-    if deadline:
-        buttons.append([InlineKeyboardButton("🚫 Убрать срок", callback_data=f"tasknodate_{task_id}")])
-    buttons += [
         [InlineKeyboardButton("🔴 Приоритет", callback_data=f"taskprio_{task_id}")],
         [InlineKeyboardButton("✏️ Название", callback_data=f"taskrename_{task_id}")],
         [InlineKeyboardButton("✅ Выполнить", callback_data=f"taskdone_{task_id}")],
         [InlineKeyboardButton("❌ Удалить", callback_data=f"taskdel_{task_id}")],
-        [InlineKeyboardButton("⬅ К задачам", callback_data="menu_tasks")],
+        [InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")],
     ]
     return InlineKeyboardMarkup(buttons)
+
+
 def task_date_keyboard(task_id):
     """Клавиатура выбора срока"""
     from datetime import date, timedelta
@@ -1012,23 +991,6 @@ async def handle_task_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return
 
-
-    # Убрать срок
-    if data.startswith("tasknodate_"):
-        task_id = int(data.replace("tasknodate_", ""))
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("UPDATE tasks SET deadline = NULL WHERE id = ?", (task_id,))
-        conn.commit()
-        c.execute("SELECT t.title, o.name as obj FROM tasks t LEFT JOIN objects o ON t.object_id = o.id WHERE t.id = ?", (task_id,))
-        row = c.fetchone()
-        conn.close()
-        title = row['title'] if row else '?'
-        obj = row['obj'] if row and row['obj'] else 'Без объекта'
-        await query.edit_message_text(
-            f"🚫 Срок убран у задачи «{title}» ({obj})"
-        )
-        return
     # Установка срока
     if data.startswith("setdate_"):
         parts = data.split("_")
