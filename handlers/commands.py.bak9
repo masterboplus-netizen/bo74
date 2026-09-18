@@ -5,7 +5,7 @@ from telegram.constants import ParseMode
 
 from db import get_connection
 from modules.objects import create_object, get_all_objects, get_object_by_name, get_object
-from modules.tasks import create_task, get_active_tasks, close_task, get_tasks_by_object
+from modules.tasks import create_task, get_active_tasks, close_task
 from modules.finance import add_expense, get_finance_summary
 from modules.parser import parse_message, parse_amount
 from config import ADMIN_IDS
@@ -328,12 +328,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(text) > 4000:
             text = text[:3900] + "\n\n..."
 
-        # Кнопки задач (макс 20), по порядку важности
+        # Кнопки задач (макс 20)
         buttons = []
-        task_order = today_tasks + tomorrow_tasks + later_tasks + no_deadline
-        for i, r in enumerate(task_order[:20], start=1):
+        for r in rows[:20]:
+            icon = "📅" if r['deadline'] else "○"
             buttons.append([InlineKeyboardButton(
-                f"{i}. {r['title'][:40]}",
+                f"{icon} {r['title'][:35]}",
                 callback_data=f"task_{r['id']}"
             )])
         buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
@@ -1409,5 +1409,41 @@ def choose_object_for_expense_keyboard():
         )])
     buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_add")])
     return InlineKeyboardMarkup(buttons)
+
+
+async def handle_new_task_object(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка выбора объекта для новой задачи"""
+    query = update.callback_query
+    await query.answer()
+    object_id = int(query.data.replace("newtask_obj_", ""))
+    obj = get_object(object_id)
+    context.user_data['pending_task_object'] = obj
+    context.user_data['waiting_for'] = 'new_task_text'
+    await query.edit_message_text(
+        f"📋 Новая задача в «{obj['name']}»\n\nНапиши задачу:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ Назад", callback_data="add_task")]
+        ])
+    )
+
+
+async def handle_new_expense_object(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка выбора объекта для нового расхода"""
+    query = update.callback_query
+    await query.answer()
+    object_id = int(query.data.replace("newexp_obj_", ""))
+    obj = get_object(object_id)
+    context.user_data['pending_expense_object'] = obj
+    context.user_data['waiting_for'] = 'new_expense_text'
+    await query.edit_message_text(
+        f"💰 Новый расход в «{obj['name']}»\n\nНапиши сумму:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ Назад", callback_data="add_expense")]
+        ])
+    )
+
+
+
+
 
 

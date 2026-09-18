@@ -2,12 +2,12 @@
 from db import get_connection
 
 
-def add_expense(object_id: int, amount: int, category: str, note: str = None, is_personal: bool = False, reimbursable: bool = False) -> int:
+def add_expense(object_id: int, amount: int, category: str, note: str = None, is_personal: bool = False) -> int:
     conn = get_connection()
     c = conn.cursor()
     c.execute(
-        "INSERT INTO finance (object_id, category, amount, type, date, note, is_personal, reimbursable) VALUES (?, ?, ?, 'expense', DATE('now'), ?, ?, ?)",
-        (object_id, category, amount, note, 1 if is_personal else 0, 1 if reimbursable else 0)
+        "INSERT INTO finance (object_id, category, amount, type, date, note, is_personal) VALUES (?, ?, ?, 'expense', DATE('now'), ?, ?)",
+        (object_id, category, amount, note, 1 if is_personal else 0)
     )
     finance_id = c.lastrowid
     conn.commit()

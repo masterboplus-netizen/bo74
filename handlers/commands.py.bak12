@@ -328,12 +328,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(text) > 4000:
             text = text[:3900] + "\n\n..."
 
-        # Кнопки задач (макс 20), по порядку важности
+        # Кнопки задач (макс 20)
         buttons = []
-        task_order = today_tasks + tomorrow_tasks + later_tasks + no_deadline
-        for i, r in enumerate(task_order[:20], start=1):
+        for r in rows[:20]:
+            icon = "📅" if r['deadline'] else "○"
             buttons.append([InlineKeyboardButton(
-                f"{i}. {r['title'][:40]}",
+                f"{icon} {r['title'][:35]}",
                 callback_data=f"task_{r['id']}"
             )])
         buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])

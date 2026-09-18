@@ -5,7 +5,7 @@ from telegram.constants import ParseMode
 
 from db import get_connection
 from modules.objects import create_object, get_all_objects, get_object_by_name, get_object
-from modules.tasks import create_task, get_active_tasks, close_task, get_tasks_by_object
+from modules.tasks import create_task, get_active_tasks, close_task
 from modules.finance import add_expense, get_finance_summary
 from modules.parser import parse_message, parse_amount
 from config import ADMIN_IDS
@@ -328,12 +328,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(text) > 4000:
             text = text[:3900] + "\n\n..."
 
-        # Кнопки задач (макс 20), по порядку важности
+        # Кнопки задач (макс 20)
         buttons = []
-        task_order = today_tasks + tomorrow_tasks + later_tasks + no_deadline
-        for i, r in enumerate(task_order[:20], start=1):
+        for r in rows[:20]:
+            icon = "📅" if r['deadline'] else "○"
             buttons.append([InlineKeyboardButton(
-                f"{i}. {r['title'][:40]}",
+                f"{icon} {r['title'][:35]}",
                 callback_data=f"task_{r['id']}"
             )])
         buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
