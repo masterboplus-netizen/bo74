@@ -152,3 +152,74 @@ async def send_evening_survey(context):
         except Exception as e:
             print(f"⚠️ Не смог отправить {u['tg_id']}: {e}")
     print(f"✅ Вечерний опрос отправлен ({len(users)} юзеров)")
+
+
+# === ЛОГ ОТПРАВКИ ДАЙДЖЕСТОВ (защита от пропуска) ===
+
+def log_digest_sent(digest_type: str):
+    """Записывает факт отправки дайджеста"""
+    from datetime import date
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute(
+            "INSERT OR IGNORE INTO digest_log (digest_type, sent_at) VALUES (?, ?)",
+            (digest_type, date.today().strftime('%Y-%m-%d'))
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"⚠️ log_digest_sent: {e}")
+    conn.close()
+
+
+def was_digest_sent_today(digest_type: str) -> bool:
+    """Проверяет, отправлялся ли дайджест сегодня"""
+    from datetime import date
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT COUNT(*) FROM digest_log WHERE digest_type = ? AND sent_at = ?",
+        (digest_type, date.today().strftime('%Y-%m-%d'))
+    )
+    count = c.fetchone()[0]
+    conn.close()
+    return count > 0
+
+
+async def send_morning_digest_with_log(context):
+    """Утренний дайджест + запись в лог"""
+    await send_morning_digest(context)
+    log_digest_sent('morning')
+
+
+async def send_evening_survey_with_log(context):
+    """Вечерний опрос + запись в лог"""
+    await send_evening_survey(context)
+    log_digest_sent('evening')
+
+
+async def catch_up_digests(context):
+    """Догоняющий дайджест — при запуске бота.
+    Если сегодня дайджест пропущен и время уже прошло — отправить сейчас."""
+    from datetime import datetime, timezone, timedelta
+
+    # МСК = UTC+3
+    msk_tz = timezone(timedelta(hours=3))
+    now_msk = datetime.now(msk_tz)
+    hour_msk = now_msk.hour
+
+    # Утренний дайджест — 9:00 МСК
+    if hour_msk >= 9:
+        if not was_digest_sent_today('morning'):
+            print(f"📬 Догоняю утренний дайджест (сейчас {hour_msk}:xx МСК)")
+            await send_morning_digest_with_log(context)
+        else:
+            print("✅ Утренний дайджест уже отправлен сегодня")
+
+    # Вечерний опрос — 18:00 МСК
+    if hour_msk >= 18:
+        if not was_digest_sent_today('evening'):
+            print(f"📬 Догоняю вечерний опрос (сейчас {hour_msk}:xx МСК)")
+            await send_evening_survey_with_log(context)
+        else:
+            print("✅ Вечерний опрос уже отправлен сегодня")

@@ -51,3 +51,29 @@ def set_role(tg_id: int, role: str):
     c.execute("UPDATE users SET role = ? WHERE tg_id = ?", (role, tg_id))
     conn.commit()
     conn.close()
+
+
+def mark_onboarded(tg_id: int):
+    """Отметить, что юзер прошёл онбординг."""
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute("UPDATE users SET onboarded=1 WHERE tg_id=?", (tg_id,))
+        conn.commit()
+    except Exception as e:
+        print(f"⚠️ mark_onboarded: {e}")
+    finally:
+        conn.close()
+
+
+def is_onboarded(tg_id: int) -> bool:
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute("SELECT onboarded FROM users WHERE tg_id=?", (tg_id,))
+        row = c.fetchone()
+        return bool(row and row[0])
+    except Exception:
+        return False
+    finally:
+        conn.close()

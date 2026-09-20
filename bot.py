@@ -4,6 +4,8 @@ from telegram import BotCommand
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from config import TOKEN, validate_config
 from db import init_db
+from handlers.onboarding import register_onboarding_handlers
+from handlers.admin import register_admin_handlers
 from handlers.commands import (
     handle_task_action, handle_add_menu, handle_confirm_date,
     handle_choose_object, handle_category,
@@ -12,7 +14,7 @@ from handlers.commands import (
     finance_command, add_expense_command, handle_callback, handle_text
 )
 from handlers.digest_cmd import digest_now_command, survey_now_command
-from modules.digest import send_morning_digest, send_evening_survey
+from modules.digest import send_morning_digest, send_evening_survey, send_morning_digest_with_log, send_evening_survey_with_log, catch_up_digests
 from modules.backup_db import send_daily_backup, backup_now_command
 from datetime import time
 from zoneinfo import ZoneInfo
@@ -54,13 +56,13 @@ def main():
         ])
         # Утренний дайджест — 9:00 МСК (6:00 UTC)
         app.job_queue.run_daily(
-            send_morning_digest,
+            send_morning_digest_with_log,
             time=time(hour=6, minute=0, tzinfo=ZoneInfo("UTC")),
             name="morning_digest"
         )
         # Вечерний опрос — 18:00 МСК (15:00 UTC)
         app.job_queue.run_daily(
-            send_evening_survey,
+            send_evening_survey_with_log,
             time=time(hour=15, minute=0, tzinfo=ZoneInfo("UTC")),
             name="evening_survey"
         )
@@ -71,6 +73,12 @@ def main():
             name="daily_backup"
         )
         logger.info("⏰ Дайджесты: 9:00 и 18:00 МСК, автобэкап БД: 23:00 МСК")
+
+        # Догоняющий дайджест — если бот запущен после 9:00 / 18:00
+        try:
+            await catch_up_digests(app)
+        except Exception as e:
+            logger.error(f"⚠️ catch_up_digests: {e}")
 
     app.post_init = post_init
 
@@ -94,6 +102,8 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_confirm_date, pattern="^confirmdate_"))
     app.add_handler(CallbackQueryHandler(handle_add_menu, pattern="^(menu_add|add_object|add_task|add_expense|newtask_obj_|newexp_obj_)"))
     app.add_handler(CallbackQueryHandler(handle_task_action, pattern="^(task_|taskdone_|taskdel_|setdate_|taskdate_|tasknodate_|taskprio_|setprio_|taskrename_)"))
+    register_onboarding_handlers(app)
+    register_admin_handlers(app)
     app.add_handler(CallbackQueryHandler(handle_callback, pattern="^(?!cat_|choose_obj_|task_|taskdone_|taskdel_|setdate_|taskdate_|taskprio_|setprio_|taskrename_).*"))
     app.run_polling()
 

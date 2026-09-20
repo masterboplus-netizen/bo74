@@ -9,21 +9,44 @@ from modules.tasks import create_task, get_active_tasks, close_task, get_tasks_b
 from modules.finance import add_expense, get_finance_summary
 from modules.parser import parse_message, parse_amount
 from config import ADMIN_IDS
+from handlers.onboarding import ask_role, role_menu_keyboard
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Старт: онбординг при первом входе, иначе — меню по роли."""
     user = update.effective_user
-    # Сохраняем юзера в БД
+
+    # Сохраняем/обновляем юзера
     try:
-        from modules.users import save_user
-        save_user(user.id, user.first_name, user.username)
+        from modules.users import save_user, get_user
+        save_user(user.id, user.first_name or "", user.username or "")
     except Exception as e:
-        print(f"⚠️ Ошибка сохранения юзера: {e}")
+        print(f"⚠️ save_user: {e}")
+
+    # Определяем роль
+    role = "guest"
+    is_new = True
+    try:
+        from modules.users import get_user
+        u = get_user(user.id)
+        if u:
+            role = (u.get("role") if isinstance(u, dict) else u[3]) or "guest"
+            if role and role != "guest":
+                is_new = False
+    except Exception as e:
+        print(f"⚠️ get_user: {e}")
+
+    # Первый вход → онбординг
+    if is_new:
+        await ask_role(update, context)
+        return
+
+    # Иначе — меню по роли
     await update.message.reply_text(
         f"👋 Привет, {user.first_name}!\n\n"
-        f"Я БО 7.2 — твой помощник по стройке.",
-        reply_markup=main_menu_keyboard(),
-        parse_mode=ParseMode.MARKDOWN
+        f"Я *Бо 7.5* — твой помощник по стройке.",
+        reply_markup=role_menu_keyboard(role),
+        parse_mode=ParseMode.MARKDOWN,
     )
 
 
