@@ -16,6 +16,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Старт: онбординг при первом входе, иначе — меню по роли."""
     user = update.effective_user
 
+    # === ГЛАВНЫЙ АДМИН — сразу меню, без онбординга ===
+    from handlers.onboarding import MAIN_ADMIN_TG_ID
+    if user.id == MAIN_ADMIN_TG_ID:
+        # Сохраняем юзера
+        try:
+            from modules.users import save_user, set_role, mark_onboarded
+            save_user(user.id, user.first_name or "", user.username or "", role="admin")
+            set_role(user.id, "admin")
+            try:
+                mark_onboarded(user.id)
+            except Exception:
+                pass
+        except Exception as e:
+            print(f"⚠️ admin save: {e}")
+
+        await update.message.reply_text(
+            f"👋 Привет, {user.first_name}!\n\n"
+            f"Я *Бо 7.5* — твой помощник по стройке.\n"
+            f"Ты вошёл как *админ*.",
+            reply_markup=role_menu_keyboard("admin"),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    # === ОБЫЧНЫЕ ЮЗЕРЫ ===
     # Сохраняем/обновляем юзера
     try:
         from modules.users import save_user, get_user
@@ -23,28 +48,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"⚠️ save_user: {e}")
 
-    # Определяем роль
+    # Определяем роль и онбординг
     role = "guest"
-    is_new = True
+    onboarded = False
     try:
-        from modules.users import get_user
+        from modules.users import get_user, is_onboarded
         u = get_user(user.id)
         if u:
             role = (u.get("role") if isinstance(u, dict) else u[3]) or "guest"
-            if role and role != "guest":
-                is_new = False
+        onboarded = is_onboarded(user.id)
     except Exception as e:
         print(f"⚠️ get_user: {e}")
 
     # Первый вход → онбординг
-    if is_new:
+    if not onboarded:
         await ask_role(update, context)
         return
 
     # Иначе — меню по роли
     await update.message.reply_text(
         f"👋 Привет, {user.first_name}!\n\n"
-        f"Я *Бо 7.5* — твой помощник по стройке.",
+        f"Я *Бо 7.5* — твой помощник по стройке.\n"
+        f"Твоя роль: *{role}*",
         reply_markup=role_menu_keyboard(role),
         parse_mode=ParseMode.MARKDOWN,
     )
