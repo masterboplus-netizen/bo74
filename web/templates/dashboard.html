@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Бо 7.4 — Дашборд</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+               background: #0f0f0f; color: #e0e0e0; line-height: 1.5; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        h1 { color: #4ade80; margin-bottom: 20px; font-size: 28px; }
+        h2 { color: #e0e0e0; margin: 24px 0 12px; font-size: 20px; }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+        .card { background: #1a1a1a; padding: 16px; border-radius: 8px; border: 1px solid #2a2a2a; }
+        .card .label { color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 6px; }
+        .card .value { font-size: 24px; font-weight: 600; color: #fff; }
+        .card.income .value { color: #4ade80; }
+        .card.expense .value { color: #f87171; }
+        .card.balance .value { color: #60a5fa; }
+        table { width: 100%; border-collapse: collapse; background: #1a1a1a; border-radius: 8px; overflow: hidden; }
+        th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #2a2a2a; }
+        th { background: #222; color: #888; font-size: 12px; text-transform: uppercase; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background: #222; }
+        a { color: #60a5fa; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .status-active { color: #4ade80; }
+        .status-paused { color: #fbbf24; }
+        .status-waiting { color: #a78bfa; }
+        .positive { color: #4ade80; }
+        .negative { color: #f87171; }
+        .overdue { background: #2a1a1a; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #2a2a2a; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🤖 Бо 7.4 — Дашборд</h1>
+        <span style="color:#666;font-size:14px;">{{ today }}</span>
+    </div>
+
+    <div class="cards">
+        <div class="card"><div class="label">Объектов</div><div class="value">{{ summary.objects_count }}</div></div>
+        <div class="card"><div class="label">Открытых задач</div><div class="value">{{ summary.tasks_open }}</div></div>
+        <div class="card"><div class="label">Выполнено</div><div class="value">{{ summary.tasks_done }}</div></div>
+        <div class="card income"><div class="label">Доход</div><div class="value">{{ "{:,}".format(summary.total_income).replace(",", " ") }} ₽</div></div>
+        <div class="card expense"><div class="label">Расход</div><div class="value">{{ "{:,}".format(summary.total_expense).replace(",", " ") }} ₽</div></div>
+        <div class="card balance"><div class="label">Баланс</div><div class="value">{{ "{:,}".format(summary.total_balance).replace(",", " ") }} ₽</div></div>
+    </div>
+
+    <h2>🏗️ Объекты</h2>
+    <table>
+        <thead><tr><th>Объект</th><th>Статус</th><th>Задачи</th><th>Доход</th><th>Расход</th><th>Баланс</th></tr></thead>
+        <tbody>
+        {% for o in objects %}
+        <tr>
+            <td><a href="/object/{{ o.id }}">{{ o.name }}</a></td>
+            <td class="status-{{ o.status }}">{{ o.status }}</td>
+            <td>{{ o.tasks_open }} / {{ o.tasks_done }}</td>
+            <td class="positive">{{ "{:,}".format(o.income).replace(",", " ") }} ₽</td>
+            <td class="negative">{{ "{:,}".format(o.expense).replace(",", " ") }} ₽</td>
+            <td class="{{ 'positive' if o.balance >= 0 else 'negative' }}">{{ "{:,}".format(o.balance).replace(",", " ") }} ₽</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    {% if overdue %}
+    <h2>⚠️ Просроченные задачи ({{ overdue|length }})</h2>
+    <table>
+        <thead><tr><th>ID</th><th>Задача</th><th>Объект</th><th>Срок</th></tr></thead>
+        <tbody>
+        {% for t in overdue %}
+        <tr class="overdue">
+            <td>#{{ t.id }}</td>
+            <td>{{ t.title }}</td>
+            <td>{{ t.object }}</td>
+            <td>{{ t.deadline }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <p style="margin-top:32px;color:#555;font-size:12px;">Бо 7.4 · Replit · {{ today }}</p>
+</div>
+</body>
+</html>

@@ -53,3 +53,33 @@ def get_tasks_by_object(object_id: int) -> list:
     rows = c.fetchall()
     conn.close()
     return [{'id': r[0], 'title': r[1], 'status': r[2], 'priority': r[3], 'type': r[4], 'assigned_to': r[5], 'deadline': r[6]} for r in rows]
+
+def get_tasks_stats_by_object(object_id: int) -> dict:
+    """Статистика задач объекта: всего, выполнено, открыто, просрочено"""
+    from datetime import date
+    today = date.today().strftime('%Y-%m-%d')
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM tasks WHERE object_id = ?", (object_id,))
+    total = c.fetchone()[0] or 0
+    c.execute("SELECT COUNT(*) FROM tasks WHERE object_id = ? AND status = 'done'", (object_id,))
+    done = c.fetchone()[0] or 0
+    c.execute(
+        "SELECT COUNT(*) FROM tasks WHERE object_id = ? AND status IN ('open', 'in_progress')",
+        (object_id,)
+    )
+    open_count = c.fetchone()[0] or 0
+    c.execute(
+        "SELECT COUNT(*) FROM tasks WHERE object_id = ? AND status IN ('open', 'in_progress') "
+        "AND deadline IS NOT NULL AND deadline < ?",
+        (object_id, today)
+    )
+    overdue = c.fetchone()[0] or 0
+    conn.close()
+    return {
+        'total': total,
+        'done': done,
+        'open': open_count,
+        'overdue': overdue,
+        'percent_done': int(done / total * 100) if total > 0 else 0
+    }

@@ -87,3 +87,38 @@ def get_all_finance_summary():
         'total_balance': total_income - total_expense,
         'objects': objects
     }
+
+
+def get_finance_by_period(object_id: int, start_date: str, end_date: str) -> dict:
+    """Финансы объекта за период (start и end в формате YYYY-MM-DD)"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT COALESCE(SUM(amount), 0) FROM finance "
+        "WHERE object_id = ? AND type = 'income' AND date BETWEEN ? AND ?",
+        (object_id, start_date, end_date)
+    )
+    income = c.fetchone()[0] or 0
+    c.execute(
+        "SELECT COALESCE(SUM(amount), 0) FROM finance "
+        "WHERE object_id = ? AND type = 'expense' AND date BETWEEN ? AND ?",
+        (object_id, start_date, end_date)
+    )
+    expense = c.fetchone()[0] or 0
+    conn.close()
+    return {'income': income, 'expense': expense, 'balance': income - expense}
+
+
+def get_finance_by_category(object_id: int, start_date: str, end_date: str) -> list:
+    """Расходы объекта по категориям за период"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT category, COALESCE(SUM(amount), 0) FROM finance "
+        "WHERE object_id = ? AND type = 'expense' AND date BETWEEN ? AND ? "
+        "GROUP BY category ORDER BY SUM(amount) DESC",
+        (object_id, start_date, end_date)
+    )
+    rows = c.fetchall()
+    conn.close()
+    return [{'category': r[0] or 'прочее', 'amount': r[1]} for r in rows]

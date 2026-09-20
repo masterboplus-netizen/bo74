@@ -62,23 +62,22 @@ def parse_message(text: str) -> dict:
     amount = parse_amount(text_lower)
     found = find_all_objects_in_text(text)
 
-    if amount and found:
+    # === РАСХОД ===
+    is_finance_query = any(w in text_lower for w in ['сколько', 'финансы', 'бюджет', 'баланс'])
+
+    if amount and not is_finance_query:
         material_words = ['материал', 'метриал', 'плитк', 'клей', 'краск', 'паркет', 'панел', 'затирк', 'штукатур', 'грунт', 'кабел', 'труб']
         has_material = any(w in text_lower for w in material_words)
 
-        # УПРОЩЕНИЕ: если есть сумма + объект — это расход (даже без триггера)
-        # Исключение: если это явно не расход (например, "сколько")
-        is_finance_query = any(w in text_lower for w in ['сколько', 'финансы', 'бюджет', 'баланс'])
+        category = 'прочее'
+        if has_material:
+            for w in material_words:
+                if w in text_lower:
+                    category = 'материалы'
+                    break
 
-        if not is_finance_query:
-            category = 'прочее'
-            if has_material:
-                for w in material_words:
-                    if w in text_lower:
-                        category = 'материалы'
-                        break
-
-            # Если несколько объектов — надо уточнить
+        # Объект найден
+        if found:
             if len(found) > 1:
                 return {
                     'action': 'choose_object',
@@ -87,12 +86,21 @@ def parse_message(text: str) -> dict:
                     'category': category,
                     'original_text': text
                 }
-
             return {
                 'action': 'expense',
                 'object': found[0],
                 'amount': amount,
                 'category': category
+            }
+
+        # Объект НЕ найден, но есть триггер расхода — спрашиваем объект
+        if has_expense_word:
+            return {
+                'action': 'choose_object',
+                'objects': get_all_objects(),
+                'amount': amount,
+                'category': category,
+                'original_text': text
             }
 
     # === ЗАКРЫТЬ ЗАДАЧУ ===
@@ -141,6 +149,18 @@ def parse_message(text: str) -> dict:
                 title = title.replace(simple, '')
             title = title.strip() or text
             return {'action': 'add_task', 'object': obj, 'title': title}
+
+    # === ТОЛЬКО СУММА (без объекта, без триггера) ===
+    # Если в тексте только число — спрашиваем: личный расход или по объекту?
+    if amount and not found:
+        stripped = text_lower.strip()
+        # Проверяем: только цифры и пробелы
+        if re.match(r'^[\d\s]+$', stripped):
+            return {
+                'action': 'ask_expense_type',
+                'amount': amount,
+                'original_text': text
+            }
 
     return {'action': 'unknown', 'text': text}
 

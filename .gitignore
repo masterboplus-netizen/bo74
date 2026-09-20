@@ -1,34 +1,26 @@
-# Python
+# Бэкапы
+*.bak
+*.bak2
+*.bak3
+*.v1
+*.zip
+
+# Кэш Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-dist/
-*.egg-info/
+*.pyc
+*.pyo
 
-# Virtual environments
-.venv/
-.pythonlibs/
-venv/
-env/
-ENV/
-
-# Test and tooling caches
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-coverage.xml
-htmlcov/
-
-# IDEs and operating systems
-.idea/
-.vscode/
-.DS_Store
-Thumbs.db
-
-# Replit and local tooling
+# Replit служебные
 .cache/
 .local/
+.upm/
+.pythonlibs/
+.conversation/
+.agents/
+.replit.bak
+
+# Логи
+*.log
+
+# Временные
+*.tmp

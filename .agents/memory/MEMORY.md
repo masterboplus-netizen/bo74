@@ -1,1 +1,0 @@
-- [Python package installation in Nix](python-package-installation.md) — system site-packages are immutable; use the project-local `.pythonlibs` path.

@@ -11,6 +11,10 @@ from handlers.commands import (
     add_task_command, tasks_command, done_command,
     finance_command, add_expense_command, handle_callback, handle_text
 )
+from handlers.digest_cmd import digest_now_command, survey_now_command
+from modules.digest import send_morning_digest, send_evening_survey
+from datetime import time
+from zoneinfo import ZoneInfo
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -37,6 +41,30 @@ def main():
             BotCommand("help", "⚙️ Помощь"),
         ])
 
+    # Настройка постоянного меню команд + дайджестов
+    async def post_init(app):
+        await app.bot.set_my_commands([
+            BotCommand("start", "🏠 Главное меню"),
+            BotCommand("objects", "🏗️ Объекты"),
+            BotCommand("tasks", "📋 Задачи"),
+            BotCommand("finance", "💰 Финансы"),
+            BotCommand("add", "➕ Добавить"),
+            BotCommand("help", "⚙️ Помощь"),
+        ])
+        # Утренний дайджест — 9:00 МСК (6:00 UTC)
+        app.job_queue.run_daily(
+            send_morning_digest,
+            time=time(hour=6, minute=0, tzinfo=ZoneInfo("UTC")),
+            name="morning_digest"
+        )
+        # Вечерний опрос — 18:00 МСК (15:00 UTC)
+        app.job_queue.run_daily(
+            send_evening_survey,
+            time=time(hour=15, minute=0, tzinfo=ZoneInfo("UTC")),
+            name="evening_survey"
+        )
+        logger.info("⏰ Дайджесты запланированы: 9:00 и 18:00 МСК")
+
     app.post_init = post_init
 
     app.add_handler(CommandHandler("start", start))
@@ -48,6 +76,8 @@ def main():
     app.add_handler(CommandHandler("done", done_command))
     app.add_handler(CommandHandler("finance", finance_command))
     app.add_handler(CommandHandler("add_expense", add_expense_command))
+    app.add_handler(CommandHandler("digest_now", digest_now_command))
+    app.add_handler(CommandHandler("survey_now", survey_now_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     logger.info("🚀 БО 7.2 запущен!")

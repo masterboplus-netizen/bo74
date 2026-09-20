@@ -13,6 +13,12 @@ from config import ADMIN_IDS
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    # Сохраняем юзера в БД
+    try:
+        from modules.users import save_user
+        save_user(user.id, user.first_name, user.username)
+    except Exception as e:
+        print(f"⚠️ Ошибка сохранения юзера: {e}")
     await update.message.reply_text(
         f"👋 Привет, {user.first_name}!\n\n"
         f"Я БО 7.2 — твой помощник по стройке.",
@@ -174,9 +180,23 @@ async def done_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def finance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Если объект не указан — общая сводка по всем объектам
     if not context.args:
-        await update.message.reply_text("❌ Использование: /finance <объект>")
+        from modules.finance import get_all_finance_summary
+        data = get_all_finance_summary()
+        text = "💰 ФИНАНСЫ (общая сводка)\n\n"
+        text += f"Доход: {data['total_income']:,} ₽\n".replace(",", " ")
+        text += f"Расход: {data['total_expense']:,} ₽\n".replace(",", " ")
+        text += f"Баланс: {data['total_balance']:,} ₽\n\n".replace(",", " ")
+        text += "🏗️ По объектам:\n"
+        for o in data['objects']:
+            if o['income'] > 0 or o['expense'] > 0:
+                sign = "+" if o['balance'] >= 0 else ""
+                text += f"• {o['name']}: {sign}{o['balance']:,} ₽\n".replace(",", " ")
+        text += "\n📊 Детали: /finance <объект>"
+        await update.message.reply_text(text)
         return
+
     obj = get_object_by_name(' '.join(context.args))
     if not obj:
         await update.message.reply_text("❌ Объект не найден")
@@ -241,6 +261,9 @@ def main_menu_keyboard():
         [InlineKeyboardButton("🏗️ Объекты", callback_data="menu_objects")],
         [InlineKeyboardButton("📋 Задачи", callback_data="menu_tasks")],
         [InlineKeyboardButton("💰 Финансы", callback_data="menu_finance")],
+        [InlineKeyboardButton("📊 Отчёты", callback_data="menu_reports")],
+        [InlineKeyboardButton("💸 Личные", callback_data="menu_personal")],
+        [InlineKeyboardButton("🌐 Дашборд", callback_data="menu_dashboard")],
         [InlineKeyboardButton("➕ Добавить", callback_data="menu_add")],
         [InlineKeyboardButton("⚙️ Помощь", callback_data="menu_help")],
     ])
@@ -366,6 +389,216 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("⬅️ К финансам", callback_data="menu_finance")]
             ]),
             parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    if data == "menu_personal":
+        await query.edit_message_text(
+            format_personal_summary('month'),
+            reply_markup=personal_keyboard()
+        )
+        return
+
+    if data == "personal_today":
+        await query.edit_message_text(
+            format_personal_summary('today'),
+            reply_markup=personal_keyboard()
+        )
+        return
+
+    if data == "personal_week":
+        await query.edit_message_text(
+            format_personal_summary('week'),
+            reply_markup=personal_keyboard()
+        )
+        return
+
+    if data == "personal_month":
+        await query.edit_message_text(
+            format_personal_summary('month'),
+            reply_markup=personal_keyboard()
+        )
+        return
+
+    if data == "personal_all":
+        await query.edit_message_text(
+            format_personal_summary('all'),
+            reply_markup=personal_keyboard()
+        )
+        return
+
+    if data == "personal_add":
+        context.user_data['waiting_for'] = 'personal_expense_text'
+        await query.edit_message_text(
+            "💸 Новый личный расход\n\nНапиши сумму и категорию. Например:\n"
+            "«300 еда»\n«1500 инструмент»\n«200 такси»",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_personal")]
+            ])
+        )
+        return
+
+    # === ВЫБОР: ЛИЧНЫЙ ИЛИ ПО ОБЪЕКТУ ===
+    if data.startswith("exp_type_personal_"):
+        amount = int(data.replace("exp_type_personal_", ""))
+        context.user_data['pending_personal_expense'] = amount
+        context.user_data['waiting_for'] = 'personal_expense_category'
+        await query.edit_message_text(
+            f"💸 Личный расход {amount} ₽\n\nЗа что?",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🍔 Еда", callback_data=f"personal_cat_{amount}_еда")],
+                [InlineKeyboardButton("🚕 Транспорт", callback_data=f"personal_cat_{amount}_транспорт")],
+                [InlineKeyboardButton("🏠 Жильё", callback_data=f"personal_cat_{amount}_жильё")],
+                [InlineKeyboardButton("💊 Медицина", callback_data=f"personal_cat_{amount}_медицина")],
+                [InlineKeyboardButton("👕 Одежда", callback_data=f"personal_cat_{amount}_одежда")],
+                [InlineKeyboardButton("📱 Связь", callback_data=f"personal_cat_{amount}_связь")],
+                [InlineKeyboardButton("📦 Прочее", callback_data=f"personal_cat_{amount}_прочее")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    if data.startswith("exp_type_object_"):
+        amount = int(data.replace("exp_type_object_", ""))
+        context.user_data['pending_object_expense_amount'] = amount
+        await query.edit_message_text(
+            f"🏗️ Расход {amount} ₽\n\nВыбери объект:",
+            reply_markup=choose_object_for_expense_keyboard_amount(amount)
+        )
+        return
+
+    if data.startswith("personal_cat_"):
+        parts = data.replace("personal_cat_", "").split("_", 1)
+        amount = int(parts[0])
+        category = parts[1]
+        from modules.personal import add_personal_expense
+        add_personal_expense(amount, category)
+        context.user_data['pending_personal_expense'] = None
+        context.user_data['waiting_for'] = None
+        await query.edit_message_text(
+            f"✅ Личный расход {amount} ₽ ({category}) записан",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("💸 К личным", callback_data="menu_personal")],
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    if data.startswith("objexp_obj_"):
+        # objexp_obj_<amount>_<obj_id>
+        parts = data.replace("objexp_obj_", "").split("_")
+        amount = int(parts[0])
+        obj_id = int(parts[1])
+        from modules.objects import get_object
+        obj = get_object(obj_id)
+        context.user_data['pending_obj_expense'] = {'amount': amount, 'obj_id': obj_id, 'obj_name': obj['name']}
+        await query.edit_message_text(
+            f"💰 {amount} ₽ в «{obj['name']}»\n\nЗа что?",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🧱 Материалы", callback_data=f"objexp_cat_{amount}_{obj_id}_материалы")],
+                [InlineKeyboardButton("🔧 Инструмент", callback_data=f"objexp_cat_{amount}_{obj_id}_инструмент")],
+                [InlineKeyboardButton("🚕 Транспорт", callback_data=f"objexp_cat_{amount}_{obj_id}_транспорт")],
+                [InlineKeyboardButton("🍔 Еда", callback_data=f"objexp_cat_{amount}_{obj_id}_еда")],
+                [InlineKeyboardButton("📦 Прочее", callback_data=f"objexp_cat_{amount}_{obj_id}_прочее")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    if data.startswith("objexp_cat_"):
+        # objexp_cat_<amount>_<obj_id>_<category>
+        parts = data.replace("objexp_cat_", "").split("_")
+        amount = int(parts[0])
+        obj_id = int(parts[1])
+        category = parts[2] if len(parts) > 2 else 'прочее'
+        from modules.objects import get_object
+        obj = get_object(obj_id)
+        add_expense(obj_id, amount, category)
+        context.user_data['pending_object_expense_amount'] = None
+        await query.edit_message_text(
+            f"✅ Расход {amount} ₽ ({category}) в «{obj['name']}»",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🏗️ К объекту", callback_data=f"obj_{obj_id}")],
+                [InlineKeyboardButton("💰 К финансам", callback_data="menu_finance")],
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    # === ОТЧЁТЫ ===
+    if data == "menu_reports":
+        await query.edit_message_text(
+            "📊 ОТЧЁТЫ\n\nВыбери тип:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📈 Сводный за месяц", callback_data="report_summary_month")],
+                [InlineKeyboardButton("📈 Сводный за неделю", callback_data="report_summary_week")],
+                [InlineKeyboardButton("📈 Сводный за всё время", callback_data="report_summary_all")],
+                [InlineKeyboardButton("🏗️ По объекту", callback_data="report_choose_object")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    if data.startswith("report_summary_"):
+        period = data.replace("report_summary_", "")
+        from modules.reports import get_summary_report, format_summary_report
+        report = get_summary_report(period)
+        text = format_summary_report(report)
+        await query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ К отчётам", callback_data="menu_reports")],
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    if data == "report_choose_object":
+        objs = get_all_objects()
+        buttons = []
+        for o in objs:
+            buttons.append([InlineKeyboardButton(
+                f"🏗️ {o['name']}",
+                callback_data=f"report_obj_{o['id']}_month"
+            )])
+        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_reports")])
+        await query.edit_message_text(
+            "📊 Выбери объект для отчёта (за месяц):",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    if data.startswith("report_obj_"):
+        # report_obj_<obj_id>_<period>
+        parts = data.replace("report_obj_", "").split("_")
+        obj_id = int(parts[0])
+        period = parts[1] if len(parts) > 1 else 'month'
+        from modules.reports import get_object_report, format_object_report
+        report = get_object_report(obj_id, period)
+        text = format_object_report(report)
+        await query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📅 За неделю", callback_data=f"report_obj_{obj_id}_week")],
+                [InlineKeyboardButton("📅 За месяц", callback_data=f"report_obj_{obj_id}_month")],
+                [InlineKeyboardButton("📅 За всё время", callback_data=f"report_obj_{obj_id}_all")],
+                [InlineKeyboardButton("⬅️ К отчётам", callback_data="menu_reports")],
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    if data == "menu_dashboard":
+        from modules.dashboard_link import get_dashboard_url
+        url = get_dashboard_url()
+        await query.edit_message_text(
+            f"🌐 Дашборд Бо 7.4\n\n"
+            f"Нажми кнопку ниже, чтобы открыть:\n\n"
+            f"📱 Совет: добавь на главный экран телефона",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🌐 Открыть дашборд", url=url)],
+                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")]
+            ])
         )
         return
 
@@ -505,6 +738,36 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
+    # Обработка личного расхода
+    if context.user_data.get('waiting_for') == 'personal_expense_text':
+        from modules.personal import add_personal_expense
+        from modules.parser import parse_amount
+        # Разбираем: "300 еда" или "1500 инструмент"
+        parts = text.strip().split(maxsplit=1)
+        amount_str = parts[0] if parts else ''
+        category = parts[1].strip() if len(parts) > 1 else 'прочее'
+        # Убираем лишние символы
+        amount_str = amount_str.replace('₽', '').replace('р', '').replace('руб', '').strip()
+        try:
+            amount = int(amount_str)
+        except ValueError:
+            amount = parse_amount(text)
+            if not amount:
+                await update.message.reply_text(
+                    "❌ Не понял сумму. Попробуй: «300 еда»"
+                )
+                return
+        add_personal_expense(amount, category)
+        context.user_data['waiting_for'] = None
+        await update.message.reply_text(
+            f"✅ Личный расход {amount} ₽ ({category}) записан",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("💸 К личным", callback_data="menu_personal")],
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            ])
+        )
+        return
+
     # Обработка создания нового объекта
     if context.user_data.get('waiting_for') == 'new_object':
         object_id = create_object(text, user_id=update.effective_user.id)
@@ -579,6 +842,19 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     result = parse_message(text)
     action = result.get('action')
+
+    if action == 'ask_expense_type':
+        amount = result['amount']
+        context.user_data['ask_expense_amount'] = amount
+        await update.message.reply_text(
+            f"💰 {amount} ₽ — куда записать?",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("💸 Личный расход", callback_data=f"exp_type_personal_{amount}")],
+                [InlineKeyboardButton("🏗️ Расход по объекту", callback_data=f"exp_type_object_{amount}")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="menu_back")],
+            ])
+        )
+        return
 
     if action == 'expense':
         obj = result['object']
@@ -1411,3 +1687,52 @@ def choose_object_for_expense_keyboard():
     return InlineKeyboardMarkup(buttons)
 
 
+
+
+# === ЛИЧНЫЕ РАСХОДЫ ===
+
+def format_personal_summary(period='month'):
+    """Формирует текст сводки личных расходов"""
+    from modules.personal import get_personal_summary
+    data = get_personal_summary(period)
+    period_names = {
+        'today': 'сегодня',
+        'week': 'за 7 дней',
+        'month': 'за месяц',
+        'all': 'за всё время'
+    }
+    text = f"💸 ЛИЧНЫЕ РАСХОДЫ ({period_names.get(period, period)})\n\n"
+    text += f"Потрачено: {data['total']} ₽\n"
+    text += f"Записей: {data['count']}\n\n"
+    if data['by_category']:
+        text += "📊 По категориям:\n"
+        for item in data['by_category'][:10]:
+            text += f"• {item['category']}: {item['amount']} ₽\n"
+    else:
+        text += "Пока нет записей за этот период."
+    return text
+
+
+def personal_keyboard():
+    """Клавиатура для экрана личных расходов"""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Добавить расход", callback_data="personal_add")],
+        [InlineKeyboardButton("📅 За сегодня", callback_data="personal_today"),
+         InlineKeyboardButton("📅 За неделю", callback_data="personal_week")],
+        [InlineKeyboardButton("📅 За месяц", callback_data="personal_month"),
+         InlineKeyboardButton("📅 За всё время", callback_data="personal_all")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")],
+    ])
+
+
+def choose_object_for_expense_keyboard_amount(amount):
+    """Клавиатура выбора объекта для расхода с суммой (только объект, без категории)"""
+    objs = get_all_objects()
+    buttons = []
+    for o in objs:
+        buttons.append([InlineKeyboardButton(
+            f"🏗️ {o['name']}",
+            callback_data=f"objexp_obj_{amount}_{o['id']}"
+        )])
+    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
+    return InlineKeyboardMarkup(buttons)
