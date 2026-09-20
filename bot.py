@@ -13,6 +13,7 @@ from handlers.commands import (
 )
 from handlers.digest_cmd import digest_now_command, survey_now_command
 from modules.digest import send_morning_digest, send_evening_survey
+from modules.backup_db import send_daily_backup, backup_now_command
 from datetime import time
 from zoneinfo import ZoneInfo
 
@@ -63,7 +64,13 @@ def main():
             time=time(hour=15, minute=0, tzinfo=ZoneInfo("UTC")),
             name="evening_survey"
         )
-        logger.info("⏰ Дайджесты запланированы: 9:00 и 18:00 МСК")
+        # Автобэкап БД — 23:00 МСК (20:00 UTC)
+        app.job_queue.run_daily(
+            send_daily_backup,
+            time=time(hour=20, minute=0, tzinfo=ZoneInfo("UTC")),
+            name="daily_backup"
+        )
+        logger.info("⏰ Дайджесты: 9:00 и 18:00 МСК, автобэкап БД: 23:00 МСК")
 
     app.post_init = post_init
 
@@ -78,6 +85,7 @@ def main():
     app.add_handler(CommandHandler("add_expense", add_expense_command))
     app.add_handler(CommandHandler("digest_now", digest_now_command))
     app.add_handler(CommandHandler("survey_now", survey_now_command))
+    app.add_handler(CommandHandler("backup_now", backup_now_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     logger.info("🚀 БО 7.2 запущен!")
