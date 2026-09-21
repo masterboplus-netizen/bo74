@@ -537,7 +537,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parts = data.replace("objexp_obj_", "").split("_")
         amount = int(parts[0])
         obj_id = int(parts[1])
-        from modules.objects import get_object
         obj = get_object(obj_id)
         context.user_data['pending_obj_expense'] = {'amount': amount, 'obj_id': obj_id, 'obj_name': obj['name']}
         await query.edit_message_text(
@@ -559,7 +558,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         amount = int(parts[0])
         obj_id = int(parts[1])
         category = parts[2] if len(parts) > 2 else 'прочее'
-        from modules.objects import get_object
         obj = get_object(obj_id)
         add_expense(obj_id, amount, category)
         context.user_data['pending_object_expense_amount'] = None
@@ -1019,7 +1017,6 @@ async def handle_choose_object(update: Update, context: ContextTypes.DEFAULT_TYP
     amount = int(parts[4]) if len(parts) > 4 and parts[4] != 'none' else None
     category = parts[5] if len(parts) > 5 else 'прочее'
 
-    from modules.objects import get_object
     obj = get_object(object_id)
     if not obj:
         await query.edit_message_text("❌ Объект не найден")
