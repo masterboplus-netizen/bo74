@@ -105,10 +105,11 @@ async def objects_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not objs:
         await update.message.reply_text("🏗️ Объектов пока нет")
         return
-    lines = ["🏗️ **Объекты:**\n"]
-    for o in objs:
-        lines.append(f"• {o['name']} ({o['status']}) — ID: {o['id']}")
-    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(
+        f"🏗️ **Объекты ({len(objs)}):**\n\nНажми на объект:",
+        reply_markup=objects_keyboard(),
+        parse_mode=ParseMode.MARKDOWN
+    )
 
 
 async def add_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -229,21 +230,12 @@ async def done_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def finance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Если объект не указан — общая сводка по всем объектам
+    # Если объект не указан — общая сводка с кнопками
     if not context.args:
-        from modules.finance import get_all_finance_summary
-        data = get_all_finance_summary()
-        text = "💰 ФИНАНСЫ (общая сводка)\n\n"
-        text += f"Доход: {data['total_income']:,} ₽\n".replace(",", " ")
-        text += f"Расход: {data['total_expense']:,} ₽\n".replace(",", " ")
-        text += f"Баланс: {data['total_balance']:,} ₽\n\n".replace(",", " ")
-        text += "🏗️ По объектам:\n"
-        for o in data['objects']:
-            if o['income'] > 0 or o['expense'] > 0:
-                sign = "+" if o['balance'] >= 0 else ""
-                text += f"• {o['name']}: {sign}{o['balance']:,} ₽\n".replace(",", " ")
-        text += "\n📊 Детали: /finance <объект>"
-        await update.message.reply_text(text)
+        await update.message.reply_text(
+            format_finance_summary(),
+            reply_markup=finance_keyboard()
+        )
         return
 
     obj = get_object_by_name(' '.join(context.args))
