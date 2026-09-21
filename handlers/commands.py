@@ -8,6 +8,7 @@ from modules.objects import create_object, get_all_objects, get_object_by_name, 
 from modules.tasks import create_task, get_active_tasks, close_task, get_tasks_by_object
 from modules.finance import add_expense, get_finance_summary
 from modules.parser import parse_message, parse_amount
+from modules.personal import add_personal_expense
 from config import ADMIN_IDS
 from handlers.onboarding import ask_role, role_menu_keyboard
 
@@ -519,7 +520,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parts = data.replace("personal_cat_", "").split("_", 1)
         amount = int(parts[0])
         category = parts[1]
-        from modules.personal import add_personal_expense
         add_personal_expense(amount, category)
         context.user_data['pending_personal_expense'] = None
         context.user_data['waiting_for'] = None
@@ -739,6 +739,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Обработка создания нового расхода
     if context.user_data.get('waiting_for') == 'new_expense_text':
         obj = context.user_data.get('pending_expense_object')
+        if not obj:
+            context.user_data['waiting_for'] = None
+            await update.message.reply_text(
+                "❌ Объект потерялся. Начни заново: «➕ Добавить» → «💰 Расход»",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("➕ Добавить", callback_data="menu_add")],
+                    [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+                ])
+            )
+            return
         if obj:
             amount = parse_amount(text)
             if amount:
@@ -786,8 +796,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Обработка личного расхода
     if context.user_data.get('waiting_for') == 'personal_expense_text':
-        from modules.personal import add_personal_expense
-        from modules.parser import parse_amount
         # Разбираем: "300 еда" или "1500 инструмент"
         parts = text.strip().split(maxsplit=1)
         amount_str = parts[0] if parts else ''
