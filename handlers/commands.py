@@ -113,6 +113,18 @@ async def objects_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def add_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        # Без аргументов — открываем интерактивное меню добавления
+        await update.message.reply_text(
+            "➕ Что добавить?",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🏗️ Новый объект", callback_data="add_object")],
+                [InlineKeyboardButton("📋 Новая задача", callback_data="add_task")],
+                [InlineKeyboardButton("💰 Расход", callback_data="add_expense")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")],
+            ])
+        )
+        return
     if len(context.args) < 2:
         await update.message.reply_text("❌ Использование: /add <объект> <задача>")
         return
