@@ -9,7 +9,8 @@ def save_user(tg_id: int, name: str = None, username: str = None, role: str = 'g
     c.execute("SELECT id FROM users WHERE tg_id = ?", (tg_id,))
     row = c.fetchone()
     if row:
-        c.execute("UPDATE users SET name = ?, role = ? WHERE tg_id = ?", (name, role, tg_id))
+        # НЕ трогаем role у существующего юзера — только имя
+        c.execute("UPDATE users SET name = ? WHERE tg_id = ?", (name, tg_id))
         user_id = row['id']
     else:
         c.execute("INSERT INTO users (tg_id, name, role) VALUES (?, ?, ?)", (tg_id, name, role))
