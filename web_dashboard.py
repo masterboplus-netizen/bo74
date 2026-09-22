@@ -26,7 +26,7 @@ def get_summary():
     c.execute("SELECT COALESCE(SUM(amount), 0) FROM finance WHERE type = 'income'")
     total_income = c.fetchone()[0] or 0
 
-    c.execute("SELECT COALESCE(SUM(amount), 0) FROM finance WHERE type = 'expense'")
+    c.execute("SELECT COALESCE(SUM(amount), 0) FROM finance WHERE type = 'expense' AND is_personal = 0")
     total_expense = c.fetchone()[0] or 0
 
     c.execute("SELECT COALESCE(SUM(amount), 0) FROM finance WHERE type = 'expense' AND is_personal = 1")
