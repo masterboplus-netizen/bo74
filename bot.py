@@ -25,6 +25,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+async def error_handler(update, context):
+    """Ловит все ошибки в хендлерах и отправляет админу в Telegram."""
+    logger.error(f"❌ Ошибка: {context.error}", exc_info=context.error)
+    try:
+        await context.bot.send_message(
+            chat_id=1821030188,
+            text=f"⚠️ Ошибка в боте:\n\n{type(context.error).__name__}: {context.error}"
+        )
+    except Exception:
+        pass
+
 
 def main():
     if not validate_config():
@@ -92,6 +103,8 @@ def main():
     register_onboarding_handlers(app)
     register_admin_handlers(app)
     app.add_handler(CallbackQueryHandler(handle_callback, pattern="^(?!cat_|choose_obj_|task_|taskdone_|taskdel_|setdate_|taskdate_|taskprio_|setprio_|taskrename_).*"))
+
+    app.add_error_handler(error_handler)
 
     logger.info("🚀 БО 7.5 запущен! Все хендлеры зарегистрированы.")
     app.run_polling()
