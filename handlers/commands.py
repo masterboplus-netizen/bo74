@@ -138,13 +138,12 @@ async def add_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def tasks_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Задачи по датам, внутри — по объектам"""
+    """Задачи по датам с кнопками — как в меню."""
     from datetime import datetime, date, timedelta
-
     conn = get_connection()
     c = conn.cursor()
     c.execute("""
-        SELECT t.id, t.title, t.status, t.priority, t.deadline, o.name as object_name
+        SELECT t.id, t.title, t.deadline, o.name as object_name
         FROM tasks t
         LEFT JOIN objects o ON t.object_id = o.id
         WHERE t.status IN ('open', 'in_progress')
@@ -160,74 +159,54 @@ async def tasks_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     today = date.today()
     tomorrow = today + timedelta(days=1)
 
-    today_data = {}
-    tomorrow_data = {}
-    by_date = {}
-    no_deadline = {}
+    today_tasks = [r for r in rows if r['deadline'] and datetime.strptime(r['deadline'], '%Y-%m-%d').date() == today]
+    tomorrow_tasks = [r for r in rows if r['deadline'] and datetime.strptime(r['deadline'], '%Y-%m-%d').date() == tomorrow]
+    later_tasks = sorted(
+        [r for r in rows if r['deadline'] and datetime.strptime(r['deadline'], '%Y-%m-%d').date() > tomorrow],
+        key=lambda x: x['deadline']
+    )
+    no_deadline = [r for r in rows if not r['deadline']]
 
-    for r in rows:
-        title = r['title']
-        obj = r['object_name'] or 'Без объекта'
+    def format_block(title, items):
+        lines = [f"**{title}:**"]
+        for r in items:
+            d = ""
+            if r['deadline']:
+                try:
+                    d = " (" + datetime.strptime(r['deadline'], '%Y-%m-%d').strftime('%d.%m') + ")"
+                except Exception:
+                    pass
+            obj = r['object_name'] or "без объекта"
+            lines.append(f"#{r['id']} {r['title']}{d} — {obj}")
+        return "\n".join(lines)
 
-        if not r['deadline']:
-            if obj not in no_deadline:
-                no_deadline[obj] = []
-            no_deadline[obj].append(title)
-            continue
-
-        try:
-            d = datetime.strptime(r['deadline'], '%Y-%m-%d').date()
-        except:
-            if obj not in no_deadline:
-                no_deadline[obj] = []
-            no_deadline[obj].append(title)
-            continue
-
-        if d == today:
-            if obj not in today_data:
-                today_data[obj] = []
-            today_data[obj].append(title)
-        elif d == tomorrow:
-            if obj not in tomorrow_data:
-                tomorrow_data[obj] = []
-            tomorrow_data[obj].append(title)
-        else:
-            key = d.strftime('%d.%m.%Y')
-            if key not in by_date:
-                by_date[key] = {}
-            if obj not in by_date[key]:
-                by_date[key][obj] = []
-            by_date[key][obj].append(title)
-
-    text = "📋 ЗАДАЧИ\n\n"
-
-    def format_block(title, data):
-        result = f"{title}\n\n"
-        for obj, tasks in data.items():
-            result += f"{obj}:\n"
-            for t in tasks:
-                result += f"• {t}\n"
-            result += "\n"
-        return result
-
-    if today_data:
-        text += format_block(f"СЕГОДНЯ — {today.strftime('%d.%m.%Y')}", today_data)
-
-    if tomorrow_data:
-        text += format_block(f"ЗАВТРА — {tomorrow.strftime('%d.%m.%Y')}", tomorrow_data)
-
-    for date_str, data in by_date.items():
-        text += format_block(date_str, data)
-
+    sections = []
+    if today_tasks:
+        sections.append(format_block(f"СЕГОДНЯ — {today.strftime('%d.%m.%Y')}", today_tasks))
+    if tomorrow_tasks:
+        sections.append(format_block(f"ЗАВТРА — {tomorrow.strftime('%d.%m.%Y')}", tomorrow_tasks))
+    if later_tasks:
+        sections.append(format_block("ПОЗЖЕ", later_tasks))
     if no_deadline:
-        text += format_block("БЕЗ СРОКА", no_deadline)
+        sections.append(format_block("БЕЗ СРОКА", no_deadline))
 
+    text = "📋 ЗАДАЧИ\n\n" + "\n".join(sections)
     if len(text) > 4000:
-        text = text[:3900] + "\n\n... (список обрезан)"
+        text = text[:3900] + "\n\n..."
 
-    await update.message.reply_text(text)
+    buttons = []
+    task_order = today_tasks + tomorrow_tasks + later_tasks + no_deadline
+    for i, r in enumerate(task_order[:20], start=1):
+        buttons.append([InlineKeyboardButton(
+            f"{i}. {r['title'][:40]}",
+            callback_data=f"task_{r['id']}"
+        )])
+    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
 
-
+    await update.message.reply_text(
+        text + "\n\nВыбери задачу:",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
 
 async def done_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
