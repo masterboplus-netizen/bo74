@@ -1,4 +1,4 @@
-"""Точка сборки БО 7.2"""
+"""Точка сборки БО 7.5"""
 import logging
 from telegram import BotCommand
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
@@ -32,18 +32,6 @@ def main():
     init_db()
 
     app = Application.builder().token(TOKEN).build()
-
-    # Настройка постоянного меню команд
-    async def post_init(app):
-        await app.bot.set_my_commands([
-            BotCommand("start", "🏠 Главное меню"),
-            BotCommand("objects", "🏗️ Объекты"),
-            BotCommand("tasks", "📋 Задачи"),
-            BotCommand("finance", "💰 Финансы"),
-            BotCommand("add", "➕ Добавить"),
-            BotCommand("help", "⚙️ Помощь"),
-        ])
-
     # Настройка постоянного меню команд + дайджестов
     async def post_init(app):
         await app.bot.set_my_commands([
@@ -96,7 +84,7 @@ def main():
     app.add_handler(CommandHandler("backup_now", backup_now_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    logger.info("🚀 БО 7.2 запущен!")
+    logger.info("🚀 БО 7.5 запущен!")
     app.add_handler(CallbackQueryHandler(handle_category, pattern="^cat_"))
     app.add_handler(CallbackQueryHandler(handle_choose_object, pattern="^choose_obj_"))
     app.add_handler(CallbackQueryHandler(handle_confirm_date, pattern="^confirmdate_"))

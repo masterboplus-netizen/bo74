@@ -1,4 +1,4 @@
-"""База данных БО 7.2 — 27 таблиц"""
+"""База данных БО 7.5 — 27 таблиц"""
 import sqlite3
 from config import DB_PATH
 
@@ -172,7 +172,7 @@ def init_db():
 
     conn.commit()
     conn.close()
-    print("✅ База БО 7.2 инициализирована (27 таблиц)")
+    print("✅ База БО 7.5 инициализирована (27 таблиц)")
 
 if __name__ == '__main__':
     init_db()

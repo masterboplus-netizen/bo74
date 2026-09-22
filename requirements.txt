@@ -1,3 +1,6 @@
 # Project dependencies
 python-dotenv
 python-telegram-bot[job-queue]
+APScheduler
+flask
+gunicorn

@@ -1,4 +1,4 @@
-"""Утренний дайджест и вечерний опрос БО 7.4"""
+"""Утренний дайджест и вечерний опрос БО 7.5"""
 from datetime import datetime, date, timedelta
 from db import get_connection
 from modules.users import get_all_users
