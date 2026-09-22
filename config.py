@@ -12,7 +12,7 @@ DB_PATH = os.getenv("DB_PATH", "bo72.db")
 DEFAULT_LANGUAGE = "ru"
 DEFAULT_MODE = "brief"
 TIMEZONE = "Europe/Moscow"
-VERSION = "7.2"
+VERSION = "7.5"
 
 
 def validate_config() -> bool:

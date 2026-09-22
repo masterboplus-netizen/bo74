@@ -84,7 +84,6 @@ def main():
     app.add_handler(CommandHandler("backup_now", backup_now_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    logger.info("🚀 БО 7.5 запущен!")
     app.add_handler(CallbackQueryHandler(handle_category, pattern="^cat_"))
     app.add_handler(CallbackQueryHandler(handle_choose_object, pattern="^choose_obj_"))
     app.add_handler(CallbackQueryHandler(handle_confirm_date, pattern="^confirmdate_"))
@@ -93,6 +92,8 @@ def main():
     register_onboarding_handlers(app)
     register_admin_handlers(app)
     app.add_handler(CallbackQueryHandler(handle_callback, pattern="^(?!cat_|choose_obj_|task_|taskdone_|taskdel_|setdate_|taskdate_|taskprio_|setprio_|taskrename_).*"))
+
+    logger.info("🚀 БО 7.5 запущен! Все хендлеры зарегистрированы.")
     app.run_polling()
 
 
