@@ -1,4 +1,4 @@
-"""Импорт всех данных БО 7.1 в БО 7.2"""
+"""Импорт всех данных БО 7.5 в БО 7.2"""
 import db
 from modules.objects import create_object, get_object_by_name
 from modules.tasks import create_task

@@ -1,4 +1,4 @@
-"""Веб-дашборд Бо 7.4 — на встроенном http.server, без зависимостей"""
+"""Веб-дашборд Бо 7.5 — на встроенном http.server, без зависимостей"""
 import http.server
 import socketserver
 import json
@@ -186,13 +186,13 @@ def render_dashboard():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Бо 7.4 — Дашборд</title>
+    <title>Бо 7.5 — Дашборд</title>
     <style>{CSS}</style>
 </head>
 <body>
 <div class="container">
     <div class="header">
-        <h1>🤖 Бо 7.4 — Дашборд</h1>
+        <h1>🤖 Бо 7.5 — Дашборд</h1>
         <span style="color:#666;font-size:14px;">{date.today().strftime('%d.%m.%Y')}</span>
     </div>
 
@@ -213,7 +213,7 @@ def render_dashboard():
 
     {f'<h2>⚠️ Просроченные задачи ({len(overdue)})</h2><table><thead><tr><th>ID</th><th>Задача</th><th>Объект</th><th>Срок</th></tr></thead><tbody>{overdue_rows}</tbody></table>' if overdue else ''}
 
-    <p style="margin-top:32px;color:#555;font-size:12px;">Бо 7.4 · Replit · {date.today().strftime('%Y-%m-%d')}</p>
+    <p style="margin-top:32px;color:#555;font-size:12px;">Бо 7.5 · Replit · {date.today().strftime('%Y-%m-%d')}</p>
 </div>
 </body>
 </html>"""
@@ -255,7 +255,7 @@ def render_object(obj):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{obj['name']} — Бо 7.4</title>
+    <title>{obj['name']} — Бо 7.5</title>
     <style>{CSS}</style>
 </head>
 <body>
@@ -332,7 +332,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 if __name__ == '__main__':
-    print(f"🚀 Дашборд Бо 7.4 запущен: http://0.0.0.0:{PORT}")
+    print(f"🚀 Дашборд Бо 7.5 запущен: http://0.0.0.0:{PORT}")
     print(f"📊 В браузере открой: https://<твой-домен>.replit.dev:{PORT}")
     with socketserver.TCPServer(("", PORT), Handler) as httpd:
         try:

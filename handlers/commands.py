@@ -1,4 +1,4 @@
-"""Команды Telegram-бота БО 7.2"""
+"""Команды Telegram-бота БО 7.5"""
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
@@ -78,18 +78,32 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "📋 **Команды БО 7.2:**\n\n"
-        "/add_object <название> — создать объект\n"
-        "/objects — список объектов\n"
-        "/add <объект> <задача> — добавить задачу\n"
-        "/tasks — активные задачи\n"
-        "/done <id> — закрыть задачу\n"
-        "/finance <объект> — финансы объекта\n"
-        "/add_expense <объект> <сумма> [категория] — добавить расход\n"
-        "/help — эта справка",
+        "📋 **Бо 7.5 — команды и возможности**\n\n"
+        "🏗️ **Объекты**\n"
+        "/objects — список объектов кнопками\n"
+        "/add_object <название> — создать объект\n\n"
+        "📋 **Задачи**\n"
+        "/tasks — активные задачи кнопками\n"
+        "/add <объект> <задача> — быстро добавить\n"
+        "/add — меню добавления (объект/задача/расход)\n"
+        "/done <id> — закрыть задачу\n\n"
+        "💰 **Финансы**\n"
+        "/finance — общая сводка кнопками\n"
+        "/finance <объект> — по объекту\n"
+        "/add_expense <объект> <сумма> [категория]\n\n"
+        "💸 **Личные расходы** — через меню «💸 Личные»\n\n"
+        "📊 **Отчёты** — через меню «📊 Отчёты»\n\n"
+        "📝 **Свободный ввод** (пиши текстом):\n"
+        "• «потратил 5000 на материалы Переделкино-2»\n"
+        "• «добавь в Арбат положить паркет»\n"
+        "• «500» — спросит личный/объект\n"
+        "• «задачи» / «объекты»\n\n"
+        "⏰ **Автоматика**\n"
+        "• Дайджест 9:00 МСК\n"
+        "• Опрос 18:00 МСК\n"
+        "• Автобэкап 23:00 МСК",
         parse_mode=ParseMode.MARKDOWN
     )
-
 
 async def add_object_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -621,7 +635,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from modules.dashboard_link import get_dashboard_url
         url = get_dashboard_url()
         await query.edit_message_text(
-            f"🌐 Дашборд Бо 7.4\n\n"
+            f"🌐 Дашборд Бо 7.5\n\n"
             f"Нажми кнопку ниже, чтобы открыть:\n\n"
             f"📱 Совет: добавь на главный экран телефона",
             reply_markup=InlineKeyboardMarkup([

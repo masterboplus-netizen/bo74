@@ -1,4 +1,4 @@
-"""Веб-дашборд Бо 7.4 — Flask"""
+"""Веб-дашборд Бо 7.5 — Flask"""
 from flask import Flask, render_template, request
 from datetime import date, timedelta
 import sys
@@ -112,5 +112,5 @@ def object_detail(obj_id):
 
 
 if __name__ == '__main__':
-    print("🚀 Дашборд Бо 7.4: http://0.0.0.0:8080")
+    print("🚀 Дашборд Бо 7.5: http://0.0.0.0:8080")
     app.run(host='0.0.0.0', port=8080, debug=False)
