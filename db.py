@@ -14,6 +14,7 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tg_id INTEGER UNIQUE, name TEXT, role TEXT DEFAULT 'guest',
+        onboarded INTEGER DEFAULT 0,
         phone TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS objects (
@@ -169,6 +170,13 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_finance_object ON finance(object_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_finance_date ON finance(date)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_events_date ON calendar_events(event_date)")
+
+    # === МИГРАЦИИ для старых БД ===
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN onboarded INTEGER DEFAULT 0")
+        print("🔧 Миграция: добавлена колонка onboarded в users")
+    except Exception:
+        pass  # колонка уже есть
 
     conn.commit()
     conn.close()
