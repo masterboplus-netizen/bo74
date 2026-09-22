@@ -275,6 +275,13 @@ async def add_expense_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text(f"✅ Расход {amount} ₽ ({category}) добавлен в «{obj['name']}»")
 
 
+async def personal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /personal — личные расходы за месяц."""
+    await update.message.reply_text(
+        format_personal_summary('month'),
+        reply_markup=personal_keyboard()
+    )
+
 # === ОБРАБОТКА КНОПОК ===
 
 def objects_keyboard():

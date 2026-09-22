@@ -11,7 +11,7 @@ from handlers.commands import (
     handle_choose_object, handle_category,
     start, help_command, add_object_command, objects_command,
     add_task_command, tasks_command, done_command,
-    finance_command, add_expense_command, handle_callback, handle_text
+    finance_command, add_expense_command, personal_command, handle_callback, handle_text
 )
 from handlers.digest_cmd import digest_now_command, survey_now_command
 from modules.digest import send_morning_digest, send_evening_survey, send_morning_digest_with_log, send_evening_survey_with_log, catch_up_digests
@@ -90,6 +90,7 @@ def main():
     app.add_handler(CommandHandler("done", done_command))
     app.add_handler(CommandHandler("finance", finance_command))
     app.add_handler(CommandHandler("add_expense", add_expense_command))
+    app.add_handler(CommandHandler("personal", personal_command))
     app.add_handler(CommandHandler("digest_now", digest_now_command))
     app.add_handler(CommandHandler("survey_now", survey_now_command))
     app.add_handler(CommandHandler("backup_now", backup_now_command))
