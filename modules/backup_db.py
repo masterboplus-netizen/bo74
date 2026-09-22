@@ -28,11 +28,11 @@ def make_backup():
 
 
 def git_commit_and_push(message: str) -> bool:
-    """Коммитит изменения и пушит в GitHub"""
+    """Коммитит ТОЛЬКО базу и её бэкап, пушит в GitHub"""
     try:
-        # git add
+        # git add — только БД и её бэкап-копия
         result = subprocess.run(
-            ["git", "add", "-A"],
+            ["git", "add", "bo72.db", "backups/"],
             cwd=WORKSPACE, capture_output=True, text=True
         )
         if result.returncode != 0:
