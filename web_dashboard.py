@@ -196,6 +196,7 @@ def render_dashboard():
             <td class="positive">{o['income']:,} ₽</td>
             <td class="negative">{o['expense']:,} ₽</td>
             <td class="{bal_class}">{o['balance']:,} ₽</td>
+            <td><a href="/object/{o['id']}/photos" style="color:#60a5fa;">📸</a></td>
         </tr>"""
 
     overdue_rows = ""
@@ -234,7 +235,7 @@ def render_dashboard():
 
     <h2>🏗️ Объекты</h2>
     <table>
-        <thead><tr><th>Объект</th><th>Статус</th><th>Задачи (откр/вып)</th><th>Доход</th><th>Расход</th><th>Баланс</th></tr></thead>
+        <thead><tr><th>Объект</th><th>Статус</th><th>Задачи (откр/вып)</th><th>Доход</th><th>Расход</th><th>Баланс</th><th>📸</th></tr></thead>
         <tbody>{rows}</tbody>
     </table>
 
@@ -289,7 +290,10 @@ def render_object(obj):
 <div class="container">
     <div class="header">
         <h1>🏗️ {obj['name']}</h1>
-        <a class="back" href="/">← К дашборду</a>
+        <div>
+            <a class="back" href="/object/{obj['id']}/photos" style="color:#60a5fa;font-weight:600;margin-right:16px;">📸 Фото объекта</a>
+            <a class="back" href="/">← К дашборду</a>
+        </div>
     </div>
 
     <div class="cards">
