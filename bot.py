@@ -90,6 +90,10 @@ def main():
             BotCommand("objects", "🏗️ Объекты"),
             BotCommand("tasks", "📋 Задачи"),
             BotCommand("finance", "💰 Финансы"),
+            BotCommand("clients", "👥 Клиенты"),
+            BotCommand("deals", "💼 Сделки"),
+            BotCommand("personal", "💸 Личные расходы"),
+            BotCommand("photos", "📸 Фото объекта"),
             BotCommand("add", "➕ Добавить"),
             BotCommand("help", "⚙️ Помощь"),
         ])
