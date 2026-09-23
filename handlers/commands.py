@@ -228,10 +228,48 @@ async def done_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     try:
         task_id = int(context.args[0])
-        close_task(task_id, user_id=update.effective_user.id)
-        await update.message.reply_text(f"✅ Задача #{task_id} выполнена!")
     except ValueError:
         await update.message.reply_text("❌ ID должен быть числом")
+        return
+
+    # Получаем задачу до закрытия (нужен object_id)
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT id, object_id, title FROM tasks WHERE id = ?", (task_id,))
+    row = c.fetchone()
+    conn.close()
+
+    if not row:
+        await update.message.reply_text(f"❌ Задача #{task_id} не найдена")
+        return
+
+    close_task(task_id, user_id=update.effective_user.id)
+
+    # Ставим флаг: ждём фото для этой задачи
+    context.user_data['photo_for_task'] = {
+        'task_id': task_id,
+        'object_id': row['object_id'],
+    }
+
+    await update.message.reply_text(
+        f"✅ Задача #{task_id} «{row['title']}» выполнена!\n\n"
+        f"📸 Приложи фото результата — оно привяжется к задаче.\n"
+        f"Или нажми «Пропустить».",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⏭️ Пропустить", callback_data=f"skip_photo_{task_id}")]
+        ])
+    )
+
+
+async def handle_skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка «Пропустить фото»."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if not data.startswith("skip_photo_"):
+        return
+    context.user_data['photo_for_task'] = None
+    await query.edit_message_text("✅ Ок, без фото.")
 
 
 async def finance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -865,12 +903,44 @@ async def photos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # === ОБРАБОТКА ФОТО ===
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ловит фото от пользователя, спрашивает объект/этап/задачу."""
-    # Берём самое большое фото
+    """Ловит фото от пользователя. Если есть photo_for_task — привязываем к задаче. Иначе — стандартный выбор."""
     photo = update.message.photo[-1]
     file_id = photo.file_id
 
-    # Сохраняем в user_data
+    # === СЦЕНАРИЙ 1: ждали фото для конкретной задачи (после /done) ===
+    pft = context.user_data.get('photo_for_task')
+    if pft and pft.get('task_id'):
+        from db import get_connection
+        from datetime import datetime
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute(
+            """INSERT INTO photos (object_id, task_id, file_id, caption, stage, uploaded_by, taken_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                pft.get('object_id'),
+                pft['task_id'],
+                file_id,
+                update.message.caption or '',
+                'after',
+                update.effective_user.id,
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            )
+        )
+        conn.commit()
+        conn.close()
+        context.user_data['photo_for_task'] = None
+
+        await update.message.reply_text(
+            f"✅ Фото сохранено для задачи #{pft['task_id']} (этап: После)",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📋 К задачам", callback_data="menu_tasks")],
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    # === СЦЕНАРИЙ 2: обычная загрузка (выбор объекта → этап → задача) ===
     context.user_data['pending_photo'] = {
         'file_id': file_id,
         'caption': update.message.caption or '',
