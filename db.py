@@ -108,6 +108,9 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS photos (
         id INTEGER PRIMARY KEY AUTOINCREMENT, object_id INTEGER,
         task_id INTEGER, file_id TEXT, caption TEXT,
+        stage TEXT DEFAULT 'progress',
+        uploaded_by INTEGER,
+        taken_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS documents (
@@ -176,7 +179,19 @@ def init_db():
         c.execute("ALTER TABLE users ADD COLUMN onboarded INTEGER DEFAULT 0")
         print("🔧 Миграция: добавлена колонка onboarded в users")
     except Exception:
-        pass  # колонка уже есть
+        pass
+
+    # Миграция photos: stage, uploaded_by, taken_at
+    for col, sql in [
+        ("stage", "ALTER TABLE photos ADD COLUMN stage TEXT DEFAULT 'progress'"),
+        ("uploaded_by", "ALTER TABLE photos ADD COLUMN uploaded_by INTEGER"),
+        ("taken_at", "ALTER TABLE photos ADD COLUMN taken_at DATETIME"),
+    ]:
+        try:
+            c.execute(sql)
+            print(f"🔧 Миграция photos: добавлена колонка {col}")
+        except Exception:
+            pass
 
     conn.commit()
     conn.close()
