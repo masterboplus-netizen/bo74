@@ -69,6 +69,33 @@ def get_objects():
     } for r in rows]
 
 
+def get_object_photos(obj_id):
+    """Фото объекта для дашборда (без картинок — только метаданные)."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT p.id, p.stage, p.caption, p.taken_at, p.created_at, p.task_id,
+               t.title as task_title,
+               u.name as uploader_name
+        FROM photos p
+        LEFT JOIN tasks t ON p.task_id = t.id
+        LEFT JOIN users u ON u.tg_id = p.uploaded_by
+        WHERE p.object_id = ?
+        ORDER BY p.stage, p.taken_at DESC
+    """, (obj_id,))
+    rows = c.fetchall()
+    conn.close()
+    return [{
+        'id': r['id'],
+        'stage': r['stage'] or 'progress',
+        'caption': r['caption'] or '',
+        'taken_at': r['taken_at'] or '',
+        'task_id': r['task_id'],
+        'task_title': r['task_title'] or '',
+        'uploader': r['uploader_name'] or '—',
+    } for r in rows]
+
+
 def get_overdue_tasks():
     """Просроченные задачи"""
     today = date.today().strftime('%Y-%m-%d')
@@ -289,6 +316,73 @@ def render_object(obj):
 </html>"""
 
 
+def render_object_photos(obj_id):
+    """Страница со списком фото объекта."""
+    obj = get_object_detail(obj_id)
+    if not obj:
+        return "<h1>Объект не найден</h1>"
+
+    photos = get_object_photos(obj_id)
+    stage_names = {'before': '📸 До', 'progress': '🔵 Процесс', 'after': '✅ После', 'document': '📄 Документы'}
+    stage_stats = {}
+    for p in photos:
+        st = p['stage']
+        stage_stats[st] = stage_stats.get(st, 0) + 1
+
+    # Статистика
+    stats_html = ""
+    for st, cnt in stage_stats.items():
+        stats_html += f'<div class="card"><div class="label">{stage_names.get(st, st)}</div><div class="value">{cnt}</div></div>'
+
+    # Строки таблицы
+    rows = ""
+    for p in photos:
+        task_str = f"#{p['task_id']} {p['task_title'][:40]}" if p['task_id'] else "Без задачи"
+        rows += f"""
+        <tr>
+            <td>#{p['id']}</td>
+            <td>{stage_names.get(p['stage'], p['stage'])}</td>
+            <td>{task_str}</td>
+            <td>{p['taken_at'][:16] if p['taken_at'] else '—'}</td>
+            <td>{p['caption'][:50] or '—'}</td>
+            <td>{p['uploader']}</td>
+        </tr>"""
+
+    return f"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Фото: {obj['name']} — Бо 7.5</title>
+    <style>{CSS}</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>📸 Фото: {obj['name']}</h1>
+        <a class="back" href="/object/{obj_id}">← К объекту</a>
+    </div>
+
+    <div class="cards">
+        <div class="card"><div class="label">Всего фото</div><div class="value">{len(photos)}</div></div>
+        {stats_html}
+    </div>
+
+    <p style="color:#888;font-size:14px;margin-bottom:16px;">
+        📱 Просмотр и загрузка — в боте:
+        <code style="background:#222;padding:2px 6px;border-radius:4px;">/photos {obj['name']}</code>
+    </p>
+
+    <h2>Список фото</h2>
+    <table>
+        <thead><tr><th>ID</th><th>Этап</th><th>Задача</th><th>Дата съёмки</th><th>Описание</th><th>Загрузил</th></tr></thead>
+        <tbody>{rows or '<tr><td colspan="6" style="text-align:center;color:#666;">Пока нет фото</td></tr>'}</tbody>
+    </table>
+</div>
+</body>
+</html>"""
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -296,6 +390,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if path == '/' or path == '':
             html = render_dashboard()
+        elif path.startswith('/object/') and path.endswith('/photos'):
+            try:
+                obj_id = int(path.split('/')[-2])
+                html = render_object_photos(obj_id)
+            except Exception as e:
+                html = f"<h1>Ошибка: {e}</h1>"
         elif path.startswith('/object/'):
             try:
                 obj_id = int(path.split('/')[-1])
