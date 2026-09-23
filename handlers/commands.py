@@ -701,6 +701,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("📅 За неделю", callback_data=f"report_obj_{obj_id}_week")],
                 [InlineKeyboardButton("📅 За месяц", callback_data=f"report_obj_{obj_id}_month")],
                 [InlineKeyboardButton("📅 За всё время", callback_data=f"report_obj_{obj_id}_all")],
+                [InlineKeyboardButton("📸 Фото объекта", callback_data=f"objphotos_{obj_id}")],
                 [InlineKeyboardButton("⬅️ К отчётам", callback_data="menu_reports")],
                 [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
             ])

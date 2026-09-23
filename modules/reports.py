@@ -46,6 +46,26 @@ def get_object_report(object_id: int, period: str = 'month') -> dict:
     }
 
 
+def get_object_photos_stats(object_id: int) -> dict:
+    """Статистика фото объекта: всего + по этапам."""
+    from db import get_connection
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM photos WHERE object_id = ?", (object_id,))
+    total = c.fetchone()[0] or 0
+
+    c.execute("""
+        SELECT stage, COUNT(*) as cnt FROM photos
+        WHERE object_id = ?
+        GROUP BY stage
+    """, (object_id,))
+    by_stage = {}
+    for r in c.fetchall():
+        by_stage[r['stage'] or 'progress'] = r['cnt']
+    conn.close()
+    return {'total': total, 'by_stage': by_stage}
+
+
 def format_object_report(report: dict) -> str:
     """Форматирует отчёт объекта в текст"""
     if not report:
@@ -85,6 +105,17 @@ def format_object_report(report: dict) -> str:
     text += f"В работе: {t['open']}\n"
     if t['overdue']:
         text += f"⚠️ Просрочено: {t['overdue']}\n"
+
+    # Фото
+    try:
+        ph = get_object_photos_stats(report['object']['id'])
+        if ph['total'] > 0:
+            text += f"\n📸 ФОТО: {ph['total']}\n"
+            stage_names = {'before': '📸 До', 'progress': '🔵 Процесс', 'after': '✅ После', 'document': '📄 Документы'}
+            for st, cnt in ph['by_stage'].items():
+                text += f"  • {stage_names.get(st, st)}: {cnt}\n"
+    except Exception:
+        pass
 
     return text
 
