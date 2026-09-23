@@ -743,6 +743,28 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text or text.startswith('/'):
         return
 
+    # === ПРИВЕТСТВИЯ ===
+    greetings = ['привет', 'здравствуй', 'здравствуйте', 'хай', 'hi', 'hello', 'ку', 'добрый день', 'доброе утро', 'добрый вечер']
+    text_low = text.lower().strip()
+    if text_low in greetings or any(text_low.startswith(g) for g in greetings):
+        user_name = update.effective_user.first_name or ''
+        await update.message.reply_text(
+            f"👋 Привет{', ' + user_name if user_name else ''}!\n\n"
+            f"Я *Бо 7.5* — помощник по стройке.\n\n"
+            f"Что умею:\n"
+            f"• «потратил 5000 на материалы Переделкино-2»\n"
+            f"• «добавь в Арбат положить паркет»\n"
+            f"• «500» — спрошу личный/объект\n"
+            f"• /objects, /tasks, /finance — списки\n"
+            f"• /help — все команды",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+                [InlineKeyboardButton("⚙️ Помощь", callback_data="menu_help")],
+            ])
+        )
+        return
+
     # Обработка создания новой задачи
     if context.user_data.get('waiting_for') == 'new_task_text':
         obj = context.user_data.get('pending_task_object')
