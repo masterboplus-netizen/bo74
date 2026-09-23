@@ -343,6 +343,7 @@ def object_detail_keyboard(object_id):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📋 Задачи объекта", callback_data=f"objtasks_{object_id}")],
         [InlineKeyboardButton("💰 Финансы", callback_data=f"objfin_{object_id}")],
+        [InlineKeyboardButton("📸 Фото объекта", callback_data=f"objphotos_{object_id}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="menu_objects")],
     ])
 
@@ -775,6 +776,39 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    if data.startswith("objphotos_"):
+        object_id = int(data.split("_")[1])
+        obj = get_object(object_id)
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM photos WHERE object_id = ?", (object_id,))
+        total = c.fetchone()[0] or 0
+        conn.close()
+
+        if total == 0:
+            await query.edit_message_text(
+                f"📸 Фото объекта «{obj['name']}»\n\nПока нет фото.\n\n"
+                f"Отправь боту фото, чтобы добавить.",
+                reply_markup=object_detail_keyboard(object_id)
+            )
+            return
+
+        await query.edit_message_text(
+            f"📸 *Фото «{obj['name']}»*\n"
+            f"Всего: {total}\n\n"
+            f"Выбери фильтр:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🆕 Последние (3 задачи)", callback_data=f"photofilt_last_{object_id}_0")],
+                [InlineKeyboardButton("📋 По задачам", callback_data=f"photofilt_tasks_{object_id}")],
+                [InlineKeyboardButton("📅 По датам", callback_data=f"photofilt_dates_{object_id}")],
+                [InlineKeyboardButton("👤 Кто загрузил", callback_data=f"photofilt_uploaders_{object_id}")],
+                [InlineKeyboardButton("🛠 Кто делал задачу", callback_data=f"photofilt_assignees_{object_id}")],
+                [InlineKeyboardButton("⬅️ К объекту", callback_data=f"obj_{object_id}")],
+            ]),
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
     if data.startswith("obj_"):
         object_id = int(data.split("_")[1])
         obj = get_object(object_id)
@@ -808,7 +842,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def photos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """/photos <объект> — все фото по объекту, с группировкой по этапам."""
-    from db import get_connection
 
     # Определяем объект
     if context.args:
@@ -900,6 +933,340 @@ async def photos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+# === ФИЛЬТРЫ ФОТО ===
+
+async def _show_photos_batch(update, context, photos, page=0, header="📸 Фото"):
+    """Показывает по 3 фото, с кнопкой 'Показать ещё'."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    BATCH = 3
+    start = page * BATCH
+    end = start + BATCH
+    batch = photos[start:end]
+
+    stage_names = {'before': '📸 До', 'progress': '🔵 Процесс', 'after': '✅ После', 'document': '📄 Документ'}
+    for r in batch:
+        caption_parts = [stage_names.get(r['stage'], r['stage'] or '')]
+        if r.get('task_title'):
+            caption_parts.append(f"#{r['task_id']} {r['task_title'][:40]}")
+        if r.get('caption'):
+            caption_parts.append(r['caption'])
+        if r.get('taken_at'):
+            caption_parts.append(f"📅 {r['taken_at'][:10]}")
+        caption = " · ".join([p for p in caption_parts if p])
+        try:
+            await context.bot.send_photo(
+                chat_id=update.effective_chat.id,
+                photo=r['file_id'],
+                caption=caption[:1024]
+            )
+        except Exception as e:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=f"⚠️ Не смог отправить фото #{r.get('id', '?')}: {e}"
+            )
+
+    # Кнопка «Показать ещё»
+    buttons = []
+    if end < len(photos):
+        buttons.append([InlineKeyboardButton(
+            f"⬇️ Показать ещё (осталось {len(photos) - end})",
+            callback_data=f"photopage_{context.user_data.get('photo_filter_key', '')}_{page + 1}"
+        )])
+    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=context.user_data.get('photo_back', 'menu_back'))])
+
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=f"{header}\nПоказано {min(end, len(photos))} из {len(photos)}",
+        reply_markup=InlineKeyboardMarkup(buttons) if buttons else None
+    )
+
+
+async def handle_photo_filter(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик всех фильтров фото."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    # Формат: photofilt_<тип>_<obj_id>_<доп>
+    parts = data.replace("photofilt_", "").split("_")
+    ftype = parts[0]
+    obj_id = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
+    extra = parts[2] if len(parts) > 2 else None
+
+    obj = get_object(obj_id) if obj_id else None
+    obj_name = obj['name'] if obj else '—'
+
+    conn = get_connection()
+    c = conn.cursor()
+
+    if ftype == "last":
+        # Последние 3 задачи с фото
+        c.execute("""
+            SELECT DISTINCT p.task_id
+            FROM photos p
+            WHERE p.object_id = ? AND p.task_id IS NOT NULL
+            ORDER BY p.taken_at DESC
+            LIMIT 3
+        """, (obj_id,))
+        task_ids = [r[0] for r in c.fetchall()]
+        if not task_ids:
+            conn.close()
+            await query.edit_message_text(
+                f"📸 Последние фото «{obj_name}»\n\nЗадач с фото нет.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Назад", callback_data=f"objphotos_{obj_id}")]
+                ])
+            )
+            return
+        placeholders = ",".join("?" * len(task_ids))
+        c.execute(f"""
+            SELECT p.id, p.file_id, p.stage, p.caption, p.taken_at, p.task_id,
+                   t.title as task_title
+            FROM photos p
+            LEFT JOIN tasks t ON p.task_id = t.id
+            WHERE p.object_id = ? AND p.task_id IN ({placeholders})
+            ORDER BY p.taken_at DESC
+        """, [obj_id] + task_ids)
+        photos = [dict(r) for r in c.fetchall()]
+        conn.close()
+        context.user_data['photo_filter_key'] = f"last_{obj_id}"
+        context.user_data['photo_back'] = f"objphotos_{obj_id}"
+        context.user_data['photo_cache'] = photos
+        await query.edit_message_text(
+            f"🆕 Последние фото «{obj_name}»\n({len(task_ids)} задач, {len(photos)} фото)"
+        )
+        await _show_photos_batch(update, context, photos, page=0, header=f"🆕 Последние фото «{obj_name}»")
+        return
+
+    if ftype == "tasks":
+        c.execute("""
+            SELECT t.id, t.title, COUNT(p.id) as cnt
+            FROM tasks t
+            JOIN photos p ON p.task_id = t.id
+            WHERE p.object_id = ?
+            GROUP BY t.id, t.title
+            ORDER BY MAX(p.taken_at) DESC
+        """, (obj_id,))
+        rows = c.fetchall()
+        conn.close()
+        if not rows:
+            await query.edit_message_text(
+                f"📸 Задачи с фото «{obj_name}»\n\nПока нет.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Назад", callback_data=f"objphotos_{obj_id}")]
+                ])
+            )
+            return
+        buttons = []
+        for r in rows[:25]:
+            buttons.append([InlineKeyboardButton(
+                f"#{r['id']} {r['title'][:35]} ({r['cnt']})",
+                callback_data=f"photofilt_task_{obj_id}_{r['id']}"
+            )])
+        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"objphotos_{obj_id}")])
+        await query.edit_message_text(
+            f"📋 Задачи с фото «{obj_name}»\n\nВыбери задачу:",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    if ftype == "task":
+        task_id = int(extra) if extra else 0
+        c.execute("""
+            SELECT p.id, p.file_id, p.stage, p.caption, p.taken_at, p.task_id,
+                   t.title as task_title
+            FROM photos p
+            LEFT JOIN tasks t ON p.task_id = t.id
+            WHERE p.object_id = ? AND p.task_id = ?
+            ORDER BY p.taken_at DESC
+        """, (obj_id, task_id))
+        photos = [dict(r) for r in c.fetchall()]
+        conn.close()
+        context.user_data['photo_filter_key'] = f"task_{obj_id}_{task_id}"
+        context.user_data['photo_back'] = f"photofilt_tasks_{obj_id}"
+        context.user_data['photo_cache'] = photos
+        title = photos[0]['task_title'] if photos else f"#{task_id}"
+        await query.edit_message_text(f"📋 Фото задачи #{task_id} «{title}»\nВсего: {len(photos)}")
+        await _show_photos_batch(update, context, photos, page=0, header=f"📋 Фото задачи #{task_id}")
+        return
+
+    if ftype == "dates":
+        c.execute("""
+            SELECT DATE(p.taken_at) as d, COUNT(*) as cnt
+            FROM photos p
+            WHERE p.object_id = ?
+            GROUP BY DATE(p.taken_at)
+            ORDER BY d DESC
+        """, (obj_id,))
+        rows = c.fetchall()
+        conn.close()
+        if not rows:
+            await query.edit_message_text(
+                f"📸 Даты с фото «{obj_name}»\n\nПока нет.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Назад", callback_data=f"objphotos_{obj_id}")]
+                ])
+            )
+            return
+        buttons = []
+        for r in rows[:25]:
+            buttons.append([InlineKeyboardButton(
+                f"📅 {r['d']} ({r['cnt']})",
+                callback_data=f"photofilt_date_{obj_id}_{r['d']}"
+            )])
+        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"objphotos_{obj_id}")])
+        await query.edit_message_text(
+            f"📅 Фото «{obj_name}» по датам:",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    if ftype == "date":
+        date_str = extra or ''
+        c.execute("""
+            SELECT p.id, p.file_id, p.stage, p.caption, p.taken_at, p.task_id,
+                   t.title as task_title
+            FROM photos p
+            LEFT JOIN tasks t ON p.task_id = t.id
+            WHERE p.object_id = ? AND DATE(p.taken_at) = ?
+            ORDER BY p.taken_at DESC
+        """, (obj_id, date_str))
+        photos = [dict(r) for r in c.fetchall()]
+        conn.close()
+        context.user_data['photo_filter_key'] = f"date_{obj_id}_{date_str}"
+        context.user_data['photo_back'] = f"photofilt_dates_{obj_id}"
+        context.user_data['photo_cache'] = photos
+        await query.edit_message_text(f"📅 Фото за {date_str}\nВсего: {len(photos)}")
+        await _show_photos_batch(update, context, photos, page=0, header=f"📅 Фото за {date_str}")
+        return
+
+    if ftype == "uploaders":
+        c.execute("""
+            SELECT p.uploaded_by, COUNT(*) as cnt, u.name
+            FROM photos p
+            LEFT JOIN users u ON u.tg_id = p.uploaded_by
+            WHERE p.object_id = ?
+            GROUP BY p.uploaded_by
+            ORDER BY cnt DESC
+        """, (obj_id,))
+        rows = c.fetchall()
+        conn.close()
+        buttons = []
+        for r in rows[:25]:
+            name = r['name'] or f"id{r['uploaded_by']}"
+            buttons.append([InlineKeyboardButton(
+                f"👤 {name} ({r['cnt']})",
+                callback_data=f"photofilt_upl_{obj_id}_{r['uploaded_by']}"
+            )])
+        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"objphotos_{obj_id}")])
+        await query.edit_message_text(
+            f"👤 Кто загрузил фото «{obj_name}»:",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    if ftype == "upl":
+        tg_id = int(extra) if extra else 0
+        c.execute("""
+            SELECT p.id, p.file_id, p.stage, p.caption, p.taken_at, p.task_id,
+                   t.title as task_title
+            FROM photos p
+            LEFT JOIN tasks t ON p.task_id = t.id
+            WHERE p.object_id = ? AND p.uploaded_by = ?
+            ORDER BY p.taken_at DESC
+        """, (obj_id, tg_id))
+        photos = [dict(r) for r in c.fetchall()]
+        c.execute("SELECT name FROM users WHERE tg_id = ?", (tg_id,))
+        u = c.fetchone()
+        conn.close()
+        name = u['name'] if u else f"id{tg_id}"
+        context.user_data['photo_filter_key'] = f"upl_{obj_id}_{tg_id}"
+        context.user_data['photo_back'] = f"photofilt_uploaders_{obj_id}"
+        context.user_data['photo_cache'] = photos
+        await query.edit_message_text(f"👤 Фото от {name}\nВсего: {len(photos)}")
+        await _show_photos_batch(update, context, photos, page=0, header=f"👤 Фото от {name}")
+        return
+
+    if ftype == "assignees":
+        c.execute("""
+            SELECT t.assigned_to, COUNT(p.id) as cnt, u.name
+            FROM photos p
+            JOIN tasks t ON p.task_id = t.id
+            LEFT JOIN users u ON u.tg_id = t.assigned_to
+            WHERE p.object_id = ? AND t.assigned_to IS NOT NULL
+            GROUP BY t.assigned_to
+            ORDER BY cnt DESC
+        """, (obj_id,))
+        rows = c.fetchall()
+        conn.close()
+        if not rows:
+            await query.edit_message_text(
+                f"🛠 Фото «{obj_name}» по исполнителям\n\n"
+                f"Ни одна задача не назначена на исполнителя.\n"
+                f"Пока все фото — без исполнителя.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Назад", callback_data=f"objphotos_{obj_id}")]
+                ])
+            )
+            return
+        buttons = []
+        for r in rows[:25]:
+            name = r['name'] or f"id{r['assigned_to']}"
+            buttons.append([InlineKeyboardButton(
+                f"🛠 {name} ({r['cnt']})",
+                callback_data=f"photofilt_asgn_{obj_id}_{r['assigned_to']}"
+            )])
+        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"objphotos_{obj_id}")])
+        await query.edit_message_text(
+            f"🛠 Кто делал задачи «{obj_name}»:",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    if ftype == "asgn":
+        tg_id = int(extra) if extra else 0
+        c.execute("""
+            SELECT p.id, p.file_id, p.stage, p.caption, p.taken_at, p.task_id,
+                   t.title as task_title
+            FROM photos p
+            JOIN tasks t ON p.task_id = t.id
+            WHERE p.object_id = ? AND t.assigned_to = ?
+            ORDER BY p.taken_at DESC
+        """, (obj_id, tg_id))
+        photos = [dict(r) for r in c.fetchall()]
+        c.execute("SELECT name FROM users WHERE tg_id = ?", (tg_id,))
+        u = c.fetchone()
+        conn.close()
+        name = u['name'] if u else f"id{tg_id}"
+        context.user_data['photo_filter_key'] = f"asgn_{obj_id}_{tg_id}"
+        context.user_data['photo_back'] = f"photofilt_assignees_{obj_id}"
+        context.user_data['photo_cache'] = photos
+        await query.edit_message_text(f"🛠 Фото по задачам от {name}\nВсего: {len(photos)}")
+        await _show_photos_batch(update, context, photos, page=0, header=f"🛠 Фото от {name}")
+        return
+
+    conn.close()
+    await query.edit_message_text(f"🤔 Неизвестный фильтр: {ftype}")
+
+
+async def handle_photo_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Пагинация: показать ещё 3 фото."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if not data.startswith("photopage_"):
+        return
+    # photopage_<filter_key>_<page>
+    parts = data.replace("photopage_", "").rsplit("_", 1)
+    page = int(parts[1]) if len(parts) > 1 else 0
+    photos = context.user_data.get('photo_cache', [])
+    if not photos:
+        await query.edit_message_text("❌ Фото потерялись. Открой заново.")
+        return
+    await _show_photos_batch(update, context, photos, page=page, header="📸 Ещё фото")
+
+
 # === ОБРАБОТКА ФОТО ===
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -910,7 +1277,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # === СЦЕНАРИЙ 1: ждали фото для конкретной задачи (после /done) ===
     pft = context.user_data.get('photo_for_task')
     if pft and pft.get('task_id'):
-        from db import get_connection
         from datetime import datetime
         conn = get_connection()
         c = conn.cursor()
@@ -1049,7 +1415,6 @@ async def handle_photo_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Сохраняем в БД
-    from db import get_connection
     from datetime import datetime
     conn = get_connection()
     c = conn.cursor()
