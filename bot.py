@@ -30,12 +30,24 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 async def error_handler(update, context):
-    """Ловит все ошибки в хендлерах и отправляет админу в Telegram."""
+    """Ловит ошибки. Сетевые — тихо логирует, остальные — отправляет админу."""
+    err_name = type(context.error).__name__
+    err_str = str(context.error)
+
+    # Сетевые ошибки — не спамим, просто логируем
+    network_errors = ("ReadError", "ConnectError", "TimeoutException",
+                      "NetworkError", "WriteError", "ConnectTimeout",
+                      "ReadTimeout", "PoolTimeout", "RemoteProtocolError")
+    if any(n in err_name for n in network_errors):
+        logger.warning(f"🌐 Сетевая ошибка (проигнорировано): {err_name}: {err_str}")
+        return
+
+    # Остальные — логируем и шлём админу
     logger.error(f"❌ Ошибка: {context.error}", exc_info=context.error)
     try:
         await context.bot.send_message(
             chat_id=1821030188,
-            text=f"⚠️ Ошибка в боте:\n\n{type(context.error).__name__}: {context.error}"
+            text=f"⚠️ Ошибка в боте:\n\n{err_name}: {err_str}"
         )
     except Exception:
         pass
