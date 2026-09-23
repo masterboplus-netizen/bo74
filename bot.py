@@ -1,4 +1,5 @@
 """Точка сборки БО 7.5"""
+import os
 import logging
 from telegram import BotCommand
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
@@ -37,7 +38,30 @@ async def error_handler(update, context):
         pass
 
 
+def _ensure_netrc():
+    """Автопочинка ~/.netrc при старте — если GITHUB_TOKEN есть, а .netrc нет."""
+    try:
+        token = os.getenv("GITHUB_TOKEN", "").strip()
+        if not token:
+            return
+        netrc_path = os.path.expanduser("~/.netrc")
+        need_write = True
+        if os.path.exists(netrc_path):
+            with open(netrc_path) as f:
+                content = f.read()
+            if token in content and "github.com" in content:
+                need_write = False
+        if need_write:
+            with open(netrc_path, "w") as f:
+                f.write(f"machine github.com\nlogin masterboplus-netizen\npassword {token}\n")
+            os.chmod(netrc_path, 0o600)
+            print("✅ ~/.netrc пересоздан")
+    except Exception as e:
+        print(f"⚠️ _ensure_netrc: {e}")
+
+
 def main():
+    _ensure_netrc()
     if not validate_config():
         return
     init_db()
