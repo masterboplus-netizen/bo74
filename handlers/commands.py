@@ -768,6 +768,100 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+async def photos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """/photos <объект> — все фото по объекту, с группировкой по этапам."""
+    from db import get_connection
+
+    # Определяем объект
+    if context.args:
+        obj = get_object_by_name(' '.join(context.args))
+        if not obj:
+            await update.message.reply_text(
+                f"❌ Объект «{' '.join(context.args)}» не найден"
+            )
+            return
+    else:
+        await update.message.reply_text(
+            "❌ Использование: /photos <объект>\n"
+            "Пример: /photos Переделкино"
+        )
+        return
+
+    # Достаём фото
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT p.id, p.file_id, p.stage, p.caption, p.taken_at, p.created_at,
+               p.task_id, t.title as task_title
+        FROM photos p
+        LEFT JOIN tasks t ON p.task_id = t.id
+        WHERE p.object_id = ?
+        ORDER BY p.stage, p.taken_at DESC
+    """, (obj['id'],))
+    rows = c.fetchall()
+    conn.close()
+
+    if not rows:
+        await update.message.reply_text(
+            f"📸 По объекту «{obj['name']}» фото нет.\n\n"
+            f"Отправь фото боту, чтобы добавить."
+        )
+        return
+
+    # Группируем по этапам
+    stage_names = {
+        'before': '📸 До',
+        'progress': '🔵 Процесс',
+        'after': '✅ После',
+        'document': '📄 Документы',
+    }
+    by_stage = {}
+    for r in rows:
+        st = r['stage'] or 'progress'
+        by_stage.setdefault(st, []).append(r)
+
+    # Заголовок
+    text = f"📸 Фото по объекту «{obj['name']}»\n"
+    text += f"Всего: {len(rows)}\n\n"
+    for st, items in by_stage.items():
+        text += f"{stage_names.get(st, st)}: {len(items)}\n"
+
+    await update.message.reply_text(text)
+
+    # Отправляем фото (максимум 20)
+    count = 0
+    for st, items in by_stage.items():
+        for r in items:
+            if count >= 20:
+                break
+            caption_parts = [stage_names.get(st, st)]
+            if r['task_title']:
+                caption_parts.append(f"#{r['task_id']} {r['task_title'][:40]}")
+            if r['caption']:
+                caption_parts.append(r['caption'])
+            if r['taken_at']:
+                caption_parts.append(f"📅 {r['taken_at'][:10]}")
+            caption = " · ".join(caption_parts)
+
+            try:
+                await update.message.reply_photo(
+                    photo=r['file_id'],
+                    caption=caption[:1024]
+                )
+                count += 1
+            except Exception as e:
+                # Если file_id устарел — сообщаем
+                await update.message.reply_text(f"⚠️ Не смог отправить фото #{r['id']}: {e}")
+
+        if count >= 20:
+            break
+
+    if len(rows) > 20:
+        await update.message.reply_text(
+            f"... (показаны первые 20 из {len(rows)})"
+        )
+
+
 # === ОБРАБОТКА ФОТО ===
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
