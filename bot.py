@@ -15,7 +15,8 @@ from handlers.commands import (
     finance_command, add_expense_command, personal_command, handle_callback, handle_text,
     handle_photo, handle_photo_stage, handle_photo_task, handle_photo_save,
     handle_skip_photo, photos_command,
-    handle_photo_filter, handle_photo_page
+    handle_photo_filter, handle_photo_page,
+    clients_command, deals_command, handle_crm_menu
 )
 from handlers.digest_cmd import digest_now_command, survey_now_command
 from modules.digest import send_morning_digest, send_evening_survey, send_morning_digest_with_log, send_evening_survey_with_log, catch_up_digests
@@ -130,6 +131,8 @@ def main():
     app.add_handler(CommandHandler("finance", finance_command))
     app.add_handler(CommandHandler("add_expense", add_expense_command))
     app.add_handler(CommandHandler("personal", personal_command))
+    app.add_handler(CommandHandler("clients", clients_command))
+    app.add_handler(CommandHandler("deals", deals_command))
     app.add_handler(CommandHandler("photos", photos_command))
     app.add_handler(CommandHandler("digest_now", digest_now_command))
     app.add_handler(CommandHandler("survey_now", survey_now_command))
@@ -137,6 +140,7 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
+    app.add_handler(CallbackQueryHandler(handle_crm_menu, pattern="^(menu_crm|crm_)"))
     app.add_handler(CallbackQueryHandler(handle_photo_page, pattern="^photopage_"))
     app.add_handler(CallbackQueryHandler(handle_photo_filter, pattern="^photofilt_"))
     app.add_handler(CallbackQueryHandler(handle_skip_photo, pattern="^skip_photo_"))

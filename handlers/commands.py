@@ -320,6 +320,125 @@ async def personal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=personal_keyboard()
     )
 
+# === CRM: КЛИЕНТЫ И СДЕЛКИ ===
+
+async def clients_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Список клиентов."""
+    from modules.crm import format_clients
+    await update.message.reply_text(
+        format_clients(),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Добавить клиента", callback_data="crm_client_add")],
+            [InlineKeyboardButton("⬅️ Меню", callback_data="menu_back")],
+        ])
+    )
+
+
+async def deals_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Список сделок."""
+    from modules.crm import format_deals
+    await update.message.reply_text(
+        format_deals(),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Добавить сделку", callback_data="crm_deal_add")],
+            [InlineKeyboardButton("⬅️ Меню", callback_data="menu_back")],
+        ])
+    )
+
+
+async def handle_crm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик callback'ов CRM."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if data == "menu_crm":
+        from modules.crm import get_clients, get_deals
+        clients = get_clients()
+        deals = get_deals()
+        await query.edit_message_text(
+            f"👥 CRM\n\n"
+            f"Клиентов: {len(clients)}\n"
+            f"Сделок: {len(deals)}",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"👥 Клиенты ({len(clients)})", callback_data="crm_clients")],
+                [InlineKeyboardButton(f"💼 Сделки ({len(deals)})", callback_data="crm_deals")],
+                [InlineKeyboardButton("➕ Добавить клиента", callback_data="crm_client_add")],
+                [InlineKeyboardButton("➕ Добавить сделку", callback_data="crm_deal_add")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    if data == "crm_clients":
+        from modules.crm import format_clients
+        await query.edit_message_text(
+            format_clients(),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Добавить", callback_data="crm_client_add")],
+                [InlineKeyboardButton("⬅️ К CRM", callback_data="menu_crm")],
+            ])
+        )
+        return
+
+    if data == "crm_deals":
+        from modules.crm import format_deals
+        await query.edit_message_text(
+            format_deals(),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Добавить", callback_data="crm_deal_add")],
+                [InlineKeyboardButton("⬅️ К CRM", callback_data="menu_crm")],
+            ])
+        )
+        return
+
+    if data == "crm_client_add":
+        context.user_data['waiting_for'] = 'crm_client_name'
+        await query.edit_message_text(
+            "👤 Новый клиент\n\nНапиши имя клиента:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Отмена", callback_data="menu_crm")],
+            ])
+        )
+        return
+
+    if data == "crm_deal_add":
+        from modules.crm import get_clients
+        clients = get_clients()
+        if not clients:
+            await query.edit_message_text(
+                "❌ Сначала добавь клиента: /client_add",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("➕ Добавить клиента", callback_data="crm_client_add")],
+                    [InlineKeyboardButton("⬅️ К CRM", callback_data="menu_crm")],
+                ])
+            )
+            return
+        buttons = []
+        for c in clients[:20]:
+            buttons.append([InlineKeyboardButton(
+                f"👤 {c['name'][:35]}",
+                callback_data=f"crm_deal_client_{c['id']}"
+            )])
+        buttons.append([InlineKeyboardButton("⬅️ К CRM", callback_data="menu_crm")])
+        await query.edit_message_text(
+            "💼 Новая сделка\n\nВыбери клиента:",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    if data.startswith("crm_deal_client_"):
+        client_id = int(data.replace("crm_deal_client_", ""))
+        context.user_data['crm_deal_client_id'] = client_id
+        context.user_data['waiting_for'] = 'crm_deal_budget'
+        from modules.crm import get_client
+        c = get_client(client_id)
+        await query.edit_message_text(
+            f"💼 Сделка для «{c['name']}»\n\nНапиши сумму бюджета (₽):"
+        )
+        return
+
+
 # === ОБРАБОТКА КНОПОК ===
 
 def objects_keyboard():
@@ -355,6 +474,7 @@ def main_menu_keyboard():
         [InlineKeyboardButton("💰 Финансы", callback_data="menu_finance")],
         [InlineKeyboardButton("📊 Отчёты", callback_data="menu_reports")],
         [InlineKeyboardButton("💸 Личные", callback_data="menu_personal")],
+        [InlineKeyboardButton("👥 CRM", callback_data="menu_crm")],
         [InlineKeyboardButton("🌐 Дашборд", callback_data="menu_dashboard")],
         [InlineKeyboardButton("➕ Добавить", callback_data="menu_add")],
         [InlineKeyboardButton("⚙️ Помощь", callback_data="menu_help")],
