@@ -768,6 +768,166 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+# === ОБРАБОТКА ФОТО ===
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ловит фото от пользователя, спрашивает объект/этап/задачу."""
+    # Берём самое большое фото
+    photo = update.message.photo[-1]
+    file_id = photo.file_id
+
+    # Сохраняем в user_data
+    context.user_data['pending_photo'] = {
+        'file_id': file_id,
+        'caption': update.message.caption or '',
+    }
+
+    objs = get_all_objects()
+    if not objs:
+        await update.message.reply_text("❌ Нет объектов. Сначала создай объект.")
+        return
+
+    buttons = []
+    for o in objs[:20]:
+        buttons.append([InlineKeyboardButton(
+            f"🏗️ {o['name']}",
+            callback_data=f"photo_obj_{o['id']}"
+        )])
+    buttons.append([InlineKeyboardButton("❌ Отмена", callback_data="menu_back")])
+
+    await update.message.reply_text(
+        "📸 Фото получено.\n\nВыбери объект:",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+
+
+async def handle_photo_stage(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выбор этапа фото."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if not data.startswith("photo_obj_"):
+        return
+    obj_id = int(data.replace("photo_obj_", ""))
+
+    pending = context.user_data.get('pending_photo', {})
+    if not pending or 'file_id' not in pending:
+        await query.edit_message_text("❌ Фото потерялось. Пришли заново.")
+        return
+
+    pending['object_id'] = obj_id
+    context.user_data['pending_photo'] = pending
+
+    await query.edit_message_text(
+        "📸 Выбери этап:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("📸 До (before)", callback_data="photo_stage_before")],
+            [InlineKeyboardButton("🔵 Процесс (progress)", callback_data="photo_stage_progress")],
+            [InlineKeyboardButton("✅ После (after)", callback_data="photo_stage_after")],
+            [InlineKeyboardButton("📄 Документ", callback_data="photo_stage_document")],
+            [InlineKeyboardButton("❌ Отмена", callback_data="menu_back")],
+        ])
+    )
+
+
+async def handle_photo_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выбор задачи после этапа."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if not data.startswith("photo_stage_"):
+        return
+    stage = data.replace("photo_stage_", "")
+
+    pending = context.user_data.get('pending_photo', {})
+    if not pending or 'file_id' not in pending:
+        await query.edit_message_text("❌ Фото потерялось. Пришли заново.")
+        return
+
+    pending['stage'] = stage
+    context.user_data['pending_photo'] = pending
+
+    # Показываем задачи объекта + «Без задачи»
+    obj_id = pending.get('object_id')
+    tasks = get_tasks_by_object(obj_id) if obj_id else []
+    open_tasks = [t for t in tasks if t['status'] in ('open', 'in_progress')]
+
+    buttons = [[InlineKeyboardButton("📌 Без задачи", callback_data="photo_task_none")]]
+    for t in open_tasks[:15]:
+        buttons.append([InlineKeyboardButton(
+            f"#{t['id']} {t['title'][:35]}",
+            callback_data=f"photo_task_{t['id']}"
+        )])
+    buttons.append([InlineKeyboardButton("❌ Отмена", callback_data="menu_back")])
+
+    await query.edit_message_text(
+        "📸 К какой задаче привязать?",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+
+
+async def handle_photo_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Сохраняет фото в БД."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if not data.startswith("photo_task_"):
+        return
+    task_part = data.replace("photo_task_", "")
+    task_id = None if task_part == "none" else int(task_part)
+
+    pending = context.user_data.get('pending_photo', {})
+    if not pending or 'file_id' not in pending:
+        await query.edit_message_text("❌ Фото потерялось. Пришли заново.")
+        return
+
+    # Сохраняем в БД
+    from db import get_connection
+    from datetime import datetime
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """INSERT INTO photos (object_id, task_id, file_id, caption, stage, uploaded_by, taken_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (
+            pending.get('object_id'),
+            task_id,
+            pending['file_id'],
+            pending.get('caption', ''),
+            pending.get('stage', 'progress'),
+            update.effective_user.id,
+            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        )
+    )
+    photo_id = c.lastrowid
+    conn.commit()
+    conn.close()
+
+    obj = get_object(pending.get('object_id')) if pending.get('object_id') else None
+    obj_name = obj['name'] if obj else '—'
+    stage_names = {'before': '📸 До', 'progress': '🔵 Процесс', 'after': '✅ После', 'document': '📄 Документ'}
+
+    context.user_data['pending_photo'] = None
+
+    await query.edit_message_text(
+        f"✅ Фото сохранено!\n\n"
+        f"🏗️ Объект: {obj_name}\n"
+        f"📊 Этап: {stage_names.get(pending.get('stage'), pending.get('stage'))}\n"
+        f"📋 Задача: #{task_id}" if task_id else
+        f"✅ Фото сохранено!\n\n"
+        f"🏗️ Объект: {obj_name}\n"
+        f"📊 Этап: {stage_names.get(pending.get('stage'), pending.get('stage'))}\n"
+        f"📋 Без задачи",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🏗️ К объекту", callback_data=f"obj_{pending.get('object_id')}")],
+            [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+        ])
+    )
+
+
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     if not text or text.startswith('/'):

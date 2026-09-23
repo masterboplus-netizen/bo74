@@ -12,7 +12,8 @@ from handlers.commands import (
     handle_choose_object, handle_category,
     start, help_command, add_object_command, objects_command,
     add_task_command, tasks_command, done_command,
-    finance_command, add_expense_command, personal_command, handle_callback, handle_text
+    finance_command, add_expense_command, personal_command, handle_callback, handle_text,
+    handle_photo, handle_photo_stage, handle_photo_task, handle_photo_save
 )
 from handlers.digest_cmd import digest_now_command, survey_now_command
 from modules.digest import send_morning_digest, send_evening_survey, send_morning_digest_with_log, send_evening_survey_with_log, catch_up_digests
@@ -118,8 +119,12 @@ def main():
     app.add_handler(CommandHandler("digest_now", digest_now_command))
     app.add_handler(CommandHandler("survey_now", survey_now_command))
     app.add_handler(CommandHandler("backup_now", backup_now_command))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
+    app.add_handler(CallbackQueryHandler(handle_photo_stage, pattern="^photo_obj_"))
+    app.add_handler(CallbackQueryHandler(handle_photo_task, pattern="^photo_stage_"))
+    app.add_handler(CallbackQueryHandler(handle_photo_save, pattern="^photo_task_"))
     app.add_handler(CallbackQueryHandler(handle_category, pattern="^cat_"))
     app.add_handler(CallbackQueryHandler(handle_choose_object, pattern="^choose_obj_"))
     app.add_handler(CallbackQueryHandler(handle_confirm_date, pattern="^confirmdate_"))
