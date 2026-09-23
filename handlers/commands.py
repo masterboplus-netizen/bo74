@@ -580,10 +580,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             "📊 ОТЧЁТЫ\n\nВыбери тип:",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📈 Сводный за месяц", callback_data="report_summary_month")],
-                [InlineKeyboardButton("📈 Сводный за неделю", callback_data="report_summary_week")],
-                [InlineKeyboardButton("📈 Сводный за всё время", callback_data="report_summary_all")],
-                [InlineKeyboardButton("🏗️ По объекту", callback_data="report_choose_object")],
+                [InlineKeyboardButton("✅ Что сделано (неделя)", callback_data="report_closed_week")],
+                [InlineKeyboardButton("✅ Что сделано (месяц)", callback_data="report_closed_month")],
+                [InlineKeyboardButton("🔄 Что в работе", callback_data="report_open")],
+                [InlineKeyboardButton("📈 Финансы за месяц", callback_data="report_summary_month")],
+                [InlineKeyboardButton("📈 Финансы за неделю", callback_data="report_summary_week")],
+                [InlineKeyboardButton("📈 Финансы за всё время", callback_data="report_summary_all")],
+                [InlineKeyboardButton("🏗️ Отчёт по объекту", callback_data="report_choose_object")],
                 [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")],
             ])
         )
@@ -594,6 +597,33 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from modules.reports import get_summary_report, format_summary_report
         report = get_summary_report(period)
         text = format_summary_report(report)
+        await query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ К отчётам", callback_data="menu_reports")],
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    if data == "report_closed_week" or data == "report_closed_month":
+        period = 'week' if data == "report_closed_week" else 'month'
+        from modules.reports import get_closed_tasks_report, format_closed_tasks_report
+        report = get_closed_tasks_report(period)
+        text = format_closed_tasks_report(report)
+        await query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ К отчётам", callback_data="menu_reports")],
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    if data == "report_open":
+        from modules.reports import get_open_tasks_report, format_open_tasks_report
+        report = get_open_tasks_report()
+        text = format_open_tasks_report(report)
         await query.edit_message_text(
             text,
             reply_markup=InlineKeyboardMarkup([

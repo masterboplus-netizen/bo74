@@ -146,3 +146,169 @@ def format_summary_report(report: dict) -> str:
         text += "За этот период операций не было."
 
     return text
+
+# ============================================================
+# ОТЧЁТЫ ПО ЗАДАЧАМ (за период, по объектам)
+# ============================================================
+
+def get_closed_tasks_report(period: str = 'week') -> dict:
+    """Закрытые задачи за период, сгруппированные по объектам.
+    period: 'today' | 'week' | 'month' | 'all'"""
+    start, end = get_period_dates(period)
+
+    conn = get_connection_from_db()
+    c = conn.cursor()
+    c.execute("""
+        SELECT t.id, t.title, t.completed_at, t.priority,
+               o.id as obj_id, o.name as obj_name
+        FROM tasks t
+        LEFT JOIN objects o ON t.object_id = o.id
+        WHERE t.status = 'done'
+          AND t.completed_at IS NOT NULL
+          AND DATE(t.completed_at) >= ?
+          AND DATE(t.completed_at) <= ?
+        ORDER BY o.name, t.completed_at DESC
+    """, (start, end))
+    rows = c.fetchall()
+    conn.close()
+
+    by_object = {}
+    for r in rows:
+        obj_name = r['obj_name'] or 'Без объекта'
+        if obj_name not in by_object:
+            by_object[obj_name] = {
+                'object_id': r['obj_id'],
+                'tasks': []
+            }
+        by_object[obj_name]['tasks'].append({
+            'id': r['id'],
+            'title': r['title'],
+            'completed_at': r['completed_at'],
+            'priority': r['priority'],
+        })
+
+    total = sum(len(v['tasks']) for v in by_object.values())
+
+    return {
+        'period': period,
+        'start': start,
+        'end': end,
+        'total': total,
+        'by_object': by_object,
+    }
+
+
+def format_closed_tasks_report(report: dict) -> str:
+    """Форматирует отчёт о закрытых задачах."""
+    period_names = {
+        'today': 'сегодня',
+        'week': 'за 7 дней',
+        'month': 'за месяц',
+        'all': 'за всё время',
+    }
+    period_name = period_names.get(report['period'], report['period'])
+
+    if report['total'] == 0:
+        return f"✅ Что сделано ({period_name}):\n\nЗадач не закрыто."
+
+    text = f"✅ ЧТО СДЕЛАНО ({period_name})\n"
+    text += f"Всего закрыто: {report['total']}\n\n"
+
+    for obj_name, data in report['by_object'].items():
+        text += f"🏗️ {obj_name} ({len(data['tasks'])})\n"
+        for t in data['tasks']:
+            # Дата закрытия
+            d = ''
+            if t['completed_at']:
+                try:
+                    d = ' — ' + t['completed_at'][:10]
+                except Exception:
+                    pass
+            text += f"  • #{t['id']} {t['title']}{d}\n"
+        text += "\n"
+
+    if len(text) > 4000:
+        text = text[:3900] + "\n\n... (список обрезан)"
+
+    return text
+
+
+def get_open_tasks_report() -> dict:
+    """Открытые + просроченные задачи, сгруппированные по объектам."""
+    from datetime import date
+    today = date.today().strftime('%Y-%m-%d')
+
+    conn = get_connection_from_db()
+    c = conn.cursor()
+    c.execute("""
+        SELECT t.id, t.title, t.status, t.deadline, t.priority,
+               o.id as obj_id, o.name as obj_name
+        FROM tasks t
+        LEFT JOIN objects o ON t.object_id = o.id
+        WHERE t.status IN ('open', 'in_progress')
+        ORDER BY (t.deadline IS NULL), t.deadline ASC
+    """)
+    rows = c.fetchall()
+    conn.close()
+
+    by_object = {}
+    total = 0
+    overdue_total = 0
+
+    for r in rows:
+        obj_name = r['obj_name'] or 'Без объекта'
+        if obj_name not in by_object:
+            by_object[obj_name] = {'object_id': r['obj_id'], 'tasks': []}
+
+        is_overdue = bool(r['deadline'] and r['deadline'] < today)
+        if is_overdue:
+            overdue_total += 1
+
+        by_object[obj_name]['tasks'].append({
+            'id': r['id'],
+            'title': r['title'],
+            'status': r['status'],
+            'deadline': r['deadline'],
+            'priority': r['priority'],
+            'overdue': is_overdue,
+        })
+        total += 1
+
+    return {
+        'total': total,
+        'overdue': overdue_total,
+        'by_object': by_object,
+    }
+
+
+def format_open_tasks_report(report: dict) -> str:
+    """Форматирует отчёт о задачах в работе."""
+    if report['total'] == 0:
+        return "🔄 Что в работе:\n\nНет открытых задач."
+
+    text = f"🔄 ЧТО В РАБОТЕ\n"
+    text += f"Всего: {report['total']}"
+    if report['overdue']:
+        text += f" (из них просрочено: {report['overdue']})"
+    text += "\n\n"
+
+    for obj_name, data in report['by_object'].items():
+        text += f"🏗️ {obj_name} ({len(data['tasks'])})\n"
+        for t in data['tasks']:
+            d = ''
+            if t['deadline']:
+                mark = '🔴 ' if t['overdue'] else ''
+                d = f" — {mark}{t['deadline']}"
+            text += f"  • #{t['id']} {t['title']}{d}\n"
+        text += "\n"
+
+    if len(text) > 4000:
+        text = text[:3900] + "\n\n... (список обрезан)"
+
+    return text
+
+
+def get_connection_from_db():
+    """Локальный импорт, чтобы не тянуть в начало файла."""
+    from db import get_connection
+    return get_connection()
