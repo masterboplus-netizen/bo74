@@ -1,0 +1,400 @@
+        await query.edit_message_text(
+            f"🛠 Кто делал задачи «{obj_name}»:",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    if ftype == "asgn":
+        tg_id = int(extra) if extra else 0
+        c.execute("""
+            SELECT p.id, p.file_id, p.stage, p.caption, p.taken_at, p.task_id,
+                   t.title as task_title
+            FROM photos p
+            JOIN tasks t ON p.task_id = t.id
+            WHERE p.object_id = ? AND t.assigned_to = ?
+            ORDER BY p.taken_at DESC
+        """, (obj_id, tg_id))
+        photos = [dict(r) for r in c.fetchall()]
+        c.execute("SELECT name FROM users WHERE tg_id = ?", (tg_id,))
+        u = c.fetchone()
+        conn.close()
+        name = u['name'] if u else f"id{tg_id}"
+        context.user_data['photo_filter_key'] = f"asgn_{obj_id}_{tg_id}"
+        context.user_data['photo_back'] = f"photofilt_assignees_{obj_id}"
+        context.user_data['photo_cache'] = photos
+        await query.edit_message_text(f"🛠 Фото по задачам от {name}\nВсего: {len(photos)}")
+        await _show_photos_batch(update, context, photos, page=0, header=f"🛠 Фото от {name}")
+        return
+
+    conn.close()
+    await query.edit_message_text(f"🤔 Неизвестный фильтр: {ftype}")
+
+
+async def handle_photo_page(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Пагинация: показать ещё 3 фото."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if not data.startswith("photopage_"):
+        return
+    # photopage_<filter_key>_<page>
+    parts = data.replace("photopage_", "").rsplit("_", 1)
+    page = int(parts[1]) if len(parts) > 1 else 0
+    photos = context.user_data.get('photo_cache', [])
+    if not photos:
+        await query.edit_message_text("❌ Фото потерялись. Открой заново.")
+        return
+    await _show_photos_batch(update, context, photos, page=page, header="📸 Ещё фото")
+
+
+# === ОБРАБОТКА ФОТО ===
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Ловит фото от пользователя. Если есть photo_for_task — привязываем к задаче. Иначе — стандартный выбор."""
+    photo = update.message.photo[-1]
+    file_id = photo.file_id
+
+    # === СЦЕНАРИЙ 1: ждали фото для конкретной задачи (после /done) ===
+    pft = context.user_data.get('photo_for_task')
+    if pft and pft.get('task_id'):
+        from datetime import datetime
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute(
+            """INSERT INTO photos (object_id, task_id, file_id, caption, stage, uploaded_by, taken_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                pft.get('object_id'),
+                pft['task_id'],
+                file_id,
+                update.message.caption or '',
+                'after',
+                update.effective_user.id,
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            )
+        )
+        conn.commit()
+        conn.close()
+        context.user_data['photo_for_task'] = None
+
+        await update.message.reply_text(
+            f"✅ Фото сохранено для задачи #{pft['task_id']} (этап: После)",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📋 К задачам", callback_data="menu_tasks")],
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    # === СЦЕНАРИЙ 2: обычная загрузка (выбор объекта → этап → задача) ===
+    context.user_data['pending_photo'] = {
+        'file_id': file_id,
+        'caption': update.message.caption or '',
+    }
+
+    objs = get_all_objects()
+    if not objs:
+        await update.message.reply_text("❌ Нет объектов. Сначала создай объект.")
+        return
+
+    buttons = []
+    for o in objs[:20]:
+        buttons.append([InlineKeyboardButton(
+            f"🏗️ {o['name']}",
+            callback_data=f"photo_obj_{o['id']}"
+        )])
+    buttons.append([InlineKeyboardButton("❌ Отмена", callback_data="menu_back")])
+
+    await update.message.reply_text(
+        "📸 Фото получено.\n\nВыбери объект:",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+
+
+async def handle_photo_stage(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выбор этапа фото."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if not data.startswith("photo_obj_"):
+        return
+    obj_id = int(data.replace("photo_obj_", ""))
+
+    pending = context.user_data.get('pending_photo', {})
+    if not pending or 'file_id' not in pending:
+        await query.edit_message_text("❌ Фото потерялось. Пришли заново.")
+        return
+
+    pending['object_id'] = obj_id
+    context.user_data['pending_photo'] = pending
+
+    await query.edit_message_text(
+        "📸 Выбери этап:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("📸 До (before)", callback_data="photo_stage_before")],
+            [InlineKeyboardButton("🔵 Процесс (progress)", callback_data="photo_stage_progress")],
+            [InlineKeyboardButton("✅ После (after)", callback_data="photo_stage_after")],
+            [InlineKeyboardButton("📄 Документ", callback_data="photo_stage_document")],
+            [InlineKeyboardButton("❌ Отмена", callback_data="menu_back")],
+        ])
+    )
+
+
+async def handle_photo_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Выбор задачи после этапа."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if not data.startswith("photo_stage_"):
+        return
+    stage = data.replace("photo_stage_", "")
+
+    pending = context.user_data.get('pending_photo', {})
+    if not pending or 'file_id' not in pending:
+        await query.edit_message_text("❌ Фото потерялось. Пришли заново.")
+        return
+
+    pending['stage'] = stage
+    context.user_data['pending_photo'] = pending
+
+    # Показываем задачи объекта + «Без задачи»
+    obj_id = pending.get('object_id')
+    tasks = get_tasks_by_object(obj_id) if obj_id else []
+    open_tasks = [t for t in tasks if t['status'] in ('open', 'in_progress')]
+
+    buttons = [[InlineKeyboardButton("📌 Без задачи", callback_data="photo_task_none")]]
+    for t in open_tasks[:15]:
+        buttons.append([InlineKeyboardButton(
+            f"#{t['id']} {t['title'][:35]}",
+            callback_data=f"photo_task_{t['id']}"
+        )])
+    buttons.append([InlineKeyboardButton("❌ Отмена", callback_data="menu_back")])
+
+    await query.edit_message_text(
+        "📸 К какой задаче привязать?",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+
+
+async def handle_photo_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Сохраняет фото в БД."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if not data.startswith("photo_task_"):
+        return
+    task_part = data.replace("photo_task_", "")
+    task_id = None if task_part == "none" else int(task_part)
+
+    pending = context.user_data.get('pending_photo', {})
+    if not pending or 'file_id' not in pending:
+        await query.edit_message_text("❌ Фото потерялось. Пришли заново.")
+        return
+
+    # Сохраняем в БД
+    from datetime import datetime
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        """INSERT INTO photos (object_id, task_id, file_id, caption, stage, uploaded_by, taken_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (
+            pending.get('object_id'),
+            task_id,
+            pending['file_id'],
+            pending.get('caption', ''),
+            pending.get('stage', 'progress'),
+            update.effective_user.id,
+            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        )
+    )
+    photo_id = c.lastrowid
+    conn.commit()
+    conn.close()
+
+    obj = get_object(pending.get('object_id')) if pending.get('object_id') else None
+    obj_name = obj['name'] if obj else '—'
+    stage_names = {'before': '📸 До', 'progress': '🔵 Процесс', 'after': '✅ После', 'document': '📄 Документ'}
+
+    context.user_data['pending_photo'] = None
+
+    await query.edit_message_text(
+        f"✅ Фото сохранено!\n\n"
+        f"🏗️ Объект: {obj_name}\n"
+        f"📊 Этап: {stage_names.get(pending.get('stage'), pending.get('stage'))}\n"
+        f"📋 Задача: #{task_id}" if task_id else
+        f"✅ Фото сохранено!\n\n"
+        f"🏗️ Объект: {obj_name}\n"
+        f"📊 Этап: {stage_names.get(pending.get('stage'), pending.get('stage'))}\n"
+        f"📋 Без задачи",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🏗️ К объекту", callback_data=f"obj_{pending.get('object_id')}")],
+            [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+        ])
+    )
+
+
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    if not text or text.startswith('/'):
+        return
+
+    # === ВСЕ CRM-ОЖИДАНИЯ — В САМОМ НАЧАЛЕ, ДО ПАРСЕРА ===
+
+    # CRM: ждём имя нового клиента (для сделки)
+    if context.user_data.get('waiting_for') == 'crm_deal_new_client_name':
+        name = text.strip()
+        context.user_data['crm_new_client_name'] = name
+        context.user_data['waiting_for'] = None
+        await update.message.reply_text(
+            f"👤 Создать клиента «{name}»?",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Создать и продолжить сделку", callback_data="crm_new_client_for_deal")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="menu_crm")],
+            ])
+        )
+        return
+
+    # CRM: ждём имя клиента (обычный сценарий)
+    if context.user_data.get('waiting_for') == 'crm_client_name':
+        context.user_data['crm_new_client_name'] = text.strip()
+        context.user_data['waiting_for'] = 'crm_client_phone'
+        await update.message.reply_text(
+            f"👤 Имя: «{text.strip()}»\n\n📞 Теперь телефон (или Пропустить):",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_phone")],
+            ])
+        )
+        return
+
+    if context.user_data.get('waiting_for') == 'crm_client_phone':
+        context.user_data['crm_new_client_phone'] = text.strip()
+        context.user_data['waiting_for'] = 'crm_client_address'
+        await update.message.reply_text(
+            f"📞 Телефон: {text.strip()}\n\n📍 Адрес (или Пропустить):",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_address")],
+            ])
+        )
+        return
+
+    if context.user_data.get('waiting_for') == 'crm_client_address':
+        context.user_data['crm_new_client_address'] = text.strip()
+        context.user_data['waiting_for'] = 'crm_client_source'
+        await update.message.reply_text(
+            f"📍 Адрес: {text.strip()}\n\n🔗 Откуда узнал? Или Пропустить:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_source")],
+            ])
+        )
+        return
+
+    if context.user_data.get('waiting_for') == 'crm_client_source':
+        context.user_data['crm_new_client_source'] = text.strip()
+        await _finalize_new_client(update, context)
+        return
+
+    # CRM: ждём бюджет сделки — ВАЖНО до парсера
+    if context.user_data.get('waiting_for') == 'crm_deal_budget':
+        try:
+            from modules.parser import parse_amount
+            budget = parse_amount(text) or 0
+        except Exception:
+            budget = 0
+        client_id = context.user_data.get('crm_deal_client_id')
+        if not client_id:
+            await update.message.reply_text("❌ Клиент потерялся. Начни заново.")
+            context.user_data['waiting_for'] = None
+            return
+        from modules.crm import add_deal, get_client
+        deal_id = add_deal(client_id=client_id, object_id=None, status='new', budget=budget)
+        c = get_client(client_id)
+        context.user_data['waiting_for'] = None
+        context.user_data['crm_deal_client_id'] = None
+        await update.message.reply_text(
+            f"✅ Сделка #{deal_id} создана!\n\n"
+            f"👤 Клиент: {c['name'] if c else '—'}\n"
+            f"💼 Бюджет: {budget} ₽\n"
+            f"📊 Статус: 🆕 Новая",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("👥 К клиентам", callback_data="crm_clients")],
+                [InlineKeyboardButton("💼 К сделкам", callback_data="crm_deals")],
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    # CRM: пользователь ввёл имя в режиме выбора клиента
+    if context.user_data.get('waiting_for') == 'crm_deal_pick_client':
+        name = text.strip()
+        from modules.crm import get_clients
+        clients = get_clients()
+        found = None
+        for c in clients:
+            if c['name'].lower().strip() == name.lower():
+                found = c
+                break
+        if found:
+            context.user_data['crm_deal_client_id'] = found['id']
+            context.user_data['waiting_for'] = 'crm_deal_budget'
+            await update.message.reply_text(
+                f"💼 Клиент: «{found['name']}»\n\nНапиши сумму бюджета сделки (₽):"
+            )
+            return
+        else:
+            context.user_data['crm_new_client_name'] = name
+            context.user_data['waiting_for'] = None
+            await update.message.reply_text(
+                f"👤 Клиента «{name}» нет в списке.\n\nСоздать нового и продолжить сделку?",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Создать и продолжить", callback_data="crm_new_client_for_deal")],
+                    [InlineKeyboardButton("⬅️ К списку", callback_data="crm_deal_add")],
+                    [InlineKeyboardButton("❌ Отмена", callback_data="menu_crm")],
+                ])
+            )
+            return
+
+    # === ДАЛЬШЕ — СТАРАЯ ЛОГИКА (новые задачи, расходы и т.д.) ===
+
+    # === ПРИВЕТСТВИЯ ===
+    greetings = ['привет', 'здравствуй', 'здравствуйте', 'хай', 'hi', 'hello', 'ку', 'добрый день', 'доброе утро', 'добрый вечер']
+    text_low = text.lower().strip()
+    if text_low in greetings or any(text_low.startswith(g) for g in greetings):
+        user_name = update.effective_user.first_name or ''
+        await update.message.reply_text(
+            f"👋 Привет{', ' + user_name if user_name else ''}!\n\n"
+            f"Я *Бо 7.5* — помощник по стройке.\n\n"
+            f"Что умею:\n"
+            f"• «потратил 5000 на материалы Переделкино-2»\n"
+            f"• «добавь в Арбат положить паркет»\n"
+            f"• «500» — спрошу личный/объект\n"
+            f"• /objects, /tasks, /finance — списки\n"
+            f"• /help — все команды",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+                [InlineKeyboardButton("⚙️ Помощь", callback_data="menu_help")],
+            ])
+        )
+        return
+
+    # Обработка создания новой задачи
+    if context.user_data.get('waiting_for') == 'new_task_text':
+        obj = context.user_data.get('pending_task_object')
+        if obj:
+            tid = create_task(obj['id'], text)
+            context.user_data['waiting_for'] = None
+            context.user_data['pending_task_object'] = None
+            await update.message.reply_text(
+                f"✅ Задача «{text}» добавлена в «{obj['name']}»",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📋 К задаче", callback_data=f"task_{tid}")],
+                    [InlineKeyboardButton("📋 К задачам", callback_data="menu_tasks")],
+                    [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+                ])
+            )
+            return
+

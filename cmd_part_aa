@@ -1,0 +1,400 @@
+"""Команды Telegram-бота БО 7.5"""
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+from telegram.constants import ParseMode
+
+from db import get_connection
+from modules.objects import create_object, get_all_objects, get_object_by_name, get_object
+from modules.tasks import create_task, get_active_tasks, close_task, get_tasks_by_object
+from modules.finance import add_expense, get_finance_summary
+from modules.parser import parse_message, parse_amount
+from modules.personal import add_personal_expense
+from config import ADMIN_IDS
+from handlers.onboarding import ask_role, role_menu_keyboard
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Старт: онбординг при первом входе, иначе — меню по роли."""
+    user = update.effective_user
+
+    # === DEEP LINK: /start photo_<id> — открыть конкретное фото ===
+    if context.args and context.args[0].startswith("photo_"):
+        try:
+            photo_id = int(context.args[0].replace("photo_", ""))
+            from db import get_connection
+            conn = get_connection()
+            c = conn.cursor()
+            c.execute("SELECT file_id, stage, caption, taken_at, task_id, object_id FROM photos WHERE id = ?", (photo_id,))
+            row = c.fetchone()
+            conn.close()
+            if row:
+                stage_names = {'before': '📸 До', 'progress': '🔵 Процесс', 'after': '✅ После', 'document': '📄 Документ'}
+                caption_parts = [stage_names.get(row['stage'], row['stage'] or '')]
+                if row['taken_at']:
+                    caption_parts.append(f"📅 {row['taken_at'][:16]}")
+                if row['caption']:
+                    caption_parts.append(row['caption'])
+                caption = " · ".join([p for p in caption_parts if p])
+                await update.message.reply_photo(
+                    photo=row['file_id'],
+                    caption=caption[:1024] if caption else None
+                )
+                return
+            else:
+                await update.message.reply_text("❌ Фото не найдено.")
+                return
+        except Exception as e:
+            await update.message.reply_text(f"❌ Ошибка: {e}")
+            return
+
+    # === ГЛАВНЫЙ АДМИН — сразу меню, без онбординга ===
+    from handlers.onboarding import MAIN_ADMIN_TG_ID
+    if user.id == MAIN_ADMIN_TG_ID:
+        # Сохраняем юзера
+        try:
+            from modules.users import save_user, set_role, mark_onboarded
+            save_user(user.id, user.first_name or "", user.username or "", role="admin")
+            set_role(user.id, "admin")
+            try:
+                mark_onboarded(user.id)
+            except Exception:
+                pass
+        except Exception as e:
+            print(f"⚠️ admin save: {e}")
+
+        await update.message.reply_text(
+            f"👋 Привет, {user.first_name}!\n\n"
+            f"Я *Бо 7.5* — твой помощник по стройке.\n"
+            f"Ты вошёл как *админ*.",
+            reply_markup=role_menu_keyboard("admin"),
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    # === ОБЫЧНЫЕ ЮЗЕРЫ ===
+    # Сохраняем/обновляем юзера
+    try:
+        from modules.users import save_user, get_user
+        save_user(user.id, user.first_name or "", user.username or "")
+    except Exception as e:
+        print(f"⚠️ save_user: {e}")
+
+    # Определяем роль и онбординг
+    role = "guest"
+    onboarded = False
+    try:
+        from modules.users import get_user, is_onboarded
+        u = get_user(user.id)
+        if u:
+            role = (u.get("role") if isinstance(u, dict) else u[3]) or "guest"
+        onboarded = is_onboarded(user.id)
+    except Exception as e:
+        print(f"⚠️ get_user: {e}")
+
+    # Первый вход → онбординг
+    if not onboarded:
+        await ask_role(update, context)
+        return
+
+    # Иначе — меню по роли
+    await update.message.reply_text(
+        f"👋 Привет, {user.first_name}!\n\n"
+        f"Я *Бо 7.5* — твой помощник по стройке.\n"
+        f"Твоя роль: *{role}*",
+        reply_markup=role_menu_keyboard(role),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📋 Бо 7.5 — команды и возможности\n\n"
+        "🏗️ Объекты\n"
+        "• /objects — список объектов кнопками\n"
+        "• /add\\_object <название> — создать объект\n\n"
+        "📋 Задачи\n"
+        "• /tasks — активные задачи кнопками\n"
+        "• /add <объект> <задача> — быстро добавить\n"
+        "• /add — меню добавления (объект/задача/расход)\n"
+        "• /done <id> — закрыть задачу\n\n"
+        "💰 Финансы\n"
+        "• /finance — общая сводка кнопками\n"
+        "• /finance <объект> — по объекту\n"
+        "• /add\\_expense <объект> <сумма> [категория]\n\n"
+        "💸 Личные расходы — через меню «💸 Личные»\n\n"
+        "📊 Отчёты — через меню «📊 Отчёты»\n\n"
+        "📝 Свободный ввод (пиши текстом):\n"
+        "• «потратил 5000 на материалы Переделкино-2»\n"
+        "• «добавь в Арбат положить паркет»\n"
+        "• «500» — спросит личный/объект\n"
+        "• «задачи» / «объекты»\n\n"
+        "⏰ Автоматика\n"
+        "• Дайджест 9:00 МСК\n"
+        "• Опрос 18:00 МСК\n"
+        "• Автобэкап 23:00 МСК",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+async def add_object_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("❌ Использование: /add_object <название>")
+        return
+    name = ' '.join(context.args)
+    object_id = create_object(name, user_id=update.effective_user.id)
+    await update.message.reply_text(f"✅ Объект «{name}» создан. ID: {object_id}")
+
+
+async def objects_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    objs = get_all_objects()
+    if not objs:
+        await update.message.reply_text("🏗️ Объектов пока нет")
+        return
+    await update.message.reply_text(
+        f"🏗️ **Объекты ({len(objs)}):**\n\nНажми на объект:",
+        reply_markup=objects_keyboard(),
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+
+async def add_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        # Без аргументов — открываем интерактивное меню добавления
+        await update.message.reply_text(
+            "➕ Что добавить?",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🏗️ Новый объект", callback_data="add_object")],
+                [InlineKeyboardButton("📋 Новая задача", callback_data="add_task")],
+                [InlineKeyboardButton("💰 Расход", callback_data="add_expense")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")],
+            ])
+        )
+        return
+    if len(context.args) < 2:
+        await update.message.reply_text("❌ Использование: /add <объект> <задача>")
+        return
+    obj = get_object_by_name(context.args[0])
+    if not obj:
+        await update.message.reply_text(f"❌ Объект «{context.args[0]}» не найден")
+        return
+    title = ' '.join(context.args[1:])
+    task_id = create_task(obj['id'], title)
+    await update.message.reply_text(f"✅ Задача «{title}» добавлена в «{obj['name']}». ID: {task_id}")
+
+
+async def tasks_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Задачи по датам с кнопками — как в меню."""
+    from datetime import datetime, date, timedelta
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT t.id, t.title, t.deadline, o.name as object_name
+        FROM tasks t
+        LEFT JOIN objects o ON t.object_id = o.id
+        WHERE t.status IN ('open', 'in_progress')
+        ORDER BY t.deadline IS NULL, t.deadline ASC
+    """)
+    rows = c.fetchall()
+    conn.close()
+
+    if not rows:
+        await update.message.reply_text("Нет активных задач")
+        return
+
+    today = date.today()
+    tomorrow = today + timedelta(days=1)
+
+    today_tasks = [r for r in rows if r['deadline'] and datetime.strptime(r['deadline'], '%Y-%m-%d').date() == today]
+    tomorrow_tasks = [r for r in rows if r['deadline'] and datetime.strptime(r['deadline'], '%Y-%m-%d').date() == tomorrow]
+    later_tasks = sorted(
+        [r for r in rows if r['deadline'] and datetime.strptime(r['deadline'], '%Y-%m-%d').date() > tomorrow],
+        key=lambda x: x['deadline']
+    )
+    no_deadline = [r for r in rows if not r['deadline']]
+
+    def format_block(title, items):
+        lines = [f"**{title}:**"]
+        for r in items:
+            d = ""
+            if r['deadline']:
+                try:
+                    d = " (" + datetime.strptime(r['deadline'], '%Y-%m-%d').strftime('%d.%m') + ")"
+                except Exception:
+                    pass
+            obj = r['object_name'] or "без объекта"
+            lines.append(f"#{r['id']} {r['title']}{d} — {obj}")
+        return "\n".join(lines)
+
+    sections = []
+    if today_tasks:
+        sections.append(format_block(f"СЕГОДНЯ — {today.strftime('%d.%m.%Y')}", today_tasks))
+    if tomorrow_tasks:
+        sections.append(format_block(f"ЗАВТРА — {tomorrow.strftime('%d.%m.%Y')}", tomorrow_tasks))
+    if later_tasks:
+        sections.append(format_block("ПОЗЖЕ", later_tasks))
+    if no_deadline:
+        sections.append(format_block("БЕЗ СРОКА", no_deadline))
+
+    text = "📋 ЗАДАЧИ\n\n" + "\n".join(sections)
+    if len(text) > 4000:
+        text = text[:3900] + "\n\n..."
+
+    buttons = []
+    task_order = today_tasks + tomorrow_tasks + later_tasks + no_deadline
+    for i, r in enumerate(task_order[:20], start=1):
+        buttons.append([InlineKeyboardButton(
+            f"{i}. {r['title'][:40]}",
+            callback_data=f"task_{r['id']}"
+        )])
+    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
+
+    await update.message.reply_text(
+        text + "\n\nВыбери задачу:",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+
+async def done_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("❌ Использование: /done <id>")
+        return
+    try:
+        task_id = int(context.args[0])
+    except ValueError:
+        await update.message.reply_text("❌ ID должен быть числом")
+        return
+
+    # Получаем задачу до закрытия (нужен object_id)
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT id, object_id, title FROM tasks WHERE id = ?", (task_id,))
+    row = c.fetchone()
+    conn.close()
+
+    if not row:
+        await update.message.reply_text(f"❌ Задача #{task_id} не найдена")
+        return
+
+    close_task(task_id, user_id=update.effective_user.id)
+
+    # Ставим флаг: ждём фото для этой задачи
+    context.user_data['photo_for_task'] = {
+        'task_id': task_id,
+        'object_id': row['object_id'],
+    }
+
+    await update.message.reply_text(
+        f"✅ Задача #{task_id} «{row['title']}» выполнена!\n\n"
+        f"📸 Приложи фото результата — оно привяжется к задаче.\n"
+        f"Или нажми «Пропустить».",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⏭️ Пропустить", callback_data=f"skip_photo_{task_id}")]
+        ])
+    )
+
+
+async def handle_skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка «Пропустить фото»."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if not data.startswith("skip_photo_"):
+        return
+    context.user_data['photo_for_task'] = None
+    await query.edit_message_text("✅ Ок, без фото.")
+
+
+async def finance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Если объект не указан — общая сводка с кнопками
+    if not context.args:
+        await update.message.reply_text(
+            format_finance_summary(),
+            reply_markup=finance_keyboard()
+        )
+        return
+
+    obj = get_object_by_name(' '.join(context.args))
+    if not obj:
+        await update.message.reply_text("❌ Объект не найден")
+        return
+    f = get_finance_summary(obj['id'])
+    await update.message.reply_text(
+        f"💰 **{obj['name']}**\n"
+        f"Доход: {f['income']} ₽\n"
+        f"Расход: {f['expense']} ₽\n"
+        f"Баланс: {f['balance']} ₽",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+
+async def add_expense_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(context.args) < 2:
+        await update.message.reply_text("❌ Использование: /add_expense <объект> <сумма> [категория]")
+        return
+    obj = get_object_by_name(context.args[0])
+    if not obj:
+        await update.message.reply_text(f"❌ Объект «{context.args[0]}» не найден")
+        return
+    try:
+        amount = int(context.args[1])
+    except ValueError:
+        await update.message.reply_text("❌ Сумма должна быть числом")
+        return
+    category = context.args[2] if len(context.args) > 2 else 'прочее'
+    add_expense(obj['id'], amount, category)
+    await update.message.reply_text(f"✅ Расход {amount} ₽ ({category}) добавлен в «{obj['name']}»")
+
+
+async def personal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /personal — личные расходы за месяц."""
+    await update.message.reply_text(
+        format_personal_summary('month'),
+        reply_markup=personal_keyboard()
+    )
+
+# === CRM: КЛИЕНТЫ И СДЕЛКИ ===
+
+async def clients_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Список клиентов."""
+    from modules.crm import format_clients
+    await update.message.reply_text(
+        format_clients(),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Добавить клиента", callback_data="crm_client_add")],
+            [InlineKeyboardButton("⬅️ Меню", callback_data="menu_back")],
+        ])
+    )
+
+
+async def deals_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Список сделок."""
+    from modules.crm import format_deals
+    await update.message.reply_text(
+        format_deals(),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Добавить сделку", callback_data="crm_deal_add")],
+            [InlineKeyboardButton("⬅️ Меню", callback_data="menu_back")],
+        ])
+    )
+
+
+async def handle_crm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик callback'ов CRM."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if data == "menu_crm":
+        from modules.crm import get_clients, get_deals
+        clients = get_clients()
+        deals = get_deals()
+        await query.edit_message_text(
+            f"👥 CRM\n\n"
+            f"Клиентов: {len(clients)}\n"
+            f"Сделок: {len(deals)}",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton(f"👥 Клиенты ({len(clients)})", callback_data="crm_clients")],
+                [InlineKeyboardButton(f"💼 Сделки ({len(deals)})", callback_data="crm_deals")],
+                [InlineKeyboardButton("➕ Добавить клиента", callback_data="crm_client_add")],
+                [InlineKeyboardButton("➕ Добавить сделку", callback_data="crm_deal_add")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")],
+            ])
+        )

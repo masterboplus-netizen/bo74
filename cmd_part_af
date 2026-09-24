@@ -1,0 +1,400 @@
+    # Обработка создания нового расхода
+    if context.user_data.get('waiting_for') == 'new_expense_text':
+        obj = context.user_data.get('pending_expense_object')
+        if not obj:
+            context.user_data['waiting_for'] = None
+            await update.message.reply_text(
+                "❌ Объект потерялся. Начни заново: «➕ Добавить» → «💰 Расход»",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("➕ Добавить", callback_data="menu_add")],
+                    [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+                ])
+            )
+            return
+        if obj:
+            amount = parse_amount(text)
+            if amount:
+                category = None
+                _tl = text.lower()
+                for _c in ["материалы", "еда", "транспорт", "инструмент"]:
+                    if _c in _tl:
+                        category = _c
+                        break
+                if category:
+                    add_expense(obj['id'], amount, category)
+                    context.user_data['waiting_for'] = None
+                    context.user_data['pending_expense_object'] = None
+                    await update.message.reply_text(
+                        f"\u2705 Расход {amount} \u20bd ({category}) добавлен в \u00ab{obj['name']}\u00bb",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("\U0001F4B0 К финансам", callback_data="menu_finance")],
+                            [InlineKeyboardButton("\U0001F3E0 Меню", callback_data="menu_back")],
+                        ])
+                    )
+                    return
+                else:
+                    context.user_data['pending_expense'] = {
+                        'object_id': obj['id'],
+                        'object_name': obj['name'],
+                        'amount': amount
+                    }
+                    context.user_data['waiting_for'] = 'new_expense_category'
+                    await update.message.reply_text(
+                        f"\U0001F4B0 {amount} \u20bd в \u00ab{obj['name']}\u00bb. За что?",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("\U0001F9F1 Материалы", callback_data="cat_материалы")],
+                            [InlineKeyboardButton("\U0001F354 Еда", callback_data="cat_еда")],
+                            [InlineKeyboardButton("\U0001F697 Транспорт", callback_data="cat_транспорт")],
+                            [InlineKeyboardButton("\U0001F527 Инструмент", callback_data="cat_инструмент")],
+                            [InlineKeyboardButton("\U0001F4E6 Прочее", callback_data="cat_прочее")],
+                        ])
+                    )
+                    return
+            else:
+                await update.message.reply_text(
+                    "\u274c Не понял сумму. Попробуй: \u00ab500\u00bb"
+                )
+                return
+
+    # Обработка личного расхода
+    if context.user_data.get('waiting_for') == 'personal_expense_text':
+        # Разбираем: "300 еда" или "1500 инструмент"
+        parts = text.strip().split(maxsplit=1)
+        amount_str = parts[0] if parts else ''
+        category = parts[1].strip() if len(parts) > 1 else 'прочее'
+        # Убираем лишние символы
+        amount_str = amount_str.replace('₽', '').replace('р', '').replace('руб', '').strip()
+        try:
+            amount = int(amount_str)
+        except ValueError:
+            amount = parse_amount(text)
+            if not amount:
+                await update.message.reply_text(
+                    "❌ Не понял сумму. Попробуй: «300 еда»"
+                )
+                return
+        add_personal_expense(amount, category)
+        context.user_data['waiting_for'] = None
+        await update.message.reply_text(
+            f"✅ Личный расход {amount} ₽ ({category}) записан",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("💸 К личным", callback_data="menu_personal")],
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    # Обработка создания нового объекта
+    if context.user_data.get('waiting_for') == 'new_object':
+        object_id = create_object(text, user_id=update.effective_user.id)
+        context.user_data['waiting_for'] = None
+        await update.message.reply_text(
+            f"✅ Объект «{text}» создан",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🏗️ К объекту", callback_data=f"obj_{object_id}")],
+                [InlineKeyboardButton("🏗️ К объектам", callback_data="menu_objects")],
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    # Обработка ввода даты для задачи
+    setdate_task = context.user_data.get('setdate_task')
+    if setdate_task:
+        d = parse_date(text)
+        if d:
+            # Сохраняем во временное хранилище, ждём подтверждения
+            context.user_data['confirm_date'] = {
+                'task_id': setdate_task,
+                'date': d.strftime('%Y-%m-%d'),
+                'date_str': d.strftime('%d.%m.%Y')
+            }
+            context.user_data['setdate_task'] = None
+            # Получаем задачу
+            conn = get_connection()
+            c = conn.cursor()
+            c.execute("SELECT t.title, o.name as obj FROM tasks t LEFT JOIN objects o ON t.object_id = o.id WHERE t.id = ?", (setdate_task,))
+            row = c.fetchone()
+            conn.close()
+            title = row['title'] if row else '?'
+            obj = row['obj'] if row and row['obj'] else 'Без объекта'
+            await update.message.reply_text(
+                f"📋 {title}\n{obj}\n\n📅 Дата: {d.strftime('%d.%m.%Y')}\n\nПодтверди:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Да", callback_data=f"confirmdate_yes_{setdate_task}_{d.strftime('%Y-%m-%d')}")],
+                    [InlineKeyboardButton("❌ Нет", callback_data=f"confirmdate_no_{setdate_task}")],
+                ])
+            )
+            # Автоподтверждение через 30 секунд
+            context.job_queue.run_once(
+                auto_confirm_date,
+                30,
+                data={
+                    'chat_id': update.effective_chat.id,
+                    'task_id': setdate_task,
+                    'date': d.strftime('%Y-%m-%d'),
+                    'date_str': d.strftime('%d.%m.%Y')
+                },
+                name=f"confirm_{setdate_task}"
+            )
+            return
+        else:
+            await update.message.reply_text(
+                "❌ Не понял дату. Попробуй: «завтра», «20.09», «пн», «+3»"
+            )
+            return
+
+    # Обработка переименования задачи
+    rename_task = context.user_data.get('rename_task')
+    if rename_task:
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("UPDATE tasks SET title = ? WHERE id = ?", (text, rename_task))
+        conn.commit()
+        conn.close()
+        context.user_data['rename_task'] = None
+        await update.message.reply_text(f"✅ Задача переименована: «{text}»")
+        return
+
+    result = parse_message(text)
+    action = result.get('action')
+
+    if action == 'ask_expense_type':
+        amount = result['amount']
+        context.user_data['ask_expense_amount'] = amount
+        await update.message.reply_text(
+            f"💰 {amount} ₽ — куда записать?",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("💸 Личный расход", callback_data=f"exp_type_personal_{amount}")],
+                [InlineKeyboardButton("🏗️ Расход по объекту", callback_data=f"exp_type_object_{amount}")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    if action == 'expense':
+        obj = result['object']
+        amount = result['amount']
+        category = result['category']
+        # Известные категории
+        known_categories = ['материалы', 'еда', 'транспорт', 'инструмент', 'сантехника', 'электрика', 'покраска']
+        # Если категория явно из списка — записываем сразу
+        if category and category in known_categories:
+            add_expense(obj['id'], amount, category)
+            await update.message.reply_text(
+                f"✅ Расход {amount} ₽ ({category}) добавлен в «{obj['name']}»"
+            )
+            return
+        # Иначе — спрашиваем категорию
+        context.user_data['pending_expense'] = {
+            'object_id': obj['id'],
+            'object_name': obj['name'],
+            'amount': amount
+        }
+        await update.message.reply_text(
+            f"💰 Расход {amount} ₽ в «{obj['name']}»\n\nЗа что?",
+            reply_markup=expense_category_keyboard()
+        )
+        return
+
+    if action == 'add_task':
+        obj = result['object']
+        title = result['title']
+        tid = create_task(obj['id'], title)
+        await update.message.reply_text(
+            f"✅ Задача «{title}» добавлена в «{obj['name']}». ID: {tid}"
+        )
+        return
+
+    if action == 'done_task':
+        obj = result['object']
+        task = result['task']
+        close_task(task['id'], user_id=update.effective_user.id)
+        await update.message.reply_text(
+            f"✅ Задача «{task['title']}» в «{obj['name']}» выполнена!"
+        )
+        return
+
+    if action == 'done_task_not_found':
+        obj = result['object']
+        await update.message.reply_text(
+            f"❌ В «{obj['name']}» не нашёл задачу с «{result['query']}». Посмотри /tasks"
+        )
+        return
+
+    if action == 'finance':
+        obj = result['object']
+        f = get_finance_summary(obj['id'])
+        await update.message.reply_text(
+            f"💰 {obj['name']}\n\nДоход: {f['income']} ₽\nРасход: {f['expense']} ₽\nБаланс: {f['balance']} ₽"
+        )
+        return
+
+    if action == 'list_tasks':
+        tasks = get_active_tasks()
+        if not tasks:
+            await update.message.reply_text("✅ Нет активных задач")
+            return
+        text_out = f"📋 Активные задачи ({len(tasks)}):\n\n"
+        for t in tasks[:15]:
+            text_out += f"• #{t['id']} {t['title']}\n"
+        await update.message.reply_text(text_out)
+        return
+
+    if action == 'list_objects':
+        objs = get_all_objects()
+        text_out = f"🏗️ Объекты ({len(objs)}):\n\n"
+        for o in objs:
+            text_out += f"• {o['name']}\n"
+        await update.message.reply_text(text_out)
+        return
+
+    if action == 'choose_object':
+        objects = result['objects']
+        intent = result.get('intent', 'expense')
+        amount = result.get('amount')
+        category = result.get('category', 'прочее')
+        if intent == 'add_task':
+            context.user_data['pending_task_title'] = result.get('original_text', '')
+        await update.message.reply_text(
+            f"🤔 Нашёл несколько объектов. Какой именно?",
+            reply_markup=make_choose_keyboard(objects, intent, amount, category)
+        )
+        return
+
+    # === CRM: ожидаем имя клиента ===
+    if context.user_data.get('waiting_for') == 'crm_client_name':
+        context.user_data['crm_new_client_name'] = text.strip()
+        context.user_data['waiting_for'] = 'crm_client_phone'
+        await update.message.reply_text(
+            f"👤 Имя: «{text.strip()}»\n\n"
+            f"📞 Теперь телефон (или нажми Пропустить):",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_phone")],
+            ])
+        )
+        return
+
+    # === CRM: ожидаем телефон ===
+    if context.user_data.get('waiting_for') == 'crm_client_phone':
+        context.user_data['crm_new_client_phone'] = text.strip()
+        context.user_data['waiting_for'] = 'crm_client_address'
+        await update.message.reply_text(
+            f"📞 Телефон: {text.strip()}\n\n"
+            f"📍 Теперь адрес (или Пропустить):",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_address")],
+            ])
+        )
+        return
+
+    # === CRM: ожидаем адрес ===
+    if context.user_data.get('waiting_for') == 'crm_client_address':
+        context.user_data['crm_new_client_address'] = text.strip()
+        context.user_data['waiting_for'] = 'crm_client_source'
+        await update.message.reply_text(
+            f"📍 Адрес: {text.strip()}\n\n"
+            f"🔗 Откуда узнал (Авито / знакомые / ...)? Или Пропустить:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_source")],
+            ])
+        )
+        return
+
+    # === CRM: ожидаем источник ===
+    if context.user_data.get('waiting_for') == 'crm_client_source':
+        context.user_data['crm_new_client_source'] = text.strip()
+        await _finalize_new_client(update, context)
+        return
+
+    # === CRM: пользователь ввёл имя в режиме выбора клиента ===
+    if context.user_data.get('waiting_for') == 'crm_deal_pick_client':
+        name = text.strip()
+        # Проверяем: может клиент уже есть?
+        from modules.crm import get_clients
+        clients = get_clients()
+        found = None
+        for c in clients:
+            if c['name'].lower().strip() == name.lower():
+                found = c
+                break
+        if found:
+            # Клиент есть — сразу к бюджету
+            context.user_data['crm_deal_client_id'] = found['id']
+            context.user_data['waiting_for'] = 'crm_deal_budget'
+            await update.message.reply_text(
+                f"💼 Клиент: «{found['name']}»\n\n"
+                f"Напиши сумму бюджета сделки (₽):"
+            )
+            return
+        else:
+            # Новый клиент — предлагаем создать
+            context.user_data['crm_new_client_name'] = name
+            context.user_data['waiting_for'] = None
+            await update.message.reply_text(
+                f"👤 Клиента «{name}» нет в списке.\n\n"
+                f"Создать нового и продолжить сделку?",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Создать и продолжить", callback_data="crm_new_client_for_deal")],
+                    [InlineKeyboardButton("⬅️ К списку", callback_data="crm_deal_add")],
+                    [InlineKeyboardButton("❌ Отмена", callback_data="menu_crm")],
+                ])
+            )
+            return
+
+    # === CRM: ожидаем бюджет сделки ===
+    if context.user_data.get('waiting_for') == 'crm_deal_budget':
+        try:
+            from modules.parser import parse_amount
+            budget = parse_amount(text) or 0
+        except Exception:
+            budget = 0
+        client_id = context.user_data.get('crm_deal_client_id')
+        if not client_id:
+            await update.message.reply_text("❌ Клиент потерялся. Начни заново.")
+            context.user_data['waiting_for'] = None
+            return
+        from modules.crm import add_deal, get_client
+        deal_id = add_deal(client_id=client_id, object_id=None, status='new', budget=budget)
+        c = get_client(client_id)
+        context.user_data['waiting_for'] = None
+        context.user_data['crm_deal_client_id'] = None
+        await update.message.reply_text(
+            f"✅ Сделка #{deal_id} создана!\n\n"
+            f"👤 Клиент: {c['name'] if c else '—'}\n"
+            f"💼 Бюджет: {budget} ₽\n"
+            f"📊 Статус: 🆕 Новая",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("👥 К клиентам", callback_data="crm_clients")],
+                [InlineKeyboardButton("💼 К сделкам", callback_data="crm_deals")],
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    # === УМНЫЙ FALLBACK: спрашиваем, что это ===
+    context.user_data['unknown_text'] = text
+    await update.message.reply_text(
+        f"🤔 Не распознал: «{text[:80]}»\n\n"
+        f"Что с этим сделать?",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("👤 Это клиент", callback_data="unknown_as_client")],
+            [InlineKeyboardButton("📋 Это задача", callback_data="unknown_as_task")],
+            [InlineKeyboardButton("💰 Расход на объект", callback_data="unknown_as_expense")],
+            [InlineKeyboardButton("💸 Личный расход", callback_data="unknown_as_personal")],
+            [InlineKeyboardButton("❌ Ничего", callback_data="unknown_cancel")],
+        ])
+    )
+
+
+# === УТОЧНЕНИЕ ОБЪЕКТА ===
+
+async def handle_choose_object(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает кнопки выбора объекта"""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    # Формат: choose_obj_<intent>_<object_id>_<amount>_<category>
+    parts = data.split('_')
+    intent = parts[2]
