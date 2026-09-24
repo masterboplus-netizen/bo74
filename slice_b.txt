@@ -1,0 +1,47 @@
+async def show_task_card(query, task_id, message=None):
+    """Показывает карточку задачи"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT t.id, t.title, t.status, t.priority, t.deadline, o.name as object_name
+        FROM tasks t
+        LEFT JOIN objects o ON t.object_id = o.id
+        WHERE t.id = ?
+    """, (task_id,))
+    row = c.fetchone()
+    conn.close()
+
+    if not row:
+        await query.edit_message_text("Задача не найдена")
+        return
+
+    priority_map = {'high': 'Высокий', 'medium': 'Средний', 'low': 'Низкий'}
+    deadline_str = 'не указан'
+    if row['deadline']:
+        try:
+            from datetime import datetime
+            d = datetime.strptime(row['deadline'], '%Y-%m-%d').date()
+            deadline_str = d.strftime('%d.%m.%Y')
+        except:
+            deadline_str = row['deadline']
+
+    text = f"📋 {row['title']}\n\n"
+    text += f"Объект: {row['object_name'] or 'Без объекта'}\n"
+    text += f"Срок: {deadline_str}\n"
+    text += f"Приоритет: {priority_map.get(row['priority'], row['priority'])}\n"
+    # Исполнитель
+    assigned = row['assigned_to'] if 'assigned_to' in row.keys() else None
+    if assigned:
+        try:
+            from modules.users import get_user
+            u = get_user(assigned)
+            uname = u.get('name') if u else f'id{assigned}'
+        except Exception:
+            uname = f'id{assigned}'
+        text += f"👤 Исполнитель: {uname}\n"
+    else:
+        text += f"👤 Исполнитель: —\n"
+
+    await query.edit_message_text(text, reply_markup=task_card_keyboard(task_id, row['deadline']))
+
+
