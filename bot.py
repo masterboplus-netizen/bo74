@@ -144,7 +144,7 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    app.add_handler(CallbackQueryHandler(handle_crm_menu, pattern="^(menu_crm|crm_)"))
+    app.add_handler(CallbackQueryHandler(handle_crm_menu, pattern="^(menu_crm|crm_|unknown_)"))
     app.add_handler(CallbackQueryHandler(handle_photo_page, pattern="^photopage_"))
     app.add_handler(CallbackQueryHandler(handle_photo_filter, pattern="^photofilt_"))
     app.add_handler(CallbackQueryHandler(handle_skip_photo, pattern="^skip_photo_"))
