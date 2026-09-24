@@ -48,7 +48,7 @@ def format_clients(clients: list = None) -> str:
     if clients is None:
         clients = get_clients()
     if not clients:
-        return "👥 Клиентов пока нет.\n\nДобавить: /client_add"
+        return "👥 Клиентов пока нет.\n\nНажми кнопку «➕ Добавить клиента» в меню."
     text = f"👥 КЛИЕНТЫ ({len(clients)})\n\n"
     for c in clients[:30]:
         text += f"#{c['id']} {c['name']}"
@@ -145,7 +145,7 @@ def format_deals(deals: list = None) -> str:
     if deals is None:
         deals = get_deals()
     if not deals:
-        return "💼 Сделок пока нет.\n\nДобавить: /deal_add"
+        return "💼 Сделок пока нет.\n\nНажми кнопку «➕ Добавить сделку» в меню."
     text = f"💼 СДЕЛКИ ({len(deals)})\n\n"
     for d in deals[:30]:
         client = d['client_name'] or '—'

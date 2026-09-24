@@ -1,5 +1,6 @@
-"""Модуль отчётов БО 7.4"""
+"""Модуль отчётов БО 7.5"""
 from datetime import date, timedelta
+from db import get_connection
 from modules.objects import get_object, get_all_objects
 from modules.finance import get_finance_by_period, get_finance_by_category, get_finance_summary
 from modules.tasks import get_tasks_stats_by_object
@@ -187,7 +188,7 @@ def get_closed_tasks_report(period: str = 'week') -> dict:
     period: 'today' | 'week' | 'month' | 'all'"""
     start, end = get_period_dates(period)
 
-    conn = get_connection_from_db()
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         SELECT t.id, t.title, t.completed_at, t.priority,
@@ -269,7 +270,7 @@ def get_open_tasks_report() -> dict:
     from datetime import date
     today = date.today().strftime('%Y-%m-%d')
 
-    conn = get_connection_from_db()
+    conn = get_connection()
     c = conn.cursor()
     c.execute("""
         SELECT t.id, t.title, t.status, t.deadline, t.priority,
@@ -338,8 +339,3 @@ def format_open_tasks_report(report: dict) -> str:
 
     return text
 
-
-def get_connection_from_db():
-    """Локальный импорт, чтобы не тянуть в начало файла."""
-    from db import get_connection
-    return get_connection()
