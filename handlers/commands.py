@@ -564,7 +564,7 @@ async def handle_crm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for o in objs[:20]:
             buttons.append([InlineKeyboardButton(
                 f"🏗️ {o['name']}",
-                callback_data=f"exp_type_object_{amount}_unknown"
+                callback_data=f"exp_type_object_{amount}"
             )])
         buttons.append([InlineKeyboardButton("❌ Отмена", callback_data="menu_back")])
         await query.edit_message_text(
