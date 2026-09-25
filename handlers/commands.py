@@ -181,6 +181,35 @@ async def add_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ Задача «{title}» добавлена в «{obj['name']}». ID: {task_id}")
 
 
+def format_tasks_block(title: str, items: list, emoji: str = '📋') -> str:
+    """Форматирует блок задач, сгруппированный по объектам."""
+    if not items:
+        return ''
+    # Группируем по объекту
+    by_obj = {}
+    order = []
+    for r in items:
+        obj = r['object_name'] or 'Без объекта'
+        if obj not in by_obj:
+            by_obj[obj] = []
+            order.append(obj)
+        by_obj[obj].append(r)
+
+    lines = [f'{emoji} {title}']
+    for obj in order:
+        lines.append(f'')
+        lines.append(f'🏗️ {obj}')
+        for r in by_obj[obj]:
+            d = ''
+            if r['deadline']:
+                try:
+                    from datetime import datetime
+                    d = ' — ' + datetime.strptime(r['deadline'], '%Y-%m-%d').strftime('%d.%m')
+                except Exception:
+                    pass
+            lines.append(f'  ▸ {r["id"]}. {r["title"]}{d}')
+    return '\n'.join(lines)
+
 async def tasks_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Задачи по датам с кнопками — как в меню."""
     from datetime import datetime, date, timedelta
@@ -997,29 +1026,16 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         no_deadline = [r for r in rows if not r['deadline']]
 
-        def format_block(title, items):
-            lines = [f"**{title}:**"]
-            for r in items:
-                d = ""
-                if r['deadline']:
-                    try:
-                        d = " (" + datetime.strptime(r['deadline'], '%Y-%m-%d').strftime('%d.%m') + ")"
-                    except Exception:
-                        pass
-                obj = r['object_name'] or "без объекта"
-                lines.append(f"#{r['id']} {r['title']}{d} — {obj}")
-            return "\n".join(lines)
-
         if today_tasks:
-            sections.append(format_block(f"СЕГОДНЯ — {today.strftime('%d.%m.%Y')}", today_tasks))
+            sections.append(format_tasks_block(f"СЕГОДНЯ — {today.strftime('%d.%m.%Y')}", today_tasks, '🔥'))
         if tomorrow_tasks:
-            sections.append(format_block(f"ЗАВТРА — {tomorrow.strftime('%d.%m.%Y')}", tomorrow_tasks))
+            sections.append(format_tasks_block(f"ЗАВТРА — {tomorrow.strftime('%d.%m.%Y')}", tomorrow_tasks, '📅'))
         if later_tasks:
-            sections.append(format_block("ПОЗЖЕ", later_tasks))
+            sections.append(format_tasks_block("ПОЗЖЕ", later_tasks, '🗓'))
         if no_deadline:
-            sections.append(format_block("БЕЗ СРОКА", no_deadline))
+            sections.append(format_tasks_block("БЕЗ СРОКА", no_deadline, '📋'))
 
-        text = "📋 ЗАДАЧИ\n\n" + "\n".join(sections)
+        text = "📋 ЗАДАЧИ\n\n" + "\n\n".join(sections)
         if len(text) > 4000:
             text = text[:3900] + "\n\n..."
 
