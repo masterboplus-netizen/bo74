@@ -1,0 +1,86 @@
+    if context.user_data.get('waiting_for') == 'crm_deal_budget':
+        try:
+            from modules.parser import parse_amount
+            budget = parse_amount(text) or 0
+        except Exception:
+            budget = 0
+        client_id = context.user_data.get('crm_deal_client_id')
+        if not client_id:
+            await update.message.reply_text("❌ Клиент потерялся. Начни заново.")
+            context.user_data['waiting_for'] = None
+            return
+        from modules.crm import add_deal, get_client
+        deal_id = add_deal(client_id=client_id, object_id=None, status='new', budget=budget)
+        c = get_client(client_id)
+        context.user_data['waiting_for'] = None
+        context.user_data['crm_deal_client_id'] = None
+        await update.message.reply_text(
+            f"✅ Сделка #{deal_id} создана!\n\n"
+            f"👤 Клиент: {c['name'] if c else '—'}\n"
+            f"💼 Бюджет: {budget} ₽\n"
+            f"📊 Статус: 🆕 Новая",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("👥 К клиентам", callback_data="crm_clients")],
+                [InlineKeyboardButton("💼 К сделкам", callback_data="crm_deals")],
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    # === УМНЫЙ FALLBACK: спрашиваем, что это ===
+    context.user_data['unknown_text'] = text
+    await update.message.reply_text(
+        f"🤔 Не распознал: «{text[:80]}»\n\n"
+        f"Что с этим сделать?",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("👤 Это клиент", callback_data="unknown_as_client")],
+            [InlineKeyboardButton("📋 Это задача", callback_data="unknown_as_task")],
+            [InlineKeyboardButton("💰 Расход на объект", callback_data="unknown_as_expense")],
+            [InlineKeyboardButton("💸 Личный расход", callback_data="unknown_as_personal")],
+            [InlineKeyboardButton("❌ Ничего", callback_data="unknown_cancel")],
+        ])
+    )
+
+
+# === УТОЧНЕНИЕ ОБЪЕКТА ===
+
+async def handle_choose_object(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает кнопки выбора объекта"""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    # Формат: choose_obj_<intent>_<object_id>_<amount>_<category>
+    parts = data.split('_')
+    intent = parts[2]
+    object_id = int(parts[3])
+    amount = int(parts[4]) if len(parts) > 4 and parts[4] != 'none' else None
+    category = parts[5] if len(parts) > 5 else 'прочее'
+
+    obj = get_object(object_id)
+    if not obj:
+        await query.edit_message_text("❌ Объект не найден")
+        return
+
+    if intent == 'expense' and amount:
+        # Сохраняем в user_data и спрашиваем категорию
+        context.user_data['pending_expense'] = {
+            'object_id': obj['id'],
+            'object_name': obj['name'],
+            'amount': amount
+        }
+        await query.edit_message_text(
+            f"💰 Расход {amount} ₽ в «{obj['name']}»\n\nЗа что?",
+            reply_markup=expense_category_keyboard()
+        )
+        return
+
+    if intent == 'add_task':
+        title = context.user_data.get('pending_task_title', '')
+        tid = create_task(obj['id'], title)
+        await query.edit_message_text(
+            f"✅ Задача «{title}» добавлена в «{obj['name']}». ID: {tid}"
+        )
+        return
+
+    if intent == 'done_task':
