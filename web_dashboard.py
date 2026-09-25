@@ -315,6 +315,7 @@ def render_object(obj):
         <h1>🏗️ {obj['name']}</h1>
         <div>
             <a class="back" href="/object/{obj['id']}/photos" style="color:#60a5fa;font-weight:600;margin-right:16px;">📸 Фото объекта</a>
+            <a href="/object/{obj['id']}" style="color:#60a5fa;margin-right:12px;">🔄 Обновить</a>
             <a class="back" href="/">← К дашборду</a>
         </div>
     </div>
