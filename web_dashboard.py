@@ -244,7 +244,7 @@ def render_dashboard():
 <div class="container">
     <div class="header">
         <h1>🤖 Бо 7.5 — Дашборд</h1>
-        <span style="color:#666;font-size:14px;">{date.today().strftime('%d.%m.%Y')}</span>
+        <div><a href="/" style="color:#60a5fa;margin-right:12px;">🔄 Обновить</a><span style="color:#666;font-size:14px;">{date.today().strftime('%d.%m.%Y')}</span></div>
     </div>
 
     <div class="cards">
@@ -375,7 +375,7 @@ def render_object_photos(obj_id):
         conn2.close()
         file_id = fr['file_id'] if fr else ''
         img_url = get_telegram_file_url(file_id)
-        img_html = f'<img src="{img_url}" style="width:100%;border-radius:8px;display:block;" loading="lazy">' if img_url else '<div style="color:#666;padding:20px;text-align:center;">📷</div>'
+        img_html = f'<a href="{img_url}" target="_blank" style="display:block;"><img src="{img_url}" style="width:100%;border-radius:8px;display:block;cursor:zoom-in;" loading="lazy"></a>' if img_url else '<div style="color:#666;padding:20px;text-align:center;">📷</div>'
         tg_link = f'https://t.me/masterbo2026_bot?start=photo_{p["id"]}'
         grid += f"""
         <div style="background:#1a1a1a;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a;">
@@ -475,7 +475,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
 if __name__ == '__main__':
     print(f"🚀 Дашборд Бо 7.5 запущен: http://0.0.0.0:{PORT}")
     print(f"📊 В браузере открой: https://<твой-домен>.replit.dev:{PORT}")
-    with socketserver.TCPServer(("", PORT), Handler) as httpd:
+    class ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+        daemon_threads = True
+        allow_reuse_address = True
+
+    with ThreadingTCPServer(("", PORT), Handler) as httpd:
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
