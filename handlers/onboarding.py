@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Бо 7.5 — Онбординг: выбор роли + меню по ролям."""
+"""Бо 7.7 — Онбординг: выбор роли + меню по ролям."""
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CallbackQueryHandler
 from telegram.constants import ParseMode

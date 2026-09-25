@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Бо 7.5 — Админ-команды."""
+"""Бо 7.7 — Админ-команды."""
 from telegram import Update
 from telegram.ext import ContextTypes, CommandHandler
 from telegram.constants import ParseMode

@@ -1,4 +1,4 @@
-"""Точка сборки БО 7.5"""
+"""Точка сборки БО 7.7"""
 import os
 import logging
 from telegram import BotCommand
@@ -144,7 +144,7 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    app.add_handler(CallbackQueryHandler(handle_crm_menu, pattern="^(menu_crm|crm_|unknown_)"))
+    app.add_handler(CallbackQueryHandler(handle_crm_menu, pattern="^(menu_crm|crm_|unknown_|deal_|client_|activity_)"))
     app.add_handler(CallbackQueryHandler(handle_photo_page, pattern="^photopage_"))
     app.add_handler(CallbackQueryHandler(handle_photo_filter, pattern="^photofilt_"))
     app.add_handler(CallbackQueryHandler(handle_skip_photo, pattern="^skip_photo_"))
@@ -155,14 +155,14 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_choose_object, pattern="^choose_obj_"))
     app.add_handler(CallbackQueryHandler(handle_confirm_date, pattern="^confirmdate_"))
     app.add_handler(CallbackQueryHandler(handle_add_menu, pattern="^(menu_add|add_object|add_task|add_expense|newtask_obj_|newexp_obj_)"))
-    app.add_handler(CallbackQueryHandler(handle_task_action, pattern="^(task_|taskdone_|taskdel_|setdate_|taskdate_|tasknodate_|taskprio_|setprio_|taskrename_)"))
+    app.add_handler(CallbackQueryHandler(handle_task_action, pattern="^(task_|taskdone_|taskdel_|setdate_|taskdate_|tasknodate_|taskprio_|setprio_|taskrename_|taskassign_|setassigned_|setrange_|setduration_|cal_|dur_days_)"))
     register_onboarding_handlers(app)
     register_admin_handlers(app)
-    app.add_handler(CallbackQueryHandler(handle_callback, pattern="^(?!cat_|choose_obj_|task_|taskdone_|taskdel_|setdate_|taskdate_|taskprio_|setprio_|taskrename_).*"))
+    app.add_handler(CallbackQueryHandler(handle_callback, pattern="^(?!cat_|choose_obj_|task_|taskdone_|taskdel_|setdate_|taskdate_|taskprio_|setprio_|taskrename_|taskassign_|setassigned_|setrange_|setduration_|cal_|dur_days_).*"))
 
     app.add_error_handler(error_handler)
 
-    logger.info("🚀 БО 7.5 запущен! Все хендлеры зарегистрированы.")
+    logger.info("🚀 БО 7.7 запущен! Все хендлеры зарегистрированы.")
     app.run_polling()
 
 

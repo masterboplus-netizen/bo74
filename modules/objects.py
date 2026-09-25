@@ -1,4 +1,4 @@
-"""Модуль объектов БО 7.2"""
+"""Модуль объектов БО 7.7"""
 from db import get_connection
 from datetime import datetime
 

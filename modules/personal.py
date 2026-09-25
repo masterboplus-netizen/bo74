@@ -1,4 +1,4 @@
-"""Модуль личных расходов БО 7.4"""
+"""Модуль личных расходов БО 7.7"""
 from db import get_connection
 from datetime import datetime, timedelta
 

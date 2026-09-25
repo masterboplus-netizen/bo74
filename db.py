@@ -1,4 +1,4 @@
-"""База данных БО 7.5 — 27 таблиц"""
+"""База данных БО 7.7 — 28 таблиц"""
 import sqlite3
 from config import DB_PATH
 
@@ -173,6 +173,7 @@ def init_db():
     c.execute("CREATE INDEX IF NOT EXISTS idx_finance_object ON finance(object_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_finance_date ON finance(date)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_events_date ON calendar_events(event_date)")
+    c.execute("CREATE TABLE IF NOT EXISTS digest_log (id INTEGER PRIMARY KEY AUTOINCREMENT, digest_type TEXT, sent_at DATE, UNIQUE(digest_type, sent_at))")
 
     # === МИГРАЦИИ для старых БД ===
     try:
@@ -180,6 +181,17 @@ def init_db():
         print("🔧 Миграция: добавлена колонка onboarded в users")
     except Exception:
         pass
+
+    # Миграция tasks: deadline_start, deadline_end (для диапазона)
+    for col, sql in [
+        ('deadline_start', 'ALTER TABLE tasks ADD COLUMN deadline_start DATE'),
+        ('deadline_end', 'ALTER TABLE tasks ADD COLUMN deadline_end DATE'),
+    ]:
+        try:
+            c.execute(sql)
+            print(f'🔧 Миграция tasks: добавлена колонка {col}')
+        except Exception:
+            pass
 
     # Миграция photos: stage, uploaded_by, taken_at
     for col, sql in [
@@ -195,7 +207,7 @@ def init_db():
 
     conn.commit()
     conn.close()
-    print("✅ База БО 7.5 инициализирована (27 таблиц)")
+    print("✅ База БО 7.7 инициализирована (28 таблиц)")
 
 if __name__ == '__main__':
     init_db()

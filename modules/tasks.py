@@ -1,13 +1,13 @@
-"""Модуль задач БО 7.2"""
+"""Модуль задач БО 7.7"""
 from db import get_connection
 
 
-def create_task(object_id: int, title: str, description: str = "", deadline: str = None, priority: str = 'medium') -> int:
+def create_task(object_id: int, title: str, description: str = "", deadline: str = None, priority: str = 'medium', assigned_to: int = None) -> int:
     conn = get_connection()
     c = conn.cursor()
     c.execute(
-        "INSERT INTO tasks (object_id, title, description, deadline, priority) VALUES (?, ?, ?, ?, ?)",
-        (object_id, title, description, deadline, priority)
+        "INSERT INTO tasks (object_id, title, description, deadline, priority, assigned_to) VALUES (?, ?, ?, ?, ?, ?)",
+        (object_id, title, description, deadline, priority, assigned_to)
     )
     task_id = c.lastrowid
     conn.commit()
@@ -83,3 +83,52 @@ def get_tasks_stats_by_object(object_id: int) -> dict:
         'overdue': overdue,
         'percent_done': int(done / total * 100) if total > 0 else 0
     }
+
+
+def assign_task(task_id: int, tg_id: int = None):
+    """Назначает задачу на юзера. tg_id=None — снять назначение."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("UPDATE tasks SET assigned_to = ? WHERE id = ?", (tg_id, task_id))
+    conn.commit()
+    conn.close()
+
+def get_tasks_by_assignee(tg_id: int) -> list:
+    """Активные задачи конкретного исполнителя."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT t.id, t.object_id, t.title, t.status, t.priority, t.deadline,
+               o.name as object_name
+        FROM tasks t
+        LEFT JOIN objects o ON t.object_id = o.id
+        WHERE t.assigned_to = ? AND t.status IN ('open', 'in_progress')
+        ORDER BY (t.deadline IS NULL), t.deadline ASC
+    """, (tg_id,))
+    rows = c.fetchall()
+    conn.close()
+    return [{'id': r['id'], 'object_id': r['object_id'], 'title': r['title'],
+             'status': r['status'], 'priority': r['priority'],
+             'deadline': r['deadline'], 'object_name': r['object_name']} for r in rows]
+
+
+def set_task_range(task_id: int, start: str = None, end: str = None):
+    """Устанавливает диапазон дат для задачи.
+    start/end в формате YYYY-MM-DD. None — убрать."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('UPDATE tasks SET deadline_start = ?, deadline_end = ?, deadline = ? WHERE id = ?',
+              (start, end, start, task_id))
+    conn.commit()
+    conn.close()
+
+def get_task_range(task_id: int) -> dict:
+    """Возвращает диапазон задачи."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('SELECT deadline, deadline_start, deadline_end FROM tasks WHERE id = ?', (task_id,))
+    r = c.fetchone()
+    conn.close()
+    if not r:
+        return {'deadline': None, 'start': None, 'end': None}
+    return {'deadline': r[0], 'start': r[1], 'end': r[2]}

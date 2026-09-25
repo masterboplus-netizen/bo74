@@ -69,6 +69,29 @@ def get_objects():
     } for r in rows]
 
 
+import os as _os
+import json as _json
+import urllib.request as _ur
+
+TG_TOKEN = _os.getenv("BOT_TOKEN", "")
+
+def get_telegram_file_url(file_id: str) -> str:
+    """Возвращает прямую ссылку на файл через Telegram Bot API."""
+    if not TG_TOKEN or not file_id:
+        return ""
+    try:
+        url = f"https://api.telegram.org/bot{TG_TOKEN}/getFile?file_id={file_id}"
+        with _ur.urlopen(url, timeout=5) as resp:
+            data = _json.loads(resp.read())
+        if data.get("ok"):
+            file_path = data["result"].get("file_path", "")
+            if file_path:
+                return f"https://api.telegram.org/file/bot{TG_TOKEN}/{file_path}"
+    except Exception:
+        pass
+    return ""
+
+
 def get_object_photos(obj_id):
     """Фото объекта для дашборда (без картинок — только метаданные)."""
     conn = get_connection()
@@ -338,19 +361,36 @@ def render_object_photos(obj_id):
     for st, cnt in stage_stats.items():
         stats_html += f'<div class="card"><div class="label">{stage_names.get(st, st)}</div><div class="value">{cnt}</div></div>'
 
-    # Строки таблицы
-    rows = ""
+    # Сетка превью
+    grid = ""
     for p in photos:
         task_str = f"#{p['task_id']} {p['task_title'][:40]}" if p['task_id'] else "Без задачи"
-        rows += f"""
-        <tr>
-            <td>#{p['id']}</td>
-            <td>{stage_names.get(p['stage'], p['stage'])}</td>
-            <td>{task_str}</td>
-            <td>{p['taken_at'][:16] if p['taken_at'] else '—'}</td>
-            <td>{p['caption'][:50] or '—'}</td>
-            <td>{p['uploader']}</td>
-        </tr>"""
+        # Получаем URL фото
+        # (для производительности — можно кэшировать, но пока так)
+        from db import get_connection as _gc
+        conn2 = _gc()
+        c2 = conn2.cursor()
+        c2.execute("SELECT file_id FROM photos WHERE id = ?", (p['id'],))
+        fr = c2.fetchone()
+        conn2.close()
+        file_id = fr['file_id'] if fr else ''
+        img_url = get_telegram_file_url(file_id)
+        img_html = f'<img src="{img_url}" style="width:100%;border-radius:8px;display:block;" loading="lazy">' if img_url else '<div style="color:#666;padding:20px;text-align:center;">📷</div>'
+        tg_link = f'https://t.me/masterbo2026_bot?start=photo_{p["id"]}'
+        grid += f"""
+        <div style="background:#1a1a1a;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a;">
+            <div style="padding:8px;font-size:12px;color:#888;">
+                #{p['id']} · {stage_names.get(p['stage'], p['stage'])}
+            </div>
+            <a href="{tg_link}" target="_blank" style="display:block;">
+                {img_html}
+            </a>
+            <div style="padding:10px;font-size:13px;">
+                <div style="color:#ccc;margin-bottom:4px;">{task_str}</div>
+                <div style="color:#666;font-size:11px;">{p['taken_at'][:16] if p['taken_at'] else '—'} · {p['uploader']}</div>
+                {f'<div style="color:#999;margin-top:6px;font-size:12px;">{p["caption"][:80]}</div>' if p['caption'] else ''}
+            </div>
+        </div>"""
 
     return f"""<!DOCTYPE html>
 <html lang="ru">
@@ -377,11 +417,8 @@ def render_object_photos(obj_id):
         <code style="background:#222;padding:2px 6px;border-radius:4px;">/photos {obj['name']}</code>
     </p>
 
-    <h2>Список фото</h2>
-    <table>
-        <thead><tr><th>ID</th><th>Этап</th><th>Задача</th><th>Дата съёмки</th><th>Описание</th><th>Загрузил</th></tr></thead>
-        <tbody>{rows or '<tr><td colspan="6" style="text-align:center;color:#666;">Пока нет фото</td></tr>'}</tbody>
-    </table>
+    <h2>Фото</h2>
+    {f'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;">{grid}</div>' if photos else '<p style="color:#666;">Пока нет фото</p>'}
 </div>
 </body>
 </html>"""

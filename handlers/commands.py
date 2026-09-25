@@ -1,4 +1,4 @@
-"""Команды Telegram-бота БО 7.5"""
+"""Команды Telegram-бота БО 7.7"""
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
@@ -16,6 +16,36 @@ from handlers.onboarding import ask_role, role_menu_keyboard
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Старт: онбординг при первом входе, иначе — меню по роли."""
     user = update.effective_user
+
+    # === DEEP LINK: /start photo_<id> — открыть конкретное фото ===
+    if context.args and context.args[0].startswith("photo_"):
+        try:
+            photo_id = int(context.args[0].replace("photo_", ""))
+            from db import get_connection
+            conn = get_connection()
+            c = conn.cursor()
+            c.execute("SELECT file_id, stage, caption, taken_at, task_id, object_id FROM photos WHERE id = ?", (photo_id,))
+            row = c.fetchone()
+            conn.close()
+            if row:
+                stage_names = {'before': '📸 До', 'progress': '🔵 Процесс', 'after': '✅ После', 'document': '📄 Документ'}
+                caption_parts = [stage_names.get(row['stage'], row['stage'] or '')]
+                if row['taken_at']:
+                    caption_parts.append(f"📅 {row['taken_at'][:16]}")
+                if row['caption']:
+                    caption_parts.append(row['caption'])
+                caption = " · ".join([p for p in caption_parts if p])
+                await update.message.reply_photo(
+                    photo=row['file_id'],
+                    caption=caption[:1024] if caption else None
+                )
+                return
+            else:
+                await update.message.reply_text("❌ Фото не найдено.")
+                return
+        except Exception as e:
+            await update.message.reply_text(f"❌ Ошибка: {e}")
+            return
 
     # === ГЛАВНЫЙ АДМИН — сразу меню, без онбординга ===
     from handlers.onboarding import MAIN_ADMIN_TG_ID
@@ -371,25 +401,135 @@ async def handle_crm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "crm_clients":
-        from modules.crm import format_clients
+        from modules.crm import format_clients, get_clients
+        clients = get_clients()
+        buttons = []
+        for c in clients[:25]:
+            label = f"👤 {c['name'][:30]}"
+            if c.get('phone'):
+                label += f" · {c['phone'][:15]}"
+            buttons.append([InlineKeyboardButton(label, callback_data=f"client_{c['id']}")])
+        buttons.append([InlineKeyboardButton("➕ Добавить", callback_data="crm_client_add")])
+        buttons.append([InlineKeyboardButton("⬅️ К CRM", callback_data="menu_crm")])
         await query.edit_message_text(
             format_clients(),
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("➕ Добавить", callback_data="crm_client_add")],
-                [InlineKeyboardButton("⬅️ К CRM", callback_data="menu_crm")],
-            ])
+            reply_markup=InlineKeyboardMarkup(buttons)
         )
         return
 
     if data == "crm_deals":
-        from modules.crm import format_deals
+        from modules.crm import format_deals, get_deals
+        deals = get_deals()
+        buttons = []
+        st_icons = {"new": "🆕", "in_progress": "🔄", "won": "✅", "lost": "❌", "paused": "⏸"}
+        for d in deals[:25]:
+            icon = st_icons.get(d["status"], "•")
+            cl = d["client_name"] or "—"
+            label = f"{icon} #{d['id']} {cl[:25]} — {d['budget'] or 0} ₽"
+            buttons.append([InlineKeyboardButton(label, callback_data=f"deal_{d['id']}")])
+        buttons.append([InlineKeyboardButton("➕ Добавить", callback_data="crm_deal_add")])
+        buttons.append([InlineKeyboardButton("⬅️ К CRM", callback_data="menu_crm")])
         await query.edit_message_text(
             format_deals(),
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    if data.startswith("activity_call_") or data.startswith("activity_meeting_") or data.startswith("activity_note_"):
+        parts = data.split("_")
+        atype = parts[1]
+        client_id = int(parts[2])
+        type_names = {"call": "📞 Звонок", "meeting": "🤝 Встреча", "note": "📝 Заметка"}
+        context.user_data["activity_client_id"] = client_id
+        context.user_data["activity_type"] = atype
+        context.user_data["waiting_for"] = "activity_text"
+        await query.edit_message_text(
+            f"{type_names.get(atype, atype)}\n\nНапиши текст:",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("➕ Добавить", callback_data="crm_deal_add")],
-                [InlineKeyboardButton("⬅️ К CRM", callback_data="menu_crm")],
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"client_{client_id}")],
             ])
         )
+        return
+
+    if data.startswith("activity_plan_"):
+        client_id = int(data.replace("activity_plan_", ""))
+        context.user_data["activity_client_id"] = client_id
+        context.user_data["activity_type"] = "call"
+        context.user_data["waiting_for"] = "activity_plan_datetime"
+        await query.edit_message_text(
+            "📅 Запланировать звонок\n\nНапиши дату и время. Например:\n"
+            "«завтра 15:00»\n«25.09 10:30»\n«пн 12:00»",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"client_{client_id}")],
+            ])
+        )
+        return
+
+    if data.startswith("activity_list_"):
+        from modules.crm import get_client, get_client_activities, format_activities
+        client_id = int(data.replace("activity_list_", ""))
+        cl = get_client(client_id)
+        acts = get_client_activities(client_id)
+        text = f"📋 АКТИВНОСТИ: {cl['name'] if cl else '—'}\n\n"
+        text += format_activities(acts)
+        await query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ К клиенту", callback_data=f"client_{client_id}")],
+            ])
+        )
+        return
+
+    if data.startswith("client_"):
+        from modules.crm import get_client, get_client_deals
+        client_id = int(data.replace("client_", ""))
+        cl = get_client(client_id)
+        if not cl:
+            await query.edit_message_text("❌ Клиент не найден")
+            return
+        deals = get_client_deals(client_id)
+        st_names = {"new": "🆕 Новая", "in_progress": "🔄 В работе", "won": "✅ Выиграна", "lost": "❌ Проиграна", "paused": "⏸ Пауза"}
+        text = f"👤 КЛИЕНТ #{client_id}\n\n"
+        text += f"Имя: {cl['name']}\n"
+        if cl.get('phone'):
+            text += f"📞 {cl['phone']}\n"
+        if cl.get('email'):
+            text += f"✉️ {cl['email']}\n"
+        if cl.get('address'):
+            text += f"📍 {cl['address']}\n"
+        if cl.get('source'):
+            text += f"🔗 {cl['source']}\n"
+        text += f"\n💼 СДЕЛКИ ({len(deals)}):\n"
+        if deals:
+            for d in deals[:10]:
+                text += f"  • #{d['id']} {st_names.get(d['status'], d['status'])} — {d['budget'] or 0} ₽\n"
+        else:
+            text += "  нет сделок\n"
+        buttons = [
+            [InlineKeyboardButton("➕ Новая сделка", callback_data=f"crm_deal_client_{client_id}")],
+        ]
+        phone = cl.get('phone') if cl.get('phone') else None
+        if phone:
+            # Нормализуем: убираем всё кроме цифр и +
+            clean = ''.join(ch for ch in phone if ch.isdigit() or ch == '+')
+            if clean and not clean.startswith('+'):
+                # Русские номера: если начинается с 8 или 7 — добавим +
+                if clean.startswith('8') and len(clean) == 11:
+                    clean = '+7' + clean[1:]
+                elif clean.startswith('7') and len(clean) == 11:
+                    clean = '+' + clean
+                else:
+                    clean = '+' + clean
+            if clean:
+                buttons.append([InlineKeyboardButton(f"📞 Позвонить {phone}", url=f"tel:{clean}")])
+        buttons.append([InlineKeyboardButton("📅 Запланировать звонок", callback_data=f"activity_plan_{client_id}")])
+        buttons.append([InlineKeyboardButton("🤝 Встреча", callback_data=f"activity_meeting_{client_id}"),
+                        InlineKeyboardButton("📝 Заметка", callback_data=f"activity_note_{client_id}")])
+        buttons.append([InlineKeyboardButton("📋 Активности", callback_data=f"activity_list_{client_id}")])
+        for d in deals[:5]:
+            buttons.append([InlineKeyboardButton(f"💼 Сделка #{d['id']} — {d['budget'] or 0} ₽", callback_data=f"deal_{d['id']}")])
+        buttons.append([InlineKeyboardButton("⬅️ К клиентам", callback_data="crm_clients")])
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(buttons))
         return
 
     if data == "crm_client_add":
@@ -417,6 +557,61 @@ async def handle_crm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             "💼 Новая сделка\n\nВыбери клиента из списка или напиши имя нового:",
             reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    if data.startswith("deal_"):
+        from modules.crm import get_client_deals, get_deals, get_client
+        parts = data.replace("deal_", "").split("_")
+        deal_id = int(parts[0])
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("SELECT id, client_id, object_id, status, budget FROM crm_deals WHERE id = ?", (deal_id,))
+        d = c.fetchone()
+        conn.close()
+        if not d:
+            await query.edit_message_text("❌ Сделка не найдена")
+            return
+        st_names = {"new": "🆕 Новая", "in_progress": "🔄 В работе", "won": "✅ Выиграна", "lost": "❌ Проиграна", "paused": "⏸ Пауза"}
+        cl = get_client(d["client_id"])
+        cl_name = cl["name"] if cl else "—"
+        obj_name = "—"
+        if d["object_id"]:
+            o = get_object(d["object_id"])
+            obj_name = o["name"] if o else "—"
+        text = f"💼 СДЕЛКА #{deal_id}\n\n"
+        text += f"👤 Клиент: {cl_name}\n"
+        text += f"🏗️ Объект: {obj_name}\n"
+        text += f"💼 Бюджет: {d['budget'] or 0} ₽\n"
+        text += f"📊 Статус: {st_names.get(d['status'], d['status'])}\n\n"
+        text += "Сменить статус:"
+        await query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔄 В работе", callback_data=f"deal_status_{deal_id}_in_progress")],
+                [InlineKeyboardButton("✅ Выиграна", callback_data=f"deal_status_{deal_id}_won")],
+                [InlineKeyboardButton("❌ Проиграна", callback_data=f"deal_status_{deal_id}_lost")],
+                [InlineKeyboardButton("⏸ Пауза", callback_data=f"deal_status_{deal_id}_paused")],
+                [InlineKeyboardButton("👤 К клиенту", callback_data=f"client_{d['client_id']}")],
+                [InlineKeyboardButton("⬅️ К сделкам", callback_data="crm_deals")],
+            ])
+        )
+        return
+
+    if data.startswith("deal_status_"):
+        from modules.crm import update_deal_status, get_client
+        parts = data.replace("deal_status_", "").split("_")
+        deal_id = int(parts[0])
+        new_status = parts[1]
+        update_deal_status(deal_id, new_status)
+        st_names = {"new": "🆕 Новая", "in_progress": "🔄 В работе", "won": "✅ Выиграна", "lost": "❌ Проиграна", "paused": "⏸ Пауза"}
+        await query.edit_message_text(
+            f"✅ Сделка #{deal_id} → {st_names.get(new_status, new_status)}",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ К сделке", callback_data=f"deal_{deal_id}")],
+                [InlineKeyboardButton("💼 К сделкам", callback_data="crm_deals")],
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            ])
         )
         return
 
@@ -453,6 +648,42 @@ async def handle_crm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # === ПРОПУСК ШАГОВ CRM ===
+    if data.startswith("crm_phone_pick_"):
+        phone = data.replace("crm_phone_pick_", "")
+        from modules.phone_utils import get_country_label
+        country = get_country_label(phone)
+        context.user_data['crm_new_client_phone'] = phone
+        context.user_data['waiting_for'] = 'crm_client_address'
+        await query.edit_message_text(
+            f"✅ Телефон: {phone}\n{country}\n\n📍 Теперь адрес (или Пропустить):",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✏️ Изменить телефон", callback_data="crm_phone_edit")],
+                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_address")],
+            ])
+        )
+        return
+
+    if data == "crm_phone_edit":
+        context.user_data['waiting_for'] = 'crm_client_phone_edit'
+        await query.edit_message_text(
+            "✏️ Введи новый телефон:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Назад", callback_data="crm_phone_edit_back")],
+            ])
+        )
+        return
+
+    if data == "crm_phone_edit_back":
+        context.user_data['waiting_for'] = 'crm_client_address'
+        await query.edit_message_text(
+            "📍 Напиши адрес:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✏️ Изменить телефон", callback_data="crm_phone_edit")],
+                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_address")],
+            ])
+        )
+        return
+
     if data == "crm_skip_phone":
         context.user_data['waiting_for'] = 'crm_client_address'
         await query.edit_message_text(
@@ -800,6 +1031,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"{i}. {r['title'][:40]}",
                 callback_data=f"task_{r['id']}"
             )])
+        buttons.append([InlineKeyboardButton("👤 Мои задачи", callback_data="my_tasks"),
+                        InlineKeyboardButton("👥 По исполнителям", callback_data="by_assignee")])
         buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
 
         await query.edit_message_text(
@@ -807,6 +1040,92 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(buttons)
         )
         return
+
+    if data == "my_tasks":
+        from modules.tasks import get_tasks_by_assignee
+        user_id = update.effective_user.id
+        my = get_tasks_by_assignee(user_id)
+        if not my:
+            await query.edit_message_text(
+                "👤 У тебя нет назначенных задач.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Назад", callback_data="menu_tasks")],
+                ])
+            )
+            return
+        text = f"👤 МОИ ЗАДАЧИ ({len(my)}):\n\n"
+        buttons = []
+        for i, t in enumerate(my[:20], start=1):
+            d = ''
+            if t['deadline']:
+                d = f" ({t['deadline'][:10]})"
+            obj = t['object_name'] or 'без объекта'
+            text += f"#{t['id']} {t['title']}{d} — {obj}\n"
+            buttons.append([InlineKeyboardButton(f"{i}. {t['title'][:40]}", callback_data=f"task_{t['id']}")])
+        buttons.append([InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")])
+        try:
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        except Exception as e:
+            if 'not modified' not in str(e).lower():
+                raise
+        return
+    if data == "by_assignee":
+        from modules.users import get_all_users
+        from modules.tasks import get_tasks_by_assignee
+        users = get_all_users()
+        users = [u for u in users if u.get('role') in ('master', 'prorab', 'designer', 'admin')]
+        buttons = []
+        for u in users:
+            cnt = len(get_tasks_by_assignee(u['tg_id']))
+            label = f"👤 {u.get('name', '—')[:30]} ({cnt})"
+            buttons.append([InlineKeyboardButton(label, callback_data=f"byassignee_{u['tg_id']}")])
+        buttons.append([InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")])
+        try:
+            await query.edit_message_text(
+                "👥 Задачи по исполнителям:",
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        except Exception as e:
+            if 'not modified' not in str(e).lower():
+                raise
+        return
+
+    if data.startswith("byassignee_"):
+        from modules.tasks import get_tasks_by_assignee
+        from modules.users import get_user
+        tg_id = int(data.replace("byassignee_", ""))
+        tasks = get_tasks_by_assignee(tg_id)
+        u = get_user(tg_id)
+        uname = u.get('name') if u else f'id{tg_id}'
+        if not tasks:
+            try:
+                await query.edit_message_text(
+                    f"👤 {uname}\n\nНет активных задач.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ Назад", callback_data="by_assignee")],
+                    ])
+                )
+            except Exception as e:
+                if 'not modified' not in str(e).lower():
+                    raise
+            return
+        text = f"👤 {uname} — {len(tasks)} задач:\n\n"
+        buttons = []
+        for i, t in enumerate(tasks[:20], start=1):
+            d = ''
+            if t['deadline']:
+                d = f" ({t['deadline'][:10]})"
+            obj = t['object_name'] or 'без объекта'
+            text += f"#{t['id']} {t['title']}{d} — {obj}\n"
+            buttons.append([InlineKeyboardButton(f"{i}. {t['title'][:40]}", callback_data=f"task_{t['id']}")])
+        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="by_assignee")])
+        try:
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        except Exception as e:
+            if 'not modified' not in str(e).lower():
+                raise
+        return
+
     if data == "menu_finance":
         await query.edit_message_text(
             format_finance_summary(),
@@ -1180,13 +1499,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(text, reply_markup=object_detail_keyboard(object_id), parse_mode=ParseMode.MARKDOWN)
         return
 
-    if data.startswith("task_"):
-        task_id = int(data.split("_")[1])
-        await query.edit_message_text(
-            f"📋 **Задача #{task_id}**\n\nЗакрыть? Напиши: `/done {task_id}`",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
 
 
 
@@ -1841,12 +2153,55 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if context.user_data.get('waiting_for') == 'crm_client_phone':
-        context.user_data['crm_new_client_phone'] = text.strip()
-        context.user_data['waiting_for'] = 'crm_client_address'
+        from modules.phone_utils import parse_phone, get_country_label
+        raw = text.strip()
+        result = parse_phone(raw)
+        status = result.get('status')
+
+        if status == 'ok':
+            normalized = result['phone']
+            country = get_country_label(normalized)
+            context.user_data['crm_new_client_phone'] = normalized
+            context.user_data['waiting_for'] = 'crm_client_address'
+            await update.message.reply_text(
+                f"✅ Телефон распознан: {normalized}\n"
+                f"{country}\n\n"
+                f"📍 Теперь адрес (или Пропустить):",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✏️ Изменить телефон", callback_data="crm_phone_edit")],
+                    [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_address")],
+                ])
+            )
+            return
+
+        if status == 'suggest':
+            variants = result.get('variants', [])
+            context.user_data['phone_variants'] = variants
+            buttons = []
+            for v in variants:
+                label = f"📞 {v}"
+                buttons.append([InlineKeyboardButton(label, callback_data=f"crm_phone_pick_{v}")])
+            buttons.append([InlineKeyboardButton("✏️ Ввести заново", callback_data="crm_phone_edit")])
+            buttons.append([InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_phone")])
+            await update.message.reply_text(
+                f"🤔 Номер «{raw}» нестандартный.\n\n"
+                f"Выбери подходящий вариант:",
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+            return
+
+        # invalid
         await update.message.reply_text(
-            f"📞 Телефон: {text.strip()}\n\n📍 Адрес (или Пропустить):",
+            f"❌ Номер «{raw}» слишком короткий или не распознан.\n\n"
+            f"Введи в формате:\n"
+            f"• +79991234567 (Россия)\n"
+            f"• 89991234567 (Россия)\n"
+            f"• 9991234567 (Россия, 10 цифр)\n"
+            f"• +491234567890 (Европа)\n\n"
+            f"Или нажми «Пропустить».",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_address")],
+                [InlineKeyboardButton("✏️ Ввести заново", callback_data="crm_phone_edit")],
+                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_phone")],
             ])
         )
         return
@@ -1854,9 +2209,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get('waiting_for') == 'crm_client_address':
         context.user_data['crm_new_client_address'] = text.strip()
         context.user_data['waiting_for'] = 'crm_client_source'
+        phone = context.user_data.get('crm_new_client_phone')
+        phone_line = f"📞 Телефон: {phone}\n" if phone else "📞 Телефон: —\n"
         await update.message.reply_text(
-            f"📍 Адрес: {text.strip()}\n\n🔗 Откуда узнал? Или Пропустить:",
+            f"📍 Адрес: {text.strip()}\n\n"
+            f"{phone_line}\n"
+            f"🔗 Откуда узнал? Или Пропустить:",
             reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✏️ Изменить телефон", callback_data="crm_phone_edit")],
                 [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_source")],
             ])
         )
@@ -1926,6 +2286,148 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ])
             )
             return
+
+    # === ЗАПЛАНИРОВАННЫЙ ЗВОНОК ===
+    if context.user_data.get('waiting_for') == 'activity_plan_datetime':
+        from modules.crm import add_activity, get_client
+        from handlers.commands import parse_date
+        client_id = context.user_data.get('activity_client_id')
+        if not client_id:
+            context.user_data['waiting_for'] = None
+            await update.message.reply_text('❌ Клиент потерялся.')
+            return
+        # Парсим дату и время из текста
+        parsed = parse_date(text)
+        due_str = None
+        if parsed:
+            due_str = parsed.strftime('%Y-%m-%d')
+        add_activity(
+            client_id=client_id,
+            user_id=update.effective_user.id,
+            type_='call',
+            description=text.strip(),
+            due_date=due_str
+        )
+        cl = get_client(client_id)
+        context.user_data['waiting_for'] = None
+        context.user_data['activity_client_id'] = None
+        context.user_data['activity_type'] = None
+        due_display = parsed.strftime('%d.%m.%Y') if parsed else 'без даты'
+        await update.message.reply_text(
+            f'✅ Звонок запланирован: {due_display}\n👤 {cl["name"] if cl else "—"}',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton('👤 К клиенту', callback_data=f'client_{client_id}')],
+                [InlineKeyboardButton('📋 Активности', callback_data=f'activity_list_{client_id}')],
+            ])
+        )
+        return
+
+    # === ДИАПАЗОН СРОКА (обработка ввода) ===
+    if context.user_data.get('range_step') == 'start':
+        d = parse_date(text)
+        if not d:
+            await update.message.reply_text('❌ Не понял дату начала. Попробуй: «завтра», «1.10», «пн», «10.10.2025»')
+            return
+        context.user_data['range_start'] = d.strftime('%Y-%m-%d')
+        context.user_data['range_step'] = 'end'
+        await update.message.reply_text(
+            f"📆 Старт: {d.strftime('%d.%m.%Y')}\n\n"
+            f"Теперь дата конца:"
+        )
+        return
+
+    if context.user_data.get('range_step') == 'end':
+        d_end = parse_date(text)
+        if not d_end:
+            await update.message.reply_text('❌ Не понял дату конца. Попробуй: «8.10», «+5», «пятница»')
+            return
+        task_id = context.user_data.get('range_task')
+        start = context.user_data.get('range_start')
+        from modules.tasks import set_task_range
+        from datetime import datetime as _dt
+        d_start = _dt.strptime(start, '%Y-%m-%d').date()
+        if d_end < d_start:
+            await update.message.reply_text('❌ Конец раньше старта. Введи ещё раз.')
+            return
+        set_task_range(task_id, start, d_end.strftime('%Y-%m-%d'))
+        days = (d_end - d_start).days + 1
+        context.user_data['range_step'] = None
+        context.user_data['range_task'] = None
+        context.user_data['range_start'] = None
+        await update.message.reply_text(
+            f"✅ Срок: {d_start.strftime('%d.%m.%Y')} — {d_end.strftime('%d.%m.%Y')} ({days} дн.)",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton('📋 К задаче', callback_data=f'task_{task_id}')],
+                [InlineKeyboardButton('🏠 Меню', callback_data='menu_back')],
+            ])
+        )
+        return
+
+    # === ДЛИТЕЛЬНОСТЬ (обработка ввода) ===
+    if context.user_data.get('duration_step') == 'start':
+        d = parse_date(text)
+        if not d:
+            await update.message.reply_text('❌ Не понял дату старта. Попробуй: «завтра», «1.10»')
+            return
+        context.user_data['duration_start'] = d.strftime('%Y-%m-%d')
+        context.user_data['duration_step'] = 'days'
+        await update.message.reply_text(
+            f"⏳ Старт: {d.strftime('%d.%m.%Y')}\n\n"
+            f"Сколько дней? Напиши число (например, 3):"
+        )
+        return
+
+    if context.user_data.get('duration_step') == 'days':
+        try:
+            n = int(text.strip())
+        except ValueError:
+            await update.message.reply_text('❌ Нужно число. Напиши, сколько дней.')
+            return
+        if n < 1 or n > 365:
+            await update.message.reply_text('❌ От 1 до 365 дней.')
+            return
+        task_id = context.user_data.get('duration_task')
+        start = context.user_data.get('duration_start')
+        from modules.tasks import set_task_range
+        from datetime import datetime as _dt, timedelta
+        d_start = _dt.strptime(start, '%Y-%m-%d').date()
+        d_end = d_start + timedelta(days=n - 1)
+        set_task_range(task_id, start, d_end.strftime('%Y-%m-%d'))
+        context.user_data['duration_step'] = None
+        context.user_data['duration_task'] = None
+        context.user_data['duration_start'] = None
+        await update.message.reply_text(
+            f"✅ Срок: {d_start.strftime('%d.%m.%Y')} — {d_end.strftime('%d.%m.%Y')} ({n} дн.)",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton('📋 К задаче', callback_data=f'task_{task_id}')],
+                [InlineKeyboardButton('🏠 Меню', callback_data='menu_back')],
+            ])
+        )
+        return
+
+    # === АКТИВНОСТИ КЛИЕНТА ===
+    if context.user_data.get('waiting_for') == 'activity_text':
+        from modules.crm import add_activity, get_client
+        client_id = context.user_data.get('activity_client_id')
+        atype = context.user_data.get('activity_type')
+        if not client_id or not atype:
+            context.user_data['waiting_for'] = None
+            await update.message.reply_text('❌ Клиент потерялся. Начни заново.')
+            return
+        add_activity(client_id=client_id, user_id=update.effective_user.id, type_=atype, description=text.strip())
+        cl = get_client(client_id)
+        context.user_data['waiting_for'] = None
+        context.user_data['activity_client_id'] = None
+        context.user_data['activity_type'] = None
+        type_names = {'call': '📞 Звонок', 'meeting': '🤝 Встреча', 'note': '📝 Заметка'}
+        await update.message.reply_text(
+            f'✅ {type_names.get(atype, atype)} записан клиенту «{cl["name"] if cl else "—"}»',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton('👤 К клиенту', callback_data=f'client_{client_id}')],
+                [InlineKeyboardButton('🏠 Меню', callback_data='menu_back')],
+            ])
+        )
+        return
 
     # === ДАЛЬШЕ — СТАРАЯ ЛОГИКА (новые задачи, расходы и т.д.) ===
 
@@ -2232,115 +2734,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # === CRM: ожидаем имя клиента ===
-    if context.user_data.get('waiting_for') == 'crm_client_name':
-        context.user_data['crm_new_client_name'] = text.strip()
-        context.user_data['waiting_for'] = 'crm_client_phone'
-        await update.message.reply_text(
-            f"👤 Имя: «{text.strip()}»\n\n"
-            f"📞 Теперь телефон (или нажми Пропустить):",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_phone")],
-            ])
-        )
-        return
-
-    # === CRM: ожидаем телефон ===
-    if context.user_data.get('waiting_for') == 'crm_client_phone':
-        context.user_data['crm_new_client_phone'] = text.strip()
-        context.user_data['waiting_for'] = 'crm_client_address'
-        await update.message.reply_text(
-            f"📞 Телефон: {text.strip()}\n\n"
-            f"📍 Теперь адрес (или Пропустить):",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_address")],
-            ])
-        )
-        return
-
-    # === CRM: ожидаем адрес ===
-    if context.user_data.get('waiting_for') == 'crm_client_address':
-        context.user_data['crm_new_client_address'] = text.strip()
-        context.user_data['waiting_for'] = 'crm_client_source'
-        await update.message.reply_text(
-            f"📍 Адрес: {text.strip()}\n\n"
-            f"🔗 Откуда узнал (Авито / знакомые / ...)? Или Пропустить:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_source")],
-            ])
-        )
-        return
-
-    # === CRM: ожидаем источник ===
-    if context.user_data.get('waiting_for') == 'crm_client_source':
-        context.user_data['crm_new_client_source'] = text.strip()
-        await _finalize_new_client(update, context)
-        return
-
-    # === CRM: пользователь ввёл имя в режиме выбора клиента ===
-    if context.user_data.get('waiting_for') == 'crm_deal_pick_client':
-        name = text.strip()
-        # Проверяем: может клиент уже есть?
-        from modules.crm import get_clients
-        clients = get_clients()
-        found = None
-        for c in clients:
-            if c['name'].lower().strip() == name.lower():
-                found = c
-                break
-        if found:
-            # Клиент есть — сразу к бюджету
-            context.user_data['crm_deal_client_id'] = found['id']
-            context.user_data['waiting_for'] = 'crm_deal_budget'
-            await update.message.reply_text(
-                f"💼 Клиент: «{found['name']}»\n\n"
-                f"Напиши сумму бюджета сделки (₽):"
-            )
-            return
-        else:
-            # Новый клиент — предлагаем создать
-            context.user_data['crm_new_client_name'] = name
-            context.user_data['waiting_for'] = None
-            await update.message.reply_text(
-                f"👤 Клиента «{name}» нет в списке.\n\n"
-                f"Создать нового и продолжить сделку?",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("✅ Создать и продолжить", callback_data="crm_new_client_for_deal")],
-                    [InlineKeyboardButton("⬅️ К списку", callback_data="crm_deal_add")],
-                    [InlineKeyboardButton("❌ Отмена", callback_data="menu_crm")],
-                ])
-            )
-            return
-
     # === CRM: ожидаем бюджет сделки ===
-    if context.user_data.get('waiting_for') == 'crm_deal_budget':
-        try:
-            from modules.parser import parse_amount
-            budget = parse_amount(text) or 0
-        except Exception:
-            budget = 0
-        client_id = context.user_data.get('crm_deal_client_id')
-        if not client_id:
-            await update.message.reply_text("❌ Клиент потерялся. Начни заново.")
-            context.user_data['waiting_for'] = None
-            return
-        from modules.crm import add_deal, get_client
-        deal_id = add_deal(client_id=client_id, object_id=None, status='new', budget=budget)
-        c = get_client(client_id)
-        context.user_data['waiting_for'] = None
-        context.user_data['crm_deal_client_id'] = None
-        await update.message.reply_text(
-            f"✅ Сделка #{deal_id} создана!\n\n"
-            f"👤 Клиент: {c['name'] if c else '—'}\n"
-            f"💼 Бюджет: {budget} ₽\n"
-            f"📊 Статус: 🆕 Новая",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("👥 К клиентам", callback_data="crm_clients")],
-                [InlineKeyboardButton("💼 К сделкам", callback_data="crm_deals")],
-                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-            ])
-        )
-        return
 
     # === УМНЫЙ FALLBACK: спрашиваем, что это ===
     context.user_data['unknown_text'] = text
@@ -2549,6 +2943,7 @@ def task_card_keyboard(task_id, deadline=None):
     if deadline:
         buttons.append([InlineKeyboardButton("🚫 Убрать срок", callback_data=f"tasknodate_{task_id}")])
     buttons += [
+        [InlineKeyboardButton("👤 Назначить", callback_data=f"taskassign_{task_id}")],
         [InlineKeyboardButton("🔴 Приоритет", callback_data=f"taskprio_{task_id}")],
         [InlineKeyboardButton("✏️ Название", callback_data=f"taskrename_{task_id}")],
         [InlineKeyboardButton("✅ Выполнить", callback_data=f"taskdone_{task_id}")],
@@ -2566,6 +2961,8 @@ def task_date_keyboard(task_id):
         [InlineKeyboardButton(f"Послезавтра ({(today+timedelta(days=2)).strftime('%d.%m')})", callback_data=f"setdate_{task_id}_dayafter")],
         [InlineKeyboardButton(f"Через 3 дня ({(today+timedelta(days=3)).strftime('%d.%m')})", callback_data=f"setdate_{task_id}_3days")],
         [InlineKeyboardButton(f"Через неделю ({(today+timedelta(days=7)).strftime('%d.%m')})", callback_data=f"setdate_{task_id}_week")],
+        [InlineKeyboardButton("📆 Диапазон (с X по Y)", callback_data=f"setrange_{task_id}")],
+        [InlineKeyboardButton("⏳ Длительность (старт + N)", callback_data=f"setduration_{task_id}")],
         [InlineKeyboardButton("✏️ Ввести дату вручную", callback_data=f"taskdate_manual_{task_id}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data=f"task_{task_id}")],
     ])
@@ -2586,7 +2983,8 @@ async def show_task_card(query, task_id, message=None):
     conn = get_connection()
     c = conn.cursor()
     c.execute("""
-        SELECT t.id, t.title, t.status, t.priority, t.deadline, o.name as object_name
+        SELECT t.id, t.title, t.status, t.priority, t.deadline, t.assigned_to,
+               o.name as object_name
         FROM tasks t
         LEFT JOIN objects o ON t.object_id = o.id
         WHERE t.id = ?
@@ -2610,8 +3008,38 @@ async def show_task_card(query, task_id, message=None):
 
     text = f"📋 {row['title']}\n\n"
     text += f"Объект: {row['object_name'] or 'Без объекта'}\n"
+    # Диапазон (если задан)
+    try:
+        conn2 = get_connection()
+        cc = conn2.cursor()
+        cc.execute('SELECT deadline_start, deadline_end FROM tasks WHERE id = ?', (task_id,))
+        rr = cc.fetchone()
+        conn2.close()
+        if rr and rr['deadline_start'] and rr['deadline_end']:
+            from datetime import datetime as _dt
+            try:
+                d1 = _dt.strptime(rr['deadline_start'], '%Y-%m-%d').date()
+                d2 = _dt.strptime(rr['deadline_end'], '%Y-%m-%d').date()
+                days = (d2 - d1).days + 1
+                deadline_str = f"{d1.strftime('%d.%m.%Y')} — {d2.strftime('%d.%m.%Y')} ({days} дн.)"
+            except Exception:
+                pass
+    except Exception:
+        pass
     text += f"Срок: {deadline_str}\n"
     text += f"Приоритет: {priority_map.get(row['priority'], row['priority'])}\n"
+    # Исполнитель
+    assigned = row['assigned_to'] if 'assigned_to' in row.keys() else None
+    if assigned:
+        try:
+            from modules.users import get_user
+            u = get_user(assigned)
+            uname = u.get('name') if u else f'id{assigned}'
+        except Exception:
+            uname = f'id{assigned}'
+        text += f"👤 Исполнитель: {uname}\n"
+    else:
+        text += f"👤 Исполнитель: —\n"
 
     await query.edit_message_text(text, reply_markup=task_card_keyboard(task_id, row['deadline']))
 
@@ -2623,6 +3051,172 @@ async def handle_task_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.answer()
     data = query.data
     from datetime import date, timedelta
+
+    # Назначить исполнителя
+    if data.startswith("taskassign_"):
+        from modules.users import get_all_users
+        task_id = int(data.replace("taskassign_", ""))
+        all_users = get_all_users()
+        # Только master/prorab/designer
+        workers = [u for u in all_users if u.get('role') in ('master', 'prorab', 'designer', 'admin')]
+        buttons = []
+        for u in workers:
+            label = f"👤 {u.get('name', '—')[:30]}"
+            buttons.append([InlineKeyboardButton(label, callback_data=f"setassigned_{task_id}_{u['tg_id']}")])
+        buttons.append([InlineKeyboardButton("🚫 Снять назначение", callback_data=f"setassigned_{task_id}_none")])
+        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"task_{task_id}")])
+        if not workers:
+            await query.edit_message_text(
+                f"👤 Некому назначить.\n\nДобавь юзеров через /users.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Назад", callback_data=f"task_{task_id}")],
+                ])
+            )
+            return
+        await query.edit_message_text(
+            f"👤 Назначить задачу #{task_id} на:",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    if data.startswith("setassigned_"):
+        from modules.tasks import assign_task
+        from modules.users import get_user
+        parts = data.replace("setassigned_", "").split("_")
+        task_id = int(parts[0])
+        if parts[1] == "none":
+            assign_task(task_id, None)
+            await show_task_card(query, task_id)
+            return
+        tg_id = int(parts[1])
+        assign_task(task_id, tg_id)
+        u = get_user(tg_id)
+        uname = u.get('name') if u else f'id{tg_id}'
+        await show_task_card(query, task_id)
+        return
+
+    # Диапазон — старт
+    if data.startswith("setrange_"):
+        from datetime import date as _date
+        task_id = int(data.replace("setrange_", ""))
+        context.user_data['range_task'] = task_id
+        context.user_data['range_step'] = 'start'
+        today = _date.today()
+        text_cal, kb = build_calendar(today.year, today.month, callback_prefix='cal')
+        await query.edit_message_text(
+            "📆 Диапазон — выбери дату СТАРТА:\n\n" + text_cal,
+            reply_markup=kb
+        )
+        return
+
+    # Длительность — старт
+    if data.startswith("setduration_"):
+        from datetime import date as _date
+        task_id = int(data.replace("setduration_", ""))
+        context.user_data['duration_task'] = task_id
+        context.user_data['duration_step'] = 'start'
+        today = _date.today()
+        text_cal, kb = build_calendar(today.year, today.month, callback_prefix='cal')
+        await query.edit_message_text(
+            "⏳ Длительность — выбери дату СТАРТА:\n\n" + text_cal,
+            reply_markup=kb
+        )
+        return
+
+    # Календарь: игнор
+    if data == "cal_ignore":
+        return
+
+    # Календарь: навигация
+    if data.startswith("cal_nav_"):
+        parts = data.replace("cal_nav_", "").split("_")
+        year, month = int(parts[0]), int(parts[1])
+        text, kb = build_calendar(year, month)
+        await query.edit_message_text(text, reply_markup=kb)
+        return
+
+    # Календарь: выбор дня
+    if data.startswith("cal_day_") or data.startswith("cal_quick_"):
+        if data.startswith("cal_day_"):
+            parts = data.replace("cal_day_", "").split("_")
+            year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
+            date_iso = f"{year:04d}-{month:02d}-{day:02d}"
+        else:
+            date_iso = data.replace("cal_quick_", "")
+        # Определяем контекст: диапазон или длительность
+        from datetime import datetime as _dt
+        d = _dt.strptime(date_iso, "%Y-%m-%d").date()
+        if context.user_data.get('range_step') == 'start':
+            context.user_data['range_start'] = date_iso
+            context.user_data['range_step'] = 'end'
+            text, kb = build_calendar(d.year, d.month)
+            await query.edit_message_text(
+                f"📆 Старт: {d.strftime('%d.%m.%Y')}\n\nТеперь дата конца:",
+                reply_markup=kb
+            )
+            return
+        if context.user_data.get('range_step') == 'end':
+            task_id = context.user_data.get('range_task')
+            start = context.user_data.get('range_start')
+            from modules.tasks import set_task_range
+            d_start = _dt.strptime(start, '%Y-%m-%d').date()
+            if d < d_start:
+                await query.edit_message_text('❌ Конец раньше старта. Выбери ещё раз:')
+                return
+            set_task_range(task_id, start, date_iso)
+            days = (d - d_start).days + 1
+            context.user_data['range_step'] = None
+            context.user_data['range_task'] = None
+            context.user_data['range_start'] = None
+            await query.edit_message_text(
+                f"✅ Срок: {d_start.strftime('%d.%m.%Y')} — {d.strftime('%d.%m.%Y')} ({days} дн.)",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton('📋 К задаче', callback_data=f'task_{task_id}')],
+                    [InlineKeyboardButton('🏠 Меню', callback_data='menu_back')],
+                ])
+            )
+            return
+        if context.user_data.get('duration_step') == 'start':
+            context.user_data['duration_start'] = date_iso
+            context.user_data['duration_step'] = 'days'
+            await query.edit_message_text(
+                f"⏳ Старт: {d.strftime('%d.%m.%Y')}\n\nСколько дней? Напиши число:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton('1', callback_data=f'dur_days_{date_iso}_1'),
+                     InlineKeyboardButton('3', callback_data=f'dur_days_{date_iso}_3'),
+                     InlineKeyboardButton('5', callback_data=f'dur_days_{date_iso}_5')],
+                    [InlineKeyboardButton('7', callback_data=f'dur_days_{date_iso}_7'),
+                     InlineKeyboardButton('14', callback_data=f'dur_days_{date_iso}_14'),
+                     InlineKeyboardButton('30', callback_data=f'dur_days_{date_iso}_30')],
+                ])
+            )
+            return
+        # Если контекста нет — просто ничего
+        await query.edit_message_text(f'📅 {d.strftime("%d.%m.%Y")}')
+        return
+
+    # Длительность: установка через кнопки
+    if data.startswith("dur_days_"):
+        parts = data.replace("dur_days_", "").rsplit("_", 1)
+        date_iso = parts[0]
+        n = int(parts[1])
+        task_id = context.user_data.get('duration_task')
+        from modules.tasks import set_task_range
+        from datetime import datetime as _dt, timedelta
+        d_start = _dt.strptime(date_iso, '%Y-%m-%d').date()
+        d_end = d_start + timedelta(days=n - 1)
+        set_task_range(task_id, date_iso, d_end.strftime('%Y-%m-%d'))
+        context.user_data['duration_step'] = None
+        context.user_data['duration_task'] = None
+        context.user_data['duration_start'] = None
+        await query.edit_message_text(
+            f"✅ Срок: {d_start.strftime('%d.%m.%Y')} — {d_end.strftime('%d.%m.%Y')} ({n} дн.)",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton('📋 К задаче', callback_data=f'task_{task_id}')],
+                [InlineKeyboardButton('🏠 Меню', callback_data='menu_back')],
+            ])
+        )
+        return
 
     # Выполнить
     if data.startswith("taskdone_"):
@@ -2762,6 +3356,69 @@ async def handle_task_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 
+
+import calendar as _cal
+from datetime import date as _date
+
+def build_calendar(year: int, month: int, callback_prefix: str = 'cal'):
+    """Строит (text, keyboard) для календаря месяца."""
+    month_names = ['', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+    text = f'📅 {month_names[month]} {year}\n\nВыбери дату:'
+
+    # Навигация
+    prev_month = month - 1
+    prev_year = year
+    if prev_month < 1:
+        prev_month = 12
+        prev_year -= 1
+    next_month = month + 1
+    next_year = year
+    if next_month > 12:
+        next_month = 1
+        next_year += 1
+
+    buttons = [[
+        InlineKeyboardButton('◀️', callback_data=f'{callback_prefix}_nav_{prev_year}_{prev_month}'),
+        InlineKeyboardButton(f'{month_names[month]} {year}', callback_data='cal_ignore'),
+        InlineKeyboardButton('▶️', callback_data=f'{callback_prefix}_nav_{next_year}_{next_month}'),
+    ]]
+    # Дни недели
+    buttons.append([
+        InlineKeyboardButton('Пн', callback_data='cal_ignore'),
+        InlineKeyboardButton('Вт', callback_data='cal_ignore'),
+        InlineKeyboardButton('Ср', callback_data='cal_ignore'),
+        InlineKeyboardButton('Чт', callback_data='cal_ignore'),
+        InlineKeyboardButton('Пт', callback_data='cal_ignore'),
+        InlineKeyboardButton('Сб', callback_data='cal_ignore'),
+        InlineKeyboardButton('Вс', callback_data='cal_ignore'),
+    ])
+    # Сетка
+    cal = _cal.Calendar(firstweekday=0)
+    month_days = cal.monthdayscalendar(year, month)
+    today = _date.today()
+    for week in month_days:
+        row = []
+        for day in week:
+            if day == 0:
+                row.append(InlineKeyboardButton(' ', callback_data='cal_ignore'))
+            else:
+                label = str(day)
+                if year == today.year and month == today.month and day == today.day:
+                    label = f'•{day}'
+                row.append(InlineKeyboardButton(label, callback_data=f'{callback_prefix}_day_{year}_{month}_{day}'))
+        buttons.append(row)
+    # Быстрые кнопки
+    from datetime import timedelta as _td
+    today_d = _date.today()
+    tomorrow = today_d + _td(days=1)
+    week = today_d + _td(days=7)
+    buttons.append([
+        InlineKeyboardButton('Сегодня', callback_data=f'{callback_prefix}_quick_{today_d.strftime("%Y-%m-%d")}'),
+        InlineKeyboardButton('Завтра', callback_data=f'{callback_prefix}_quick_{tomorrow.strftime("%Y-%m-%d")}'),
+        InlineKeyboardButton('+7', callback_data=f'{callback_prefix}_quick_{week.strftime("%Y-%m-%d")}'),
+    ])
+    return text, InlineKeyboardMarkup(buttons)
 
 def parse_date(text):
     """Парсит дату из текста. Возвращает date или None"""

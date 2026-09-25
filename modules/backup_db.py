@@ -1,4 +1,4 @@
-"""Автобэкап базы данных Бо 7.4 — копия + git commit + push"""
+"""Автобэкап базы данных Бо 7.7 — копия + git commit + push"""
 import os
 import shutil
 import subprocess
@@ -6,9 +6,16 @@ from datetime import datetime
 from pathlib import Path
 
 
-WORKSPACE = Path("/home/runner/workspace")
+import sys
+WORKSPACE = Path(__file__).resolve().parent.parent
 BACKUP_DIR = WORKSPACE / "backups"
-DB_PATH = WORKSPACE / "bo72.db"
+# Берём DB_PATH из config, если возможно
+try:
+    sys.path.insert(0, str(WORKSPACE))
+    from config import DB_PATH as _CONFIG_DB_PATH
+    DB_PATH = WORKSPACE / _CONFIG_DB_PATH
+except Exception:
+    DB_PATH = WORKSPACE / "bo72.db"
 
 
 def make_backup():

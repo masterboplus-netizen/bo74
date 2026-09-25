@@ -1,4 +1,4 @@
-"""Команда для тестирования дайджеста БО 7.4"""
+"""Команда для тестирования дайджеста БО 7.7"""
 from telegram import Update
 from telegram.ext import ContextTypes
 from modules.digest import build_morning_digest, build_evening_survey

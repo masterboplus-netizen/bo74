@@ -1,4 +1,4 @@
-"""Парсер свободного ввода БО 7.2 — с уточнением"""
+"""Парсер свободного ввода БО 7.7"""
 import re
 from modules.objects import get_object_by_name, get_all_objects
 from modules.tasks import create_task, close_task, get_tasks_by_object, get_active_tasks

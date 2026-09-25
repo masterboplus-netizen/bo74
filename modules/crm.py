@@ -1,4 +1,4 @@
-"""Модуль CRM БО 7.5 — клиенты и сделки"""
+"""Модуль CRM БО 7.7 — клиенты и сделки"""
 from db import get_connection
 
 # ============================================================
@@ -166,3 +166,51 @@ def update_deal_status(deal_id: int, status: str):
     c.execute("UPDATE crm_deals SET status = ? WHERE id = ?", (status, deal_id))
     conn.commit()
     conn.close()
+
+
+# ============================================================
+# АКТИВНОСТИ (звонки / встречи / заметки)
+# ============================================================
+
+def add_activity(client_id: int, user_id: int, type_: str, description: str, due_date: str = None) -> int:
+    """Добавляет активность клиенту. type_: call / meeting / note"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO crm_activities (client_id, user_id, type, description, due_date, status) "
+        "VALUES (?, ?, ?, ?, ?, 'pending')",
+        (client_id, user_id, type_, description, due_date)
+    )
+    activity_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return activity_id
+
+def get_client_activities(client_id: int, limit: int = 20) -> list:
+    """Последние N активностей клиента."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT id, type, description, due_date, status, created_at, completed_at "
+        "FROM crm_activities WHERE client_id = ? ORDER BY id DESC LIMIT ?",
+        (client_id, limit)
+    )
+    rows = c.fetchall()
+    conn.close()
+    return [{'id': r['id'], 'type': r['type'], 'description': r['description'],
+             'due_date': r['due_date'], 'status': r['status'],
+             'created_at': r['created_at'], 'completed_at': r['completed_at']} for r in rows]
+
+def format_activities(activities: list) -> str:
+    """Форматирует список активностей в текст."""
+    if not activities:
+        return 'Пока активностей нет.'
+    icons = {'call': '📞', 'meeting': '🤝', 'note': '📝'}
+    text = ''
+    for a in activities:
+        icon = icons.get(a['type'], '•')
+        dt = ''
+        if a['created_at']:
+            dt = ' — ' + a['created_at'][:16]
+        text += f"{icon} {a['description'][:60]}{dt}\n"
+    return text
