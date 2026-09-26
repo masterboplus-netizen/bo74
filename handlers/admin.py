@@ -45,7 +45,7 @@ async def cmd_set_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("tg_id должен быть числом")
         return
     role = args[1].lower()
-    valid = {"admin", "designer", "prorab", "master", "client", "guest"}
+    valid = {"admin", "designer", "prorab", "master", "guest"}
     if role not in valid:
         await update.message.reply_text(f"Недопустимая роль. Доступно: {', '.join(sorted(valid))}")
         return

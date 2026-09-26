@@ -2,7 +2,6 @@
 import subprocess
 import time
 import os
-import sys
 from datetime import datetime
 
 CHECK_INTERVAL = 60  # секунд

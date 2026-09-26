@@ -49,12 +49,12 @@ def parse_phone(raw):
     if len(digits) >= 11 and _is_valid(digits):
         return {'status': 'ok', 'phone': '+' + digits}
 
-    # 8-9 цифр — слишком короткий. Не угадываем.
+    # Меньше 10 — слишком короткий
     if len(digits) < 10:
         return {'status': 'invalid', 'reason': f'слишком короткий ({len(digits)} цифр)'}
 
-    # Всё остальное — invalid
-    return {'status': 'invalid', 'reason': f'слишком короткий ({len(digits)} цифр)'}
+    # Всё остальное — неизвестный формат
+    return {'status': 'invalid', 'reason': f'неизвестный формат ({len(digits)} цифр)'}
 
 def normalize_phone(raw, default_country='7'):
     """Совместимость со старым API: возвращает номер или None."""
