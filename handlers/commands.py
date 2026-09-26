@@ -3894,9 +3894,10 @@ async def handle_recognize_receipt(update: Update, context: ContextTypes.DEFAULT
             return
 
         text = result.get('text', '')
-        from modules.ocr import parse_receipt, parse_receipt_items
+        from modules.ocr import parse_receipt
         parsed = parse_receipt(text)
-        raw_items = parse_receipt_items(text)
+        parsed['items'] = []
+        raw_items = []
 
         # ВАЛИДАЦИЯ: сохраняем позиции только если они "осмысленные"
         items = []
