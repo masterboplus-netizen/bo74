@@ -51,7 +51,7 @@ def format_clients(clients: list = None) -> str:
         return "👥 Клиентов пока нет.\n\nНажми кнопку «➕ Добавить клиента» в меню."
     text = f"👥 КЛИЕНТЫ ({len(clients)})\n\n"
     for c in clients[:30]:
-        text += f"#{c['id']} {c['name']}"
+        text += f"{c['id']}. {c['name']}"
         if c['phone']:
             text += f" · {c['phone']}"
         text += "\n"
@@ -151,7 +151,7 @@ def format_deals(deals: list = None) -> str:
         client = d['client_name'] or '—'
         status_icon = {'new': '🆕', 'in_progress': '🔄', 'won': '✅',
                        'lost': '❌', 'paused': '⏸'}.get(d['status'], '•')
-        text += f"{status_icon} #{d['id']} {client} — {d['budget'] or 0} ₽"
+        text += f"{status_icon} {d['id']}. {client} — {d['budget'] or 0} ₽"
         if d['object_name']:
             text += f" ({d['object_name']})"
         text += "\n"
