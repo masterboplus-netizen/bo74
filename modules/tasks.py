@@ -18,8 +18,12 @@ def create_task(object_id: int, title: str, description: str = "", deadline: str
 def close_task(task_id: int, user_id: int = None):
     conn = get_connection()
     c = conn.cursor()
+    # Читаем старый статус для истории
+    c.execute("SELECT status FROM tasks WHERE id = ?", (task_id,))
+    row = c.fetchone()
+    old_status = row['status'] if row else 'open'
     c.execute("UPDATE tasks SET status = 'done', completed_at = CURRENT_TIMESTAMP WHERE id = ?", (task_id,))
-    c.execute("INSERT INTO task_history (task_id, old_status, new_status, changed_by) VALUES (?, 'open', 'done', ?)", (task_id, user_id))
+    c.execute("INSERT INTO task_history (task_id, old_status, new_status, changed_by) VALUES (?, ?, 'done', ?)", (task_id, old_status, user_id))
     conn.commit()
     conn.close()
 
@@ -35,7 +39,7 @@ def cancel_task(task_id: int, reason: str = None):
 def get_active_tasks(user_id: int = None) -> list:
     conn = get_connection()
     c = conn.cursor()
-    query = "SELECT id, object_id, title, status, priority, deadline FROM tasks WHERE status IN ('open', 'in_progress')"
+    query = "SELECT id, object_id, title, status, priority, deadline, assigned_to FROM tasks WHERE status IN ('open', 'in_progress')"
     params = []
     if user_id:
         query += " AND assigned_to = ?"
@@ -43,13 +47,13 @@ def get_active_tasks(user_id: int = None) -> list:
     c.execute(query, params)
     rows = c.fetchall()
     conn.close()
-    return [{'id': r[0], 'object_id': r[1], 'title': r[2], 'status': r[3], 'priority': r[4], 'deadline': r[5]} for r in rows]
+    return [{'id': r[0], 'object_id': r[1], 'title': r[2], 'status': r[3], 'priority': r[4], 'deadline': r[5], 'assigned_to': r[6]} for r in rows]
 
 
 def get_tasks_by_object(object_id: int) -> list:
     conn = get_connection()
     c = conn.cursor()
-    c.execute("SELECT id, title, status, priority, type, assigned_to, deadline FROM tasks WHERE object_id = ? AND status != 'archived'", (object_id,))
+    c.execute("SELECT id, title, status, priority, type, assigned_to, deadline FROM tasks WHERE object_id = ? AND status NOT IN ('archived', 'cancelled')", (object_id,))
     rows = c.fetchall()
     conn.close()
     return [{'id': r[0], 'title': r[1], 'status': r[2], 'priority': r[3], 'type': r[4], 'assigned_to': r[5], 'deadline': r[6]} for r in rows]
