@@ -3875,11 +3875,21 @@ async def handle_recognize_receipt(update: Update, context: ContextTypes.DEFAULT
 
         result = ocr_image(image_bytes)
         if not result.get('ok'):
+            err = result.get('error', '')
+            msg = "❌ Не смог распознать чек\n\n"
+            msg += f"*Техническая ошибка:* {err}\n\n"
+            msg += "📷 *Что попробовать:*\n"
+            msg += "• Переснять при лучшем свете\n"
+            msg += "• Отправить чек без тени\n"
+            msg += "• Повторить через минуту (сервер может быть занят)\n"
+            msg += "• Или добавить расход вручную через меню"
             await query.edit_message_text(
-                f"❌ Ошибка OCR: {result.get('error')}",
+                msg,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")]
-                ])
+                    [InlineKeyboardButton("🔄 Попробовать снова", callback_data="menu_back")],
+                    [InlineKeyboardButton("💰 Добавить вручную", callback_data="menu_add")],
+                ]),
+                parse_mode=ParseMode.MARKDOWN
             )
             return
 

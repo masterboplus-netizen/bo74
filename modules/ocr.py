@@ -44,11 +44,32 @@ def ocr_image(image_bytes: bytes, language: str = "rus") -> dict:
     req = urllib.request.Request(OCR_URL, data=body)
     req.add_header("Content-Type", "multipart/form-data; boundary=" + boundary)
 
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except Exception as e:
-        return {"ok": False, "error": "HTTP: " + str(e)}
+    # Retry 3 раза при E502/timeout
+    import time as _time
+    last_error = None
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            # Проверяем E502 в ответе
+            if data.get("IsErroredOnProcessing"):
+                err = data.get("ErrorMessage", "")
+                if isinstance(err, list):
+                    err = "; ".join(err)
+                if "E502" in err or "E503" in err or "timeout" in err.lower():
+                    last_error = err
+                    _time.sleep(2)
+                    continue
+            break
+        except Exception as e:
+            last_error = "HTTP: " + str(e)
+            _time.sleep(2)
+            continue
+    else:
+        return {"ok": False, "error": last_error or "OCR не отвечает"}
+
+    if 'data' not in dir() or not data:
+        return {"ok": False, "error": last_error or "OCR не отвечает"}
 
     if data.get("IsErroredOnProcessing"):
         err = data.get("ErrorMessage", "unknown")
