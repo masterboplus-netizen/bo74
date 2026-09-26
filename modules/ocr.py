@@ -73,36 +73,69 @@ def parse_receipt(text: str) -> dict:
 
     lines = [l.strip() for l in text.split("\n") if l.strip()]
 
-    # 1. Сумма — ищем «Итого», «ИТОГ», «К оплате», «Сумма»
-    amount_patterns = [
-        r"(?:итого|итог|к оплате|сумма|всего)[:\s]*([\d\s]+[.,]?\d*)\s*(?:руб|₽|р\.)?",
-        r"([\d\s]+[.,]\d{2})\s*(?:руб|₽)",
-        r"(\d{3,6})[.,]\d{2}",
+    # 1. Сумма — ищем ТОЛЬКО ключевые слова: ИТОГ, ИТОГО, К ОПЛАТЕ, НАЛИЧНЫМИ, ОПЛАЧЕНО
+    total_keywords = [
+        r"итого\s*[:=]?\s*(\d+[.,]\d{2})",
+        r"итог\s*[:=]?\s*(\d+[.,]\d{2})",
+        r"к\s*оплате\s*[:=]?\s*(\d+[.,]\d{2})",
+        r"оплачено\s*[:=]?\s*(\d+[.,]\d{2})",
+        r"получено\s*[:=]?\s*(\d+[.,]\d{2})",
+        r"итоговая\s*сумма\s*[:=]?\s*(\d+[.,]\d{2})",
+        r"сумма\s*без\s*ндс\s*[:=]?\s*(\d+[.,]\d{2})",
+        r"наличными\s*[:=]?\s*=?\s*(\d+[.,]\d{2})",
+        r"итого\s*[:=]?\s*=?\s*(\d+[.,]\d{2})",
+        r"итог\s*[:=]?\s*=?\s*(\d+[.,]\d{2})",
+        r"=(\d{3,6}[.,]\d{2})",
     ]
-    for pattern in amount_patterns:
+
+    candidates = []
+    for pattern in total_keywords:
         for line in lines:
-            m = re.search(pattern, line.lower())
-            if m:
+            for m in re.finditer(pattern, line.lower()):
                 try:
-                    # Сохраняем точку/запятую для копеек
-                    raw_num = m.group(1).strip().replace(" ", "").replace(",", ".")
-                    try:
-                        val = float(raw_num)
-                        if 10 < val < 10000000:
-                            result["amount"] = int(round(val))
-                            break
-                    except Exception:
-                        pass
+                    raw_num = m.group(1).strip().replace(",", ".")
+                    val = float(raw_num)
+                    if 10 < val < 10_000_000:
+                        candidates.append(val)
                 except Exception:
                     pass
-        if result["amount"]:
+
+    if candidates:
+        # Берём максимальное — обычно это ИТОГ
+        result["amount"] = int(round(max(candidates)))
+    else:
+        # Fallback: самое большое число с копейками (\d+.\d{2})
+        all_nums = []
+        for line in lines:
+            for m in re.finditer(r"(\d{2,6}[.,]\d{2})", line):
+                try:
+                    val = float(m.group(1).replace(",", "."))
+                    if 10 < val < 10_000_000:
+                        all_nums.append(val)
+                except Exception:
+                    pass
+        if all_nums:
+            result["amount"] = int(round(max(all_nums)))
+
+    # 2. Магазин — ищем «ИП», «ООО», или берём первую осмысленную строку
+    shop_patterns = [r"^(ИП\s+.+)", r"^(ООО\s+.+)", r"^(АО\s+.+)"]
+    for pattern in shop_patterns:
+        for line in lines:
+            m = re.search(pattern, line, re.IGNORECASE)
+            if m:
+                result["shop"] = m.group(1)[:60]
+                break
+        if result["shop"]:
             break
 
-    # 2. Магазин — первая непустая строка
-    if lines:
-        result["shop"] = lines[0][:60]
+    if not result["shop"] and lines:
+        # Берём первую строку с буквами (не цифры)
+        for line in lines[:5]:
+            if re.search(r"[А-Яа-яA-Za-z]{3,}", line):
+                result["shop"] = line[:60]
+                break
 
-    # 3. Дата — dd.mm.yyyy
+    # 3. Дата
     date_pattern = r"(\d{1,2})[./\-](\d{1,2})[./\-](\d{2,4})"
     for line in lines:
         m = re.search(date_pattern, line)
