@@ -179,24 +179,24 @@ def parse_receipt_items(text: str) -> list:
         return letters >= 3
 
     def extract_amount(line):
-        # Форматы: 55.00*2, =400.00, =1001.00, 400.00*1
-        m = re.search(r"(\d+[.,]\d{2})\s*[*xх]\s*(\d+)", line)
+        # Формат «цена*кол-во» или «кол-во x цена=сумма»
+        # Пример: «5.000 x 19.80=99.00» — 5.000 * 19.80 = 99.00
+        m = re.search(r"(\d+[.,]?\d*)\s*[*x]\s*(\d+[.,]?\d*)", line)
         if m:
-            price = float(m.group(1).replace(",", "."))
-            qty = float(m.group(2))
-            return price, qty, price * qty
-
+            n1 = float(m.group(1).replace(",", "."))
+            n2 = float(m.group(2).replace(",", "."))
+            # Если n1 < n2 — это (кол-во × цена)
+            if n1 < n2:
+                qty, price = n1, n2
+            else:
+                price, qty = n1, n2
+            return price, qty, price * qty, True
+        # Формат «=сумма»
         m = re.search(r"=+\s*(\d+[.,]\d{2})", line)
         if m:
             total = float(m.group(1).replace(",", "."))
-            return total, 1, total
-
-        m = re.search(r"^\s*(\d+[.,]\d{2})\s*$", line)
-        if m:
-            total = float(m.group(1).replace(",", "."))
-            return total, 1, total
-
-        return None, None, None
+            return total, 1, total, False
+        return None, None, None, False
 
     pending_name = None
 
@@ -207,7 +207,7 @@ def parse_receipt_items(text: str) -> list:
             continue
 
         # Если есть сумма — создаём позицию
-        price, qty, total = extract_amount(line)
+        price, qty, total, has_qty = extract_amount(line)
         if price is not None and 10 < total < 10_000_000:
             name = pending_name or "позиция"
             items.append({
