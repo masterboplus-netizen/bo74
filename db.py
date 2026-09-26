@@ -5,6 +5,11 @@ from config import DB_PATH
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    # WAL-режим — параллельные чтения при записи
+    try:
+        conn.execute('PRAGMA journal_mode = WAL')
+    except Exception:
+        pass
     return conn
 
 def init_db():

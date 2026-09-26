@@ -97,7 +97,7 @@ def get_object_photos(obj_id):
     conn = get_connection()
     c = conn.cursor()
     c.execute("""
-        SELECT p.id, p.stage, p.caption, p.taken_at, p.created_at, p.task_id,
+        SELECT p.id, p.stage, p.caption, p.taken_at, p.created_at, p.task_id, p.file_id,
                t.title as task_title,
                u.name as uploader_name
         FROM photos p
@@ -116,6 +116,7 @@ def get_object_photos(obj_id):
         'task_id': r['task_id'],
         'task_title': r['task_title'] or '',
         'uploader': r['uploader_name'] or '—',
+        'file_id': r['file_id'] or '',
     } for r in rows]
 
 
@@ -366,15 +367,8 @@ def render_object_photos(obj_id):
     grid = ""
     for p in photos:
         task_str = f"#{p['task_id']} {p['task_title'][:40]}" if p['task_id'] else "Без задачи"
-        # Получаем URL фото
-        # (для производительности — можно кэшировать, но пока так)
-        from db import get_connection as _gc
-        conn2 = _gc()
-        c2 = conn2.cursor()
-        c2.execute("SELECT file_id FROM photos WHERE id = ?", (p['id'],))
-        fr = c2.fetchone()
-        conn2.close()
-        file_id = fr['file_id'] if fr else ''
+        # file_id уже в p (из get_object_photos)
+        file_id = p.get('file_id', '')
         img_url = get_telegram_file_url(file_id)
         img_html = f'<a href="{img_url}" target="_blank" style="display:block;"><img src="{img_url}" style="width:100%;border-radius:8px;display:block;cursor:zoom-in;" loading="lazy"></a>' if img_url else '<div style="color:#666;padding:20px;text-align:center;">📷</div>'
         tg_link = f'https://t.me/masterbo2026_bot?start=photo_{p["id"]}'
