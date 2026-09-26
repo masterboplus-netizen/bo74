@@ -25,7 +25,6 @@ def get_master_kpi(days: int = 30) -> list:
         done = c.fetchall()
         total_done = len(done)
         in_time = 0
-        total_days = 0
         for t in done:
             if t['deadline'] and t['completed_at']:
                 try:

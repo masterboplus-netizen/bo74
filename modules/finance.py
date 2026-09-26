@@ -31,7 +31,7 @@ def add_income(object_id: int, amount: int, category: str, note: str = None) -> 
 def get_finance_summary(object_id: int) -> dict:
     conn = get_connection()
     c = conn.cursor()
-    c.execute("SELECT SUM(amount) FROM finance WHERE object_id = ? AND type = 'expense'", (object_id,))
+    c.execute("SELECT SUM(amount) FROM finance WHERE object_id = ? AND type = 'expense' AND is_personal = 0", (object_id,))
     expense = c.fetchone()[0] or 0
     c.execute("SELECT SUM(amount) FROM finance WHERE object_id = ? AND type = 'income'", (object_id,))
     income = c.fetchone()[0] or 0
@@ -39,13 +39,6 @@ def get_finance_summary(object_id: int) -> dict:
     return {'expense': expense, 'income': income, 'balance': income - expense}
 
 
-def get_personal_expenses() -> int:
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("SELECT SUM(amount) FROM finance WHERE is_personal = 1 AND type = 'expense'")
-    total = c.fetchone()[0] or 0
-    conn.close()
-    return total
 
 def get_all_finance_summary():
     """Возвращает финансы по всем объектам"""
