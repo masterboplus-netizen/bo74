@@ -3886,7 +3886,7 @@ async def handle_recognize_receipt(update: Update, context: ContextTypes.DEFAULT
             await query.edit_message_text(
                 msg,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔄 Попробовать снова", callback_data="menu_back")],
+                    [InlineKeyboardButton("🔄 Попробовать снова", callback_data="recognize_receipt")],
                     [InlineKeyboardButton("💰 Добавить вручную", callback_data="menu_add")],
                 ]),
                 parse_mode=ParseMode.MARKDOWN
@@ -3896,7 +3896,25 @@ async def handle_recognize_receipt(update: Update, context: ContextTypes.DEFAULT
         text = result.get('text', '')
         from modules.ocr import parse_receipt, parse_receipt_items
         parsed = parse_receipt(text)
-        parsed['items'] = parse_receipt_items(text)
+        raw_items = parse_receipt_items(text)
+
+        # ВАЛИДАЦИЯ: сохраняем позиции только если они "осмысленные"
+        items = []
+        amount = parsed.get('amount')
+        if amount and raw_items:
+            items_sum = sum(it.get('total', 0) for it in raw_items)
+            # 1. Сумма должна сходиться (±10%)
+            sum_ok = abs(items_sum - amount) / max(amount, 1) <= 0.1
+            # 2. Все названия должны быть осмысленными (>= 3 букв, не стоп-слово)
+            names_ok = all(
+                sum(c.isalpha() for c in (it.get('name') or '')) >= 3
+                for it in raw_items
+            )
+            # 3. Минимум 3 позиции
+            count_ok = len(raw_items) >= 3
+            if sum_ok and names_ok and count_ok:
+                items = raw_items
+        parsed['items'] = items
 
         # Формируем ответ
         msg = "💳 *Результат распознавания:*\n\n"
