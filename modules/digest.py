@@ -9,7 +9,6 @@ def build_morning_digest() -> str:
     """Утренний дайджест: задачи на сегодня + просрочка + объекты"""
     today = date.today()
     today_str = today.strftime('%Y-%m-%d')
-    tomorrow_str = (today + timedelta(days=1)).strftime('%Y-%m-%d')
 
     conn = get_connection()
     c = conn.cursor()
