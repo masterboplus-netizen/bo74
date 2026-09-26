@@ -86,77 +86,70 @@ def ocr_image(image_bytes: bytes, language: str = "rus") -> dict:
 
 
 def parse_receipt(text: str) -> dict:
-    """Из текста чека вытаскивает сумму, магазин, дату."""
+    """Извлекает сумму, магазин, дату (v5)."""
     result = {"amount": None, "shop": None, "date": None, "raw": text}
-
     if not text:
         return result
 
     lines = [l.strip() for l in text.split("\n") if l.strip()]
 
-    # 1. Сумма — ищем ТОЛЬКО ключевые слова: ИТОГ, ИТОГО, К ОПЛАТЕ, НАЛИЧНЫМИ, ОПЛАЧЕНО
-    total_keywords = [
-        r"итого\s*[:=]?\s*(\d+[.,]\d{2})",
-        r"итог\s*[:=]?\s*(\d+[.,]\d{2})",
-        r"к\s*оплате\s*[:=]?\s*(\d+[.,]\d{2})",
-        r"оплачено\s*[:=]?\s*(\d+[.,]\d{2})",
-        r"получено\s*[:=]?\s*(\d+[.,]\d{2})",
-        r"итоговая\s*сумма\s*[:=]?\s*(\d+[.,]\d{2})",
-        r"сумма\s*без\s*ндс\s*[:=]?\s*(\d+[.,]\d{2})",
-        r"наличными\s*[:=]?\s*=?\s*(\d+[.,]\d{2})",
-        r"итого\s*[:=]?\s*=?\s*(\d+[.,]\d{2})",
-        r"итог\s*[:=]?\s*=?\s*(\d+[.,]\d{2})",
-        r"=(\d{3,6}[.,]\d{2})",
-    ]
+    amount_candidates = []
 
-    candidates = []
-    for pattern in total_keywords:
-        for line in lines:
-            for m in re.finditer(pattern, line.lower()):
-                try:
-                    raw_num = m.group(1).strip().replace(",", ".")
-                    val = float(raw_num)
-                    if 10 < val < 10_000_000:
-                        candidates.append(val)
-                except Exception:
-                    pass
-
-    if candidates:
-        # Берём максимальное — обычно это ИТОГ
-        result["amount"] = int(round(max(candidates)))
-    else:
-        # Fallback: самое большое число с копейками (\d+.\d{2})
-        all_nums = []
-        for line in lines:
-            for m in re.finditer(r"(\d{2,6}[.,]\d{2})", line):
+    for i, line in enumerate(lines):
+        line_low = line.lower()
+        if "ндс" in line_low:
+            continue
+        if any(w in line_low for w in ["итог", "итого", "к оплате", "оплата", "наличными", "получено"]):
+            m = re.search(r"=+\s*(\d+[.,]\d{2})", line)
+            if m:
                 try:
                     val = float(m.group(1).replace(",", "."))
                     if 10 < val < 10_000_000:
-                        all_nums.append(val)
+                        amount_candidates.append(val)
                 except Exception:
                     pass
-        if all_nums:
-            result["amount"] = int(round(max(all_nums)))
+            else:
+                for j in range(i + 1, min(i + 3, len(lines))):
+                    m = re.search(r"=+\s*(\d+[.,]\d{2})", lines[j])
+                    if m:
+                        try:
+                            val = float(m.group(1).replace(",", "."))
+                            if 10 < val < 10_000_000:
+                                amount_candidates.append(val)
+                                break
+                        except Exception:
+                            pass
 
-    # 2. Магазин — ищем «ИП», «ООО», или берём первую осмысленную строку
-    shop_patterns = [r"^(ИП\s+.+)", r"^(ООО\s+.+)", r"^(АО\s+.+)"]
-    for pattern in shop_patterns:
+    if not amount_candidates:
+        all_equal = []
         for line in lines:
-            m = re.search(pattern, line, re.IGNORECASE)
-            if m:
-                result["shop"] = m.group(1)[:60]
-                break
-        if result["shop"]:
-            break
+            line_low = line.lower()
+            if "ндс" in line_low:
+                continue
+            for m in re.finditer(r"=+\s*(\d{3,7}[.,]\d{2})", line):
+                try:
+                    val = float(m.group(1).replace(",", "."))
+                    if 100 < val < 10_000_000:
+                        all_equal.append(val)
+                except Exception:
+                    pass
+        if all_equal:
+            amount_candidates = [max(all_equal)]
 
-    if not result["shop"] and lines:
-        # Берём первую строку с буквами (не цифры)
+    if amount_candidates:
+        result["amount"] = int(round(max(amount_candidates)))
+
+    for line in lines[:5]:
+        m = re.search(r"^(АО|ООО|ИП|ЗАО|ПАО)\s+[\"«]?(.+?)[\"»]?$", line, re.IGNORECASE)
+        if m:
+            result["shop"] = (m.group(1) + " " + m.group(2))[:60]
+            break
+    if not result["shop"]:
         for line in lines[:5]:
             if re.search(r"[А-Яа-яA-Za-z]{3,}", line):
                 result["shop"] = line[:60]
                 break
 
-    # 3. Дата
     date_pattern = r"(\d{1,2})[./\-](\d{1,2})[./\-](\d{2,4})"
     for line in lines:
         m = re.search(date_pattern, line)
@@ -171,55 +164,43 @@ def parse_receipt(text: str) -> dict:
 
 
 def parse_receipt_items(text: str) -> list:
-    """Извлекает позиции товаров из текста чека."""
+    """Позиции из чека (v6 — для плотных чеков)."""
     items = []
     if not text:
         return items
 
     lines = [l.strip() for l in text.split("\n") if l.strip()]
 
-    # Стоп-слова — не названия и не позиции
     stop_words = [
         "ндс", "не облагается", "номер продажи", "кассир", "итог", "сумма",
         "наличными", "получено", "место расчетов", "инн", "ккт", "фн",
-        "фд", "фп", "смена", "кассовый чек", "онлайн - касса", "рии",
+        "фд", "фп", "смена", "кассовый чек", "онлайн", "рии",
         "адрес", "ул ", "г. ", "зн ", "рн ", "рихпд",
+        "приход", "расход", "спасибо", "покупку", "покупка", "ждите",
+        "ответ", "смс", "чек", "№", "qr", "сайт", "www", "http",
+        "тел", "телефон", "оператор", "касса", "документ",
+        "позиций", "покупок", "арт:", "шк:", "код:", "шт.",
+        "сдача", "скидка", "сдача", "кол-во", "цена", "стоим",
+        "наименование", "кулирование", "руб",
     ]
 
     def is_stop(line_low):
         return any(w in line_low for w in stop_words)
 
     def is_name(line, line_low):
-        # Название — есть буквы. Цифры допустимы (артикулы, размеры)
         if is_stop(line_low):
             return False
-        # Если есть формат суммы (X.XX*N или =X.XX) — это НЕ название
         if re.search(r"\d+[.,]\d{2}", line):
+            return False
+        if ":" in line and not re.match(r"^[А-Яа-я]", line):
+            return False
+        if line.strip().startswith(("«", '"', "'")):
             return False
         letters = sum(c.isalpha() for c in line)
         return letters >= 3
 
-    def extract_amount(line):
-        # Формат «цена*кол-во» или «кол-во x цена=сумма»
-        # Пример: «5.000 x 19.80=99.00» — 5.000 * 19.80 = 99.00
-        m = re.search(r"(\d+[.,]?\d*)\s*[*x]\s*(\d+[.,]?\d*)", line)
-        if m:
-            n1 = float(m.group(1).replace(",", "."))
-            n2 = float(m.group(2).replace(",", "."))
-            # Если n1 < n2 — это (кол-во × цена)
-            if n1 < n2:
-                qty, price = n1, n2
-            else:
-                price, qty = n1, n2
-            return price, qty, price * qty, True
-        # Формат «=сумма»
-        m = re.search(r"=+\s*(\d+[.,]\d{2})", line)
-        if m:
-            total = float(m.group(1).replace(",", "."))
-            return total, 1, total, False
-        return None, None, None, False
-
     pending_name = None
+    seen_totals = []
 
     for line in lines:
         line_low = line.lower()
@@ -227,21 +208,41 @@ def parse_receipt_items(text: str) -> list:
         if is_stop(line_low):
             continue
 
-        # Если есть сумма — создаём позицию
-        price, qty, total, has_qty = extract_amount(line)
-        if price is not None and 10 < total < 10_000_000:
+        # 1. «X * Y = Z» — цена * кол-во
+        m = re.search(r"(\d+[.,]?\d*)\s*[*x]\s*(\d+[.,]?\d*)\s*=?\s*(\d+[.,]\d{2})?", line)
+        if m:
+            n1 = float(m.group(1).replace(",", "."))
+            n2 = float(m.group(2).replace(",", "."))
+            if n1 < n2:
+                qty, price = n1, n2
+            else:
+                price, qty = n1, n2
+            total = price * qty
+            if m.group(3):
+                total = float(m.group(3).replace(",", "."))
             name = pending_name or "позиция"
-            items.append({
-                "name": name[:80],
-                "qty": qty,
-                "price": price,
-                "total": total,
-            })
+            items.append({"name": name[:80], "qty": qty, "price": price, "total": total})
             pending_name = None
             continue
 
-        # Если название — запоминаем
+        # 2. Одиночное число в строке (сумма позиции) — но НЕ если это "=NNN.NN" с ключ. словом
+        m_single = re.match(r"^\s*=?\s*(\d{1,6}[.,]\d{2})\s*$", line)
+        if m_single and pending_name:
+            try:
+                val = float(m_single.group(1).replace(",", "."))
+                if 1 < val < 1_000_000:
+                    items.append({"name": pending_name[:80], "qty": 1, "price": val, "total": val})
+                    pending_name = None
+                    continue
+            except Exception:
+                pass
+
+        # 3. Название — запоминаем
         if is_name(line, line_low):
             pending_name = line
+
+    # Валидация — если меньше 2 позиций, скорее всего ложное срабатывание
+    if len(items) <= 1:
+        return items
 
     return items
