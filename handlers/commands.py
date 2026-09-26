@@ -106,8 +106,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
+
+
+def _help_text() -> str:
+    """Текст справки (общий для /help и кнопки Помощь)."""
+    return (
         "📋 Бо 7.7 — команды и возможности\n\n"
         "🏗️ Объекты\n"
         "• /objects — список объектов кнопками\n"
@@ -115,25 +118,29 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📋 Задачи\n"
         "• /tasks — активные задачи кнопками\n"
         "• /add <объект> <задача> — быстро добавить\n"
-        "• /add — меню добавления (объект/задача/расход)\n"
+        "• /add — меню добавления\n"
         "• /done <id> — закрыть задачу\n\n"
         "💰 Финансы\n"
         "• /finance — общая сводка кнопками\n"
         "• /finance <объект> — по объекту\n"
         "• /add\\_expense <объект> <сумма> [категория]\n\n"
-        "💸 Личные расходы — через меню «💸 Личные»\n\n"
-        "📊 Отчёты — через меню «📊 Отчёты»\n\n"
-        "📝 Свободный ввод (пиши текстом):\n"
-        "• «потратил 5000 на материалы Переделкино-2»\n"
+        "💸 Личные — через меню\n"
+        "📊 Отчёты — через меню\n"
+        "📊 KPI — мастер, объекты, красная зона\n"
+        "👥 CRM — клиенты, сделки, активности\n\n"
+        "📝 Свободный ввод:\n"
+        "• «потратил 5000 на материалы Арбат»\n"
         "• «добавь в Арбат положить паркет»\n"
-        "• «500» — спросит личный/объект\n"
-        "• «задачи» / «объекты»\n\n"
-        "⏰ Автоматика\n"
+        "• «500» — спросит личный/объект\n\n"
+        "⏰ Автоматика:\n"
         "• Дайджест 9:00 МСК\n"
         "• Опрос 18:00 МСК\n"
-        "• Автобэкап 23:00 МСК",
-        parse_mode=ParseMode.MARKDOWN
+        "• Автобэкап 23:00 МСК"
     )
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(_help_text(), parse_mode=ParseMode.MARKDOWN)
+
 
 async def add_object_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
@@ -1460,29 +1467,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "menu_help":
         await query.edit_message_text(
-            "📋 Бо 7.7 — команды и возможности\n\n"
-            "🏗️ Объекты\n"
-            "• /objects — список объектов кнопками\n"
-            "• /add\\_object <название> — создать объект\n\n"
-            "📋 Задачи\n"
-            "• /tasks — активные задачи кнопками\n"
-            "• /add <объект> <задача> — быстро добавить\n"
-            "• /add — меню добавления\n"
-            "• /done <id> — закрыть задачу\n\n"
-            "💰 Финансы\n"
-            "• /finance — общая сводка кнопками\n"
-            "• /finance <объект> — по объекту\n"
-            "• /add\\_expense <объект> <сумма> [категория]\n\n"
-            "💸 Личные расходы — через меню «💸 Личные»\n"
-            "📊 Отчёты — через меню «📊 Отчёты»\n\n"
-            "📝 Свободный ввод (пиши текстом):\n"
-            "• «потратил 5000 на материалы Переделкино-2»\n"
-            "• «добавь в Арбат положить паркет»\n"
-            "• «500» — спросит личный/объект\n\n"
-            "⏰ Автоматика\n"
-            "• Дайджест 9:00 МСК\n"
-            "• Опрос 18:00 МСК\n"
-            "• Автобэкап 23:00 МСК",
+            _help_text(),
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")]
             ]),

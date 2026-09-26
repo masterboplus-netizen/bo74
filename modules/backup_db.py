@@ -106,6 +106,15 @@ async def send_daily_backup(context):
         run_daily_backup()
     except Exception as e:
         print(f"❌ Ошибка автобэкапа: {e}")
+        try:
+            from config import MAIN_ADMIN_TG_ID
+            await context.bot.send_message(
+                chat_id=MAIN_ADMIN_TG_ID,
+                text=f"⚠️ Ошибка автобэкапа БД:\n\n{e}"
+            )
+        except Exception:
+            pass
+
 
 
 async def backup_now_command(update, context):

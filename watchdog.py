@@ -6,6 +6,7 @@ from datetime import datetime
 
 CHECK_INTERVAL = 60  # секунд
 BOT_CMD = ['python', 'bot.py']
+DASHBOARD_CMD = ['python', 'web_dashboard.py']
 WORKSPACE = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(WORKSPACE, 'watchdog.log')
 
@@ -19,16 +20,22 @@ def log(msg):
     except Exception:
         pass
 
-def is_bot_running():
+def _is_running(pattern: str) -> bool:
     try:
         result = subprocess.run(
-            ['pgrep', '-f', 'python bot.py'],
+            ['pgrep', '-f', pattern],
             capture_output=True, text=True, timeout=5
         )
         return result.returncode == 0
     except Exception as e:
         log(f'⚠️ pgrep error: {e}')
         return False
+
+def is_bot_running():
+    return _is_running('python bot.py')
+
+def is_dashboard_running():
+    return _is_running('python web_dashboard.py')
 
 def start_bot():
     try:
@@ -39,6 +46,15 @@ def start_bot():
     except Exception as e:
         log(f'❌ Не смог запустить bot.py: {e}')
 
+def start_dashboard():
+    try:
+        log('🚀 Запускаю web_dashboard.py...')
+        with open(os.path.join(WORKSPACE, 'dashboard.log'), 'a') as f:
+            subprocess.Popen(DASHBOARD_CMD, cwd=WORKSPACE, stdout=f, stderr=f, start_new_session=True)
+        log('✅ web_dashboard.py запущен')
+    except Exception as e:
+        log(f'❌ Не смог запустить dashboard: {e}')
+
 def main():
     log('🐕 Watchdog запущен')
     while True:
@@ -48,6 +64,13 @@ def main():
                 start_bot()
             else:
                 log('✅ Бот работает')
+
+            if not is_dashboard_running():
+                log('⚠️ Дашборд не работает — перезапускаю')
+                start_dashboard()
+            else:
+                log('✅ Дашборд работает')
+
             time.sleep(CHECK_INTERVAL)
         except KeyboardInterrupt:
             log('⏹️ Watchdog остановлен вручную')
