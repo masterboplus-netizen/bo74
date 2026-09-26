@@ -1,100 +1,75 @@
-"""OCR для чеков через OCR.space (бесплатный API)."""
+"""OCR для чеков через OCR.space."""
 import os
 import json
 import re
+import time
 import urllib.request
 
 OCR_API_KEY = os.getenv("OCR_SPACE_API_KEY", "")
 OCR_URL = "https://api.ocr.space/parse/image"
 
 
-def ocr_image(image_bytes: bytes, language: str = "rus") -> dict:
-    """Отправляет фото в OCR.space, возвращает {ok, text, error}."""
+def ocr_image(image_bytes, language="rus"):
     if not OCR_API_KEY:
-        return {"ok": False, "error": "OCR_SPACE_API_KEY не задан в Secrets"}
-
+        return {"ok": False, "error": "OCR_SPACE_API_KEY не задан"}
     boundary = "----BoBoundary7MA4YWxkTrZu0gW"
     CRLF = b"\r\n"
-
     body = b""
-    # apikey
     body += ("--" + boundary + "\r\n").encode()
     body += b'Content-Disposition: form-data; name="apikey"\r\n\r\n'
     body += OCR_API_KEY.encode() + CRLF
-    # language
     body += ("--" + boundary + "\r\n").encode()
     body += b'Content-Disposition: form-data; name="language"\r\n\r\n'
     body += language.encode() + CRLF
-    # isOverlayRequired
     body += ("--" + boundary + "\r\n").encode()
     body += b'Content-Disposition: form-data; name="isOverlayRequired"\r\n\r\n'
     body += b"false" + CRLF
-    # OCREngine
     body += ("--" + boundary + "\r\n").encode()
     body += b'Content-Disposition: form-data; name="OCREngine"\r\n\r\n'
-    body += b"2" + CRLF
-    # file
+    body += b"3" + CRLF
+    body += ("--" + boundary + "\r\n").encode()
+    body += b'Content-Disposition: form-data; name="scale"\r\n\r\n'
+    body += b"true" + CRLF
     body += ("--" + boundary + "\r\n").encode()
     body += b'Content-Disposition: form-data; name="file"; filename="receipt.jpg"\r\n'
     body += b"Content-Type: image/jpeg\r\n\r\n"
     body += image_bytes + CRLF
-    # final
     body += ("--" + boundary + "--\r\n").encode()
-
-    req = urllib.request.Request(OCR_URL, data=body)
-    req.add_header("Content-Type", "multipart/form-data; boundary=" + boundary)
-
-    # Retry 3 раза при E502/timeout
-    import time as _time
     last_error = None
     for attempt in range(3):
         try:
-            with urllib.request.urlopen(req, timeout=45) as resp:
+            req = urllib.request.Request(OCR_URL, data=body)
+            req.add_header("Content-Type", "multipart/form-data; boundary=" + boundary)
+            with urllib.request.urlopen(req, timeout=60) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-            # Проверяем E502 в ответе
             if data.get("IsErroredOnProcessing"):
-                err = data.get("ErrorMessage", "")
+                err = data.get("ErrorMessage", "unknown")
                 if isinstance(err, list):
                     err = "; ".join(err)
                 if "E502" in err or "E503" in err or "timeout" in err.lower():
                     last_error = err
-                    _time.sleep(2)
+                    time.sleep(2)
                     continue
-            break
+                return {"ok": False, "error": err}
+            parsed = data.get("ParsedResults", [])
+            if not parsed:
+                return {"ok": False, "error": "Пустой результат"}
+            return {"ok": True, "text": parsed[0].get("ParsedText", "")}
         except Exception as e:
             last_error = "HTTP: " + str(e)
-            _time.sleep(2)
-            continue
-    else:
-        return {"ok": False, "error": last_error or "OCR не отвечает"}
-
-    if 'data' not in dir() or not data:
-        return {"ok": False, "error": last_error or "OCR не отвечает"}
-
-    if data.get("IsErroredOnProcessing"):
-        err = data.get("ErrorMessage", "unknown")
-        if isinstance(err, list):
-            err = "; ".join(err)
-        return {"ok": False, "error": err}
-
-    parsed = data.get("ParsedResults", [])
-    if not parsed:
-        return {"ok": False, "error": "Пустой результат"}
-
-    text = parsed[0].get("ParsedText", "")
-    return {"ok": True, "text": text}
+            time.sleep(2)
+    return {"ok": False, "error": last_error or "OCR не отвечает"}
 
 
-def parse_receipt(text: str) -> dict:
-    """Извлекает сумму, магазин, дату (v5)."""
+def parse_receipt(text):
+    """Извлекает сумму, магазин, дату."""
     result = {"amount": None, "shop": None, "date": None, "raw": text}
     if not text:
         return result
-
     lines = [l.strip() for l in text.split("\n") if l.strip()]
 
+    # 1. Сумма — из "ИТОГ / ИТОГО / К ОПЛАТЕ / НАЛИЧНЫМИ / ПОЛУЧЕНО"
     amount_candidates = []
-
     for i, line in enumerate(lines):
         line_low = line.lower()
         if "ндс" in line_low:
@@ -120,27 +95,33 @@ def parse_receipt(text: str) -> dict:
                         except Exception:
                             pass
 
-    if not amount_candidates:
+    if amount_candidates:
+        result["amount"] = int(round(max(amount_candidates)))
+
+    # 2. Fallback — =NNNN.NN (только >= 200, чтобы отсечь НДС/скидки)
+    if result["amount"] is None:
         all_equal = []
-        for line in lines:
+        for i, line in enumerate(lines):
             line_low = line.lower()
             if "ндс" in line_low:
+                continue
+            if i > 0 and any(w in lines[i-1].lower() for w in ["ндс", "скидка", "сдача", "получено"]):
+                continue
+            if i < len(lines) - 1 and any(w in lines[i+1].lower() for w in ["ндс", "скидка", "сдача"]):
                 continue
             for m in re.finditer(r"=+\s*(\d{3,7}[.,]\d{2})", line):
                 try:
                     val = float(m.group(1).replace(",", "."))
-                    if 100 < val < 10_000_000:
+                    if 200 <= val < 10_000_000:
                         all_equal.append(val)
                 except Exception:
                     pass
         if all_equal:
-            amount_candidates = [max(all_equal)]
+            result["amount"] = int(round(max(all_equal)))
 
-    if amount_candidates:
-        result["amount"] = int(round(max(amount_candidates)))
-
+    # 3. Магазин
     for line in lines[:5]:
-        m = re.search(r"^(АО|ООО|ИП|ЗАО|ПАО)\s+[\"«]?(.+?)[\"»]?$", line, re.IGNORECASE)
+        m = re.search(r'^(АО|ООО|ИП|ЗАО|ПАО)\s+[\"«]?(.+?)[\"»]?$', line, re.IGNORECASE)
         if m:
             result["shop"] = (m.group(1) + " " + m.group(2))[:60]
             break
@@ -150,9 +131,9 @@ def parse_receipt(text: str) -> dict:
                 result["shop"] = line[:60]
                 break
 
-    date_pattern = r"(\d{1,2})[./\-](\d{1,2})[./\-](\d{2,4})"
+    # 4. Дата
     for line in lines:
-        m = re.search(date_pattern, line)
+        m = re.search(r"(\d{1,2})[./\-](\d{1,2})[./\-](\d{2,4})", line)
         if m:
             d, mo, y = m.group(1), m.group(2), m.group(3)
             if len(y) == 2:
@@ -163,14 +144,12 @@ def parse_receipt(text: str) -> dict:
     return result
 
 
-def parse_receipt_items(text: str) -> list:
-    """Позиции из чека (v6 — для плотных чеков)."""
+def parse_receipt_items(text):
+    """Позиции из чека."""
     items = []
     if not text:
         return items
-
     lines = [l.strip() for l in text.split("\n") if l.strip()]
-
     stop_words = [
         "ндс", "не облагается", "номер продажи", "кассир", "итог", "сумма",
         "наличными", "получено", "место расчетов", "инн", "ккт", "фн",
@@ -180,13 +159,11 @@ def parse_receipt_items(text: str) -> list:
         "ответ", "смс", "чек", "№", "qr", "сайт", "www", "http",
         "тел", "телефон", "оператор", "касса", "документ",
         "позиций", "покупок", "арт:", "шк:", "код:", "шт.",
-        "сдача", "скидка", "сдача", "кол-во", "цена", "стоим",
-        "наименование", "кулирование", "руб",
+        "сдача", "скидка", "кол-во", "цена", "стоим",
+        "наименование", "руб",
     ]
-
     def is_stop(line_low):
         return any(w in line_low for w in stop_words)
-
     def is_name(line, line_low):
         if is_stop(line_low):
             return False
@@ -198,17 +175,11 @@ def parse_receipt_items(text: str) -> list:
             return False
         letters = sum(c.isalpha() for c in line)
         return letters >= 3
-
     pending_name = None
-    seen_totals = []
-
     for line in lines:
         line_low = line.lower()
-
         if is_stop(line_low):
             continue
-
-        # 1. «X * Y = Z» — цена * кол-во
         m = re.search(r"(\d+[.,]?\d*)\s*[*x]\s*(\d+[.,]?\d*)\s*=?\s*(\d+[.,]\d{2})?", line)
         if m:
             n1 = float(m.group(1).replace(",", "."))
@@ -224,8 +195,6 @@ def parse_receipt_items(text: str) -> list:
             items.append({"name": name[:80], "qty": qty, "price": price, "total": total})
             pending_name = None
             continue
-
-        # 2. Одиночное число в строке (сумма позиции) — но НЕ если это "=NNN.NN" с ключ. словом
         m_single = re.match(r"^\s*=?\s*(\d{1,6}[.,]\d{2})\s*$", line)
         if m_single and pending_name:
             try:
@@ -236,13 +205,8 @@ def parse_receipt_items(text: str) -> list:
                     continue
             except Exception:
                 pass
-
-        # 3. Название — запоминаем
         if is_name(line, line_low):
             pending_name = line
-
-    # Валидация — если меньше 2 позиций, скорее всего ложное срабатывание
     if len(items) <= 1:
         return items
-
     return items
