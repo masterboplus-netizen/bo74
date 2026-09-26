@@ -169,6 +169,20 @@ def init_db():
         user_id INTEGER, lat REAL, lon REAL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
 
+    c.execute("""CREATE TABLE IF NOT EXISTS receipt_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        finance_id INTEGER,
+        object_id INTEGER,
+        name TEXT,
+        qty REAL,
+        unit TEXT,
+        price REAL,
+        total REAL,
+        is_personal INTEGER DEFAULT 0,
+        receipt_date DATE,
+        shop TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP)""")
+
     c.execute('''CREATE TABLE IF NOT EXISTS system_settings (
         key TEXT PRIMARY KEY, value TEXT,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')

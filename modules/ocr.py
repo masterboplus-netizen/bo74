@@ -147,3 +147,80 @@ def parse_receipt(text: str) -> dict:
             break
 
     return result
+
+
+def parse_receipt_items(text: str) -> list:
+    """Извлекает позиции товаров из текста чека."""
+    items = []
+    if not text:
+        return items
+
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+
+    # Стоп-слова — не названия и не позиции
+    stop_words = [
+        "ндс", "не облагается", "номер продажи", "кассир", "итог", "сумма",
+        "наличными", "получено", "место расчетов", "инн", "ккт", "фн",
+        "фд", "фп", "смена", "кассовый чек", "онлайн - касса", "рии",
+        "адрес", "ул ", "г. ", "зн ", "рн ", "рихпд",
+    ]
+
+    def is_stop(line_low):
+        return any(w in line_low for w in stop_words)
+
+    def is_name(line, line_low):
+        # Название — есть буквы. Цифры допустимы (артикулы, размеры)
+        if is_stop(line_low):
+            return False
+        # Если есть формат суммы (X.XX*N или =X.XX) — это НЕ название
+        if re.search(r"\d+[.,]\d{2}", line):
+            return False
+        letters = sum(c.isalpha() for c in line)
+        return letters >= 3
+
+    def extract_amount(line):
+        # Форматы: 55.00*2, =400.00, =1001.00, 400.00*1
+        m = re.search(r"(\d+[.,]\d{2})\s*[*xх]\s*(\d+)", line)
+        if m:
+            price = float(m.group(1).replace(",", "."))
+            qty = float(m.group(2))
+            return price, qty, price * qty
+
+        m = re.search(r"=+\s*(\d+[.,]\d{2})", line)
+        if m:
+            total = float(m.group(1).replace(",", "."))
+            return total, 1, total
+
+        m = re.search(r"^\s*(\d+[.,]\d{2})\s*$", line)
+        if m:
+            total = float(m.group(1).replace(",", "."))
+            return total, 1, total
+
+        return None, None, None
+
+    pending_name = None
+
+    for line in lines:
+        line_low = line.lower()
+
+        if is_stop(line_low):
+            continue
+
+        # Если есть сумма — создаём позицию
+        price, qty, total = extract_amount(line)
+        if price is not None and 10 < total < 10_000_000:
+            name = pending_name or "позиция"
+            items.append({
+                "name": name[:80],
+                "qty": qty,
+                "price": price,
+                "total": total,
+            })
+            pending_name = None
+            continue
+
+        # Если название — запоминаем
+        if is_name(line, line_low):
+            pending_name = line
+
+    return items
