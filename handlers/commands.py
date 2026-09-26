@@ -3884,7 +3884,9 @@ async def handle_recognize_receipt(update: Update, context: ContextTypes.DEFAULT
             return
 
         text = result.get('text', '')
+        from modules.ocr import parse_receipt, parse_receipt_items
         parsed = parse_receipt(text)
+        parsed['items'] = parse_receipt_items(text)
 
         # Формируем ответ
         msg = "💳 *Результат распознавания:*\n\n"
@@ -3978,7 +3980,7 @@ async def handle_receipt_object(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def handle_receipt_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Сохраняет расход с категорией."""
+    """Сохраняет расход с категорией + позиции чека в receipt_items."""
     query = update.callback_query
     await query.answer()
     data = query.data  # receipt_cat_<amount>_<obj_id>_<category>
@@ -3987,11 +3989,91 @@ async def handle_receipt_category(update: Update, context: ContextTypes.DEFAULT_
     obj_id = int(parts[1])
     category = parts[2] if len(parts) > 2 else 'прочее'
     obj = get_object(obj_id)
-    add_expense(obj_id, amount, category)
+
+    # 1. Создаём расход в finance
+    finance_id = add_expense(obj_id, amount, category)
+
+    # 2. Сохраняем позиции чека
+    receipt = context.user_data.get('pending_receipt') or {}
+    items = receipt.get('items', [])
+    shop = receipt.get('shop') or ''
+    date = receipt.get('date')
+
+    saved = 0
+    if items:
+        conn = get_connection()
+        c = conn.cursor()
+        for it in items:
+            c.execute(
+                "INSERT INTO receipt_items (finance_id, object_id, name, qty, price, total, is_personal, receipt_date, shop) "
+                "VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)",
+                (finance_id, obj_id, it.get('name'), it.get('qty'), it.get('price'), it.get('total'), date, shop)
+            )
+            saved += 1
+        conn.commit()
+        conn.close()
+
+    # 3. Очищаем pending
+    context.user_data['pending_receipt'] = None
+
+    msg = f"✅ Расход {amount} ₽ ({category}) в «{obj['name']}» записан\n"
+    if saved:
+        msg += f"📋 Позиций чека: {saved}"
+    if shop:
+        msg += f"\n🏪 {shop}"
+
     await query.edit_message_text(
-        f"✅ Расход {amount} ₽ ({category}) в «{obj['name']}» записан",
+        msg,
         reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("📋 Позиции чека", callback_data=f"receipt_show_{finance_id}")],
             [InlineKeyboardButton("💰 К финансам", callback_data="menu_finance")],
             [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
         ])
+    )
+
+
+async def handle_receipt_show(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает позиции чека по finance_id."""
+    query = update.callback_query
+    await query.answer()
+    fid = int(query.data.replace("receipt_show_", ""))
+
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT name, qty, price, total FROM receipt_items WHERE finance_id = ? ORDER BY id",
+        (fid,)
+    )
+    rows = c.fetchall()
+    conn.close()
+
+    if not rows:
+        await query.edit_message_text(
+            "📋 Позиций нет",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")]
+            ])
+        )
+        return
+
+    text = f"📋 *Позиции чека #{fid}:*\n\n"
+    total_sum = 0
+    for r in rows:
+        name = r['name'] or '—'
+        qty = r['qty'] or 1
+        price = r['price'] or 0
+        total = r['total'] or 0
+        text += f"• {name}\n"
+        text += f"  {qty} × {int(price)} ₽ = {int(total)} ₽\n"
+        total_sum += total
+
+    text += f"\n💰 *Итого: {int(total_sum)} ₽*"
+
+    await query.edit_message_text(
+        text,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("💰 К финансам", callback_data="menu_finance")],
+            [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+        ]),
+        parse_mode=ParseMode.MARKDOWN
     )
