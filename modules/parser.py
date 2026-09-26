@@ -1,8 +1,8 @@
 """Парсер свободного ввода БО 7.7"""
 import re
 from modules.objects import get_object_by_name, get_all_objects
-from modules.tasks import create_task, close_task, get_tasks_by_object, get_active_tasks
-from modules.finance import add_expense, add_income, get_finance_summary
+from modules.tasks import get_tasks_by_object
+from modules.finance import add_expense
 
 
 def find_all_objects_in_text(text: str):
@@ -54,6 +54,34 @@ def parse_message(text: str) -> dict:
         found = find_all_objects_in_text(text)
         if found:
             return {'action': 'finance', 'object': found[0]}
+        # Без объекта — общая сводка
+        return {'action': 'finance_all'}
+
+
+    found = find_all_objects_in_text(text)
+    # === ДОБАВИТЬ ЗАДАЧУ ===
+    add_words = ['добавь', 'добавить', 'задача', 'новая задача', 'надо', 'нужно']
+    if any(w in text_lower for w in add_words):
+        if found:
+            if len(found) > 1:
+                return {
+                    'action': 'choose_object',
+                    'objects': found,
+                    'original_text': text,
+                    'intent': 'add_task'
+                }
+            obj = found[0]
+            title = text_lower
+            for w in add_words:
+                title = title.replace(w, '')
+            for w in ['в', 'на', 'для']:
+                title = title.replace(w, '', 1)
+            title = title.replace(obj['name'].lower(), '')
+            simple = obj['name'].lower().split('(')[0].strip()
+            if simple:
+                title = title.replace(simple, '')
+            title = title.strip() or text
+            return {'action': 'add_task', 'object': obj, 'title': title}
 
     # === РАСХОД ===
     expense_words = ['потратил', 'расход', 'заплатил', 'купил', 'оплатил', 'ушло', 'отдал', 'цена']
@@ -125,31 +153,6 @@ def parse_message(text: str) -> dict:
                     if w in text_lower:
                         return {'action': 'done_task', 'object': obj, 'task': t}
             return {'action': 'done_task_not_found', 'object': obj, 'query': text_lower}
-
-    # === ДОБАВИТЬ ЗАДАЧУ ===
-    add_words = ['добавь', 'добавить', 'задача', 'новая задача', 'надо', 'нужно']
-    if any(w in text_lower for w in add_words):
-        if found:
-            if len(found) > 1:
-                return {
-                    'action': 'choose_object',
-                    'objects': found,
-                    'original_text': text,
-                    'intent': 'add_task'
-                }
-            obj = found[0]
-            title = text_lower
-            for w in add_words:
-                title = title.replace(w, '')
-            for w in ['в', 'на', 'для']:
-                title = title.replace(w, '', 1)
-            title = title.replace(obj['name'].lower(), '')
-            simple = obj['name'].lower().split('(')[0].strip()
-            if simple:
-                title = title.replace(simple, '')
-            title = title.strip() or text
-            return {'action': 'add_task', 'object': obj, 'title': title}
-
     # === ТОЛЬКО СУММА (без объекта, без триггера) ===
     # Если в тексте только число — спрашиваем: личный расход или по объекту?
     if amount and not found:
@@ -167,7 +170,6 @@ def parse_message(text: str) -> dict:
 
 def parse_amount(text: str):
     """Парсит сумму: 450, 5000, 5к, 5 к, 5К, 5 кк"""
-    import re
     text_lower = text.lower().replace(',', '.')
 
     m = re.search(r'(\d+)\s*кк', text_lower)

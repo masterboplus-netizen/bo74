@@ -1,5 +1,4 @@
 """Автобэкап базы данных Бо 7.7 — копия + git commit + push"""
-import os
 import shutil
 import subprocess
 from datetime import datetime
@@ -22,7 +21,7 @@ def make_backup():
     """Создаёт копию БД в папке backups/"""
     BACKUP_DIR.mkdir(exist_ok=True)
     date_str = datetime.now().strftime("%Y%m%d")
-    backup_path = BACKUP_DIR / f"bo72_{date_str}.db"
+    backup_path = BACKUP_DIR / f"{DB_PATH.stem}_{date_str}.db"
 
     if not DB_PATH.exists():
         print(f"⚠️ БД не найдена: {DB_PATH}")
@@ -39,7 +38,7 @@ def git_commit_and_push(message: str) -> bool:
     try:
         # git add — только БД и её бэкап-копия
         result = subprocess.run(
-            ["git", "add", "bo72.db", "backups/"],
+            ["git", "add", DB_PATH.name, "backups/"],
             cwd=WORKSPACE, capture_output=True, text=True
         )
         if result.returncode != 0:
@@ -84,9 +83,9 @@ def run_daily_backup():
 
     # Удаляем старые бэкапы (старше 30 дней)
     deleted = 0
-    for old_backup in BACKUP_DIR.glob("bo72_*.db"):
+    for old_backup in BACKUP_DIR.glob(f"{DB_PATH.stem}_*.db"):
         try:
-            file_date_str = old_backup.stem.replace("bo72_", "")
+            file_date_str = old_backup.stem.replace(f"{DB_PATH.stem}_", "")
             file_date = datetime.strptime(file_date_str, "%Y%m%d")
             if (datetime.now() - file_date).days > 30:
                 old_backup.unlink()
