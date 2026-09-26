@@ -9,10 +9,11 @@ ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
 DB_PATH = os.getenv("DB_PATH", "bo72.db")
 
 # === СИСТЕМНЫЕ ===
-DEFAULT_LANGUAGE = "ru"
-DEFAULT_MODE = "brief"
 TIMEZONE = "Europe/Moscow"
 VERSION = "7.7"
+
+# === ГЛАВНЫЙ АДМИН ===
+MAIN_ADMIN_TG_ID = int(os.getenv("MAIN_ADMIN_TG_ID", "1821030188"))
 
 
 def validate_config() -> bool:

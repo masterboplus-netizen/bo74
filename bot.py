@@ -3,7 +3,7 @@ import os
 import logging
 from telegram import BotCommand
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
-from config import TOKEN, validate_config
+from config import TOKEN, validate_config, MAIN_ADMIN_TG_ID
 from db import init_db
 from handlers.onboarding import register_onboarding_handlers
 from handlers.admin import register_admin_handlers
@@ -19,7 +19,7 @@ from handlers.commands import (
     clients_command, deals_command, handle_crm_menu
 )
 from handlers.digest_cmd import digest_now_command, survey_now_command
-from modules.digest import send_morning_digest, send_evening_survey, send_morning_digest_with_log, send_evening_survey_with_log, catch_up_digests
+from modules.digest import send_morning_digest_with_log, send_evening_survey_with_log, catch_up_digests
 from modules.backup_db import send_daily_backup, backup_now_command
 from datetime import time
 from zoneinfo import ZoneInfo
@@ -47,7 +47,7 @@ async def error_handler(update, context):
     logger.error(f"❌ Ошибка: {context.error}", exc_info=context.error)
     try:
         await context.bot.send_message(
-            chat_id=1821030188,
+            chat_id=MAIN_ADMIN_TG_ID,
             text=f"⚠️ Ошибка в боте:\n\n{err_name}: {err_str}"
         )
     except Exception:
@@ -163,7 +163,7 @@ def main():
     app.add_error_handler(error_handler)
 
     logger.info("🚀 БО 7.7 запущен! Все хендлеры зарегистрированы.")
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":

@@ -5,8 +5,8 @@ from telegram.ext import ContextTypes, CallbackQueryHandler
 from telegram.constants import ParseMode
 
 
-# === ГЛАВНЫЙ АДМИН (всегда admin, онбординг пропускает) ===
-MAIN_ADMIN_TG_ID = 1821030188
+# === ГЛАВНЫЙ АДМИН (из config) ===
+from config import MAIN_ADMIN_TG_ID
 
 
 ONBOARDING_ROLES = [
