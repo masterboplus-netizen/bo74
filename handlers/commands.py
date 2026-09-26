@@ -240,30 +240,17 @@ async def tasks_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     no_deadline = [r for r in rows if not r['deadline']]
 
-    def format_block(title, items):
-        lines = [f"**{title}:**"]
-        for r in items:
-            d = ""
-            if r['deadline']:
-                try:
-                    d = " (" + datetime.strptime(r['deadline'], '%Y-%m-%d').strftime('%d.%m') + ")"
-                except Exception:
-                    pass
-            obj = r['object_name'] or "без объекта"
-            lines.append(f"#{r['id']} {r['title']}{d} — {obj}")
-        return "\n".join(lines)
-
     sections = []
     if today_tasks:
-        sections.append(format_block(f"СЕГОДНЯ — {today.strftime('%d.%m.%Y')}", today_tasks))
+        sections.append(format_tasks_block(f"СЕГОДНЯ — {today.strftime('%d.%m.%Y')}", today_tasks, '🔥'))
     if tomorrow_tasks:
-        sections.append(format_block(f"ЗАВТРА — {tomorrow.strftime('%d.%m.%Y')}", tomorrow_tasks))
+        sections.append(format_tasks_block(f"ЗАВТРА — {tomorrow.strftime('%d.%m.%Y')}", tomorrow_tasks, '📅'))
     if later_tasks:
-        sections.append(format_block("ПОЗЖЕ", later_tasks))
+        sections.append(format_tasks_block("ПОЗЖЕ", later_tasks, '🗓'))
     if no_deadline:
-        sections.append(format_block("БЕЗ СРОКА", no_deadline))
+        sections.append(format_tasks_block("БЕЗ СРОКА", no_deadline, '📋'))
 
-    text = "📋 ЗАДАЧИ\n\n" + "\n".join(sections)
+    text = "📋 ЗАДАЧИ\n\n" + "\n\n".join(sections)
     if len(text) > 4000:
         text = text[:3900] + "\n\n..."
 
@@ -1512,7 +1499,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = "📋 **Задачи объекта:**\n\n"
         for t in tasks[:20]:
             icon = "✅" if t['status'] == 'done' else "🔵"
-            text += f"{icon} #{t['id']} {t['title']}\n"
+            text += f"{icon} {t['id']}. {t['title']}\n"
         await query.edit_message_text(text, reply_markup=object_detail_keyboard(object_id), parse_mode=ParseMode.MARKDOWN)
         return
 
