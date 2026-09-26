@@ -16,6 +16,7 @@ from handlers.commands import (
     handle_photo, handle_photo_stage, handle_photo_task, handle_photo_save,
     handle_skip_photo, photos_command,
     handle_photo_filter, handle_photo_page,
+    handle_recognize_receipt, handle_receipt_save, handle_receipt_object, handle_receipt_category,
     clients_command, deals_command, handle_crm_menu
 )
 from handlers.digest_cmd import digest_now_command, survey_now_command
@@ -158,6 +159,10 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_task_action, pattern="^(task_|taskdone_|taskdel_|setdate_|taskdate_|tasknodate_|taskprio_|setprio_|taskrename_|taskassign_|setassigned_|setrange_|setduration_|cal_|dur_days_)"))
     register_onboarding_handlers(app)
     register_admin_handlers(app)
+    app.add_handler(CallbackQueryHandler(handle_recognize_receipt, pattern="^recognize_receipt$"))
+    app.add_handler(CallbackQueryHandler(handle_receipt_save, pattern="^receipt_save_"))
+    app.add_handler(CallbackQueryHandler(handle_receipt_object, pattern="^receipt_obj_"))
+    app.add_handler(CallbackQueryHandler(handle_receipt_category, pattern="^receipt_cat_"))
     app.add_handler(CallbackQueryHandler(handle_callback, pattern="^(?!cat_|choose_obj_|task_|taskdone_|taskdel_|setdate_|taskdate_|taskprio_|setprio_|taskrename_|taskassign_|setassigned_|setrange_|setduration_|cal_|dur_days_).*"))
 
     app.add_error_handler(error_handler)

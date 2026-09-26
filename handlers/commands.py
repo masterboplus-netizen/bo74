@@ -2038,10 +2038,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🏗️ {o['name']}",
             callback_data=f"photo_obj_{o['id']}"
         )])
+    buttons.append([InlineKeyboardButton("💳 Распознать чек (OCR)", callback_data="recognize_receipt")])
     buttons.append([InlineKeyboardButton("❌ Отмена", callback_data="menu_back")])
 
     await update.message.reply_text(
-        "📸 Фото получено.\n\nВыбери объект:",
+        "📸 Фото получено.\n\nВыбери объект или распознай чек:",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
@@ -3846,3 +3847,151 @@ def choose_object_for_expense_keyboard_amount(amount):
         )])
     buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
     return InlineKeyboardMarkup(buttons)
+
+
+# === OCR: распознавание чеков ===
+
+async def handle_recognize_receipt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Скачивает фото и распознаёт через OCR.space."""
+    query = update.callback_query
+    await query.answer()
+
+    pending = context.user_data.get('pending_photo') or {}
+    file_id = pending.get('file_id')
+    if not file_id:
+        await query.edit_message_text("❌ Фото потерялось. Пришли заново.")
+        return
+
+    await query.edit_message_text("📷 Распознаю чек... (5-10 секунд)")
+
+    try:
+        from modules.ocr import ocr_image, parse_receipt
+        # Скачиваем файл через Telegram API
+        tg_file = await context.bot.get_file(file_id)
+        import io
+        buf = io.BytesIO()
+        await tg_file.download_to_memory(buf)
+        image_bytes = buf.getvalue()
+
+        result = ocr_image(image_bytes)
+        if not result.get('ok'):
+            await query.edit_message_text(
+                f"❌ Ошибка OCR: {result.get('error')}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")]
+                ])
+            )
+            return
+
+        text = result.get('text', '')
+        parsed = parse_receipt(text)
+
+        # Формируем ответ
+        msg = "💳 *Результат распознавания:*\n\n"
+        if parsed['amount']:
+            msg += f"💰 Сумма: {parsed['amount']} ₽\n"
+        else:
+            msg += "💰 Сумма: не найдена\n"
+        if parsed['shop']:
+            msg += f"🏪 Магазин: {parsed['shop']}\n"
+        if parsed['date']:
+            msg += f"📅 Дата: {parsed['date']}\n"
+        msg += f"\n📄 *Сырой текст:*\n```\n{text[:800]}\n```"
+
+        buttons = []
+        if parsed['amount']:
+            buttons.append([InlineKeyboardButton(
+                f"💰 Записать расход {parsed['amount']} ₽",
+                callback_data=f"receipt_save_{parsed['amount']}"
+            )])
+        buttons.append([InlineKeyboardButton("📸 Другое фото", callback_data="menu_back")])
+        buttons.append([InlineKeyboardButton("🏠 Меню", callback_data="menu_back")])
+
+        context.user_data['pending_receipt'] = parsed
+        await query.edit_message_text(
+            msg,
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode=ParseMode.MARKDOWN
+        )
+    except Exception as e:
+        await query.edit_message_text(
+            f"❌ Ошибка распознавания: {e}",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")]
+            ])
+        )
+
+
+async def handle_receipt_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Сохраняет распознанный расход — спрашивает объект."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data  # receipt_save_<amount>
+    amount = int(data.replace("receipt_save_", ""))
+
+    # Выбор объекта
+    objs = get_all_objects()
+    if not objs:
+        await query.edit_message_text("❌ Нет объектов. Создай сначала.")
+        return
+
+    buttons = []
+    for o in objs[:20]:
+        buttons.append([InlineKeyboardButton(
+            f"🏗️ {o['name']}",
+            callback_data=f"receipt_obj_{amount}_{o['id']}"
+        )])
+    buttons.append([InlineKeyboardButton("❌ Отмена", callback_data="menu_back")])
+
+    await query.edit_message_text(
+        f"💰 Расход {amount} ₽\n\nВыбери объект:",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+
+
+async def handle_receipt_object(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Создаёт расход в выбранном объекте."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data  # receipt_obj_<amount>_<obj_id>
+    parts = data.replace("receipt_obj_", "").split("_")
+    amount = int(parts[0])
+    obj_id = int(parts[1])
+    obj = get_object(obj_id)
+    if not obj:
+        await query.edit_message_text("❌ Объект не найден")
+        return
+
+    # Спрашиваем категорию
+    context.user_data['pending_receipt_expense'] = {'amount': amount, 'obj_id': obj_id}
+    await query.edit_message_text(
+        f"💰 {amount} ₽ в «{obj['name']}»\n\nКатегория?",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🧱 Материалы", callback_data=f"receipt_cat_{amount}_{obj_id}_материалы")],
+            [InlineKeyboardButton("🔧 Инструмент", callback_data=f"receipt_cat_{amount}_{obj_id}_инструмент")],
+            [InlineKeyboardButton("🚕 Транспорт", callback_data=f"receipt_cat_{amount}_{obj_id}_транспорт")],
+            [InlineKeyboardButton("🍔 Еда", callback_data=f"receipt_cat_{amount}_{obj_id}_еда")],
+            [InlineKeyboardButton("📦 Прочее", callback_data=f"receipt_cat_{amount}_{obj_id}_прочее")],
+            [InlineKeyboardButton("❌ Отмена", callback_data="menu_back")],
+        ])
+    )
+
+
+async def handle_receipt_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Сохраняет расход с категорией."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data  # receipt_cat_<amount>_<obj_id>_<category>
+    parts = data.replace("receipt_cat_", "").split("_", 2)
+    amount = int(parts[0])
+    obj_id = int(parts[1])
+    category = parts[2] if len(parts) > 2 else 'прочее'
+    obj = get_object(obj_id)
+    add_expense(obj_id, amount, category)
+    await query.edit_message_text(
+        f"✅ Расход {amount} ₽ ({category}) в «{obj['name']}» записан",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("💰 К финансам", callback_data="menu_finance")],
+            [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+        ])
+    )
