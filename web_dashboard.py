@@ -1,4 +1,4 @@
-"""Веб-дашборд Бо 7.5 — на встроенном http.server, без зависимостей"""
+"""Веб-дашборд Бо 7.7 — на встроенном http.server, без зависимостей"""
 import http.server
 import socketserver
 import json
@@ -237,13 +237,13 @@ def render_dashboard():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Бо 7.5 — Дашборд</title>
+    <title>Бо 7.7 — Дашборд</title>
     <style>{CSS}</style>
 </head>
 <body>
 <div class="container">
     <div class="header">
-        <h1>🤖 Бо 7.5 — Дашборд</h1>
+        <h1>🤖 Бо 7.7 — Дашборд</h1>
         <div><a href="/" style="color:#60a5fa;margin-right:12px;">🔄 Обновить</a><span style="color:#666;font-size:14px;">{date.today().strftime('%d.%m.%Y')}</span></div>
     </div>
 
@@ -264,7 +264,7 @@ def render_dashboard():
 
     {f'<h2>⚠️ Просроченные задачи ({len(overdue)})</h2><table><thead><tr><th>ID</th><th>Задача</th><th>Объект</th><th>Срок</th></tr></thead><tbody>{overdue_rows}</tbody></table>' if overdue else ''}
 
-    <p style="margin-top:32px;color:#555;font-size:12px;">Бо 7.5 · Replit · {date.today().strftime('%Y-%m-%d')}</p>
+    <p style="margin-top:32px;color:#555;font-size:12px;">Бо 7.7 · Replit · {date.today().strftime('%Y-%m-%d')}</p>
 </div>
 </body>
 </html>"""
@@ -306,7 +306,7 @@ def render_object(obj):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{obj['name']} — Бо 7.5</title>
+    <title>{obj['name']} — Бо 7.7</title>
     <style>{CSS}</style>
 </head>
 <body>
@@ -398,7 +398,7 @@ def render_object_photos(obj_id):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Фото: {obj['name']} — Бо 7.5</title>
+    <title>Фото: {obj['name']} — Бо 7.7</title>
     <style>{CSS}</style>
 </head>
 <body>
@@ -474,7 +474,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 if __name__ == '__main__':
-    print(f"🚀 Дашборд Бо 7.5 запущен: http://0.0.0.0:{PORT}")
+    print(f"🚀 Дашборд Бо 7.7 запущен: http://0.0.0.0:{PORT}")
     print(f"📊 В браузере открой: https://<твой-домен>.replit.dev:{PORT}")
     class ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
         daemon_threads = True

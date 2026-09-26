@@ -64,7 +64,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(
             f"👋 Привет, {user.first_name}!\n\n"
-            f"Я *Бо 7.5* — твой помощник по стройке.\n"
+            f"Я *Бо 7.7* — твой помощник по стройке.\n"
             f"Ты вошёл как *админ*.",
             reply_markup=role_menu_keyboard("admin"),
             parse_mode=ParseMode.MARKDOWN,
@@ -99,7 +99,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Иначе — меню по роли
     await update.message.reply_text(
         f"👋 Привет, {user.first_name}!\n\n"
-        f"Я *Бо 7.5* — твой помощник по стройке.\n"
+        f"Я *Бо 7.7* — твой помощник по стройке.\n"
         f"Твоя роль: *{role}*",
         reply_markup=role_menu_keyboard(role),
         parse_mode=ParseMode.MARKDOWN,
@@ -108,7 +108,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "📋 Бо 7.5 — команды и возможности\n\n"
+        "📋 Бо 7.7 — команды и возможности\n\n"
         "🏗️ Объекты\n"
         "• /objects — список объектов кнопками\n"
         "• /add\\_object <название> — создать объект\n\n"
@@ -1461,7 +1461,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from modules.dashboard_link import get_dashboard_url
         url = get_dashboard_url()
         await query.edit_message_text(
-            f"🌐 Дашборд Бо 7.5\n\n"
+            f"🌐 Дашборд Бо 7.7\n\n"
             f"Нажми кнопку ниже, чтобы открыть:\n\n"
             f"📱 Совет: добавь на главный экран телефона",
             reply_markup=InlineKeyboardMarkup([
@@ -1473,7 +1473,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "menu_help":
         await query.edit_message_text(
-            "📋 Бо 7.5 — команды и возможности\n\n"
+            "📋 Бо 7.7 — команды и возможности\n\n"
             "🏗️ Объекты\n"
             "• /objects — список объектов кнопками\n"
             "• /add\\_object <название> — создать объект\n\n"
@@ -2519,7 +2519,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_name = update.effective_user.first_name or ''
         await update.message.reply_text(
             f"👋 Привет{', ' + user_name if user_name else ''}!\n\n"
-            f"Я *Бо 7.5* — помощник по стройке.\n\n"
+            f"Я *Бо 7.7* — помощник по стройке.\n\n"
             f"Что умею:\n"
             f"• «потратил 5000 на материалы Переделкино-2»\n"
             f"• «добавь в Арбат положить паркет»\n"
