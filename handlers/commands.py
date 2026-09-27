@@ -48,7 +48,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     # === ГЛАВНЫЙ АДМИН — сразу меню, без онбординга ===
-    from handlers.onboarding import MAIN_ADMIN_TG_ID
+    from config import MAIN_ADMIN_TG_ID
     if user.id == MAIN_ADMIN_TG_ID:
         # Сохраняем юзера
         try:

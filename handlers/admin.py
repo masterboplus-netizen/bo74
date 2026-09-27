@@ -3,7 +3,7 @@
 from telegram import Update
 from telegram.ext import ContextTypes, CommandHandler
 from telegram.constants import ParseMode
-from handlers.onboarding import MAIN_ADMIN_TG_ID
+from config import MAIN_ADMIN_TG_ID
 
 
 def _is_admin(update: Update) -> bool:
