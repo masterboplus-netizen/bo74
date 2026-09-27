@@ -623,7 +623,7 @@ async def handle_crm_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith("deal_status_"):
         from modules.crm import update_deal_status, get_client
-        parts = data.replace("deal_status_", "").split("_")
+        parts = data.replace("deal_status_", "").split("_", 1)
         deal_id = int(parts[0])
         new_status = parts[1]
         update_deal_status(deal_id, new_status)
