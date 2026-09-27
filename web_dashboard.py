@@ -420,6 +420,12 @@ def render_object_photos(obj_id):
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
+    def do_HEAD(self):
+        """HEAD — как GET, но без тела. Для мониторингов."""
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.end_headers()
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
