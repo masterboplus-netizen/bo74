@@ -202,6 +202,7 @@ def format_tasks_block(title: str, items: list, emoji: str = '📋') -> str:
             order.append(obj)
         by_obj[obj].append(r)
 
+    from datetime import datetime as _dt
     lines = [f'{emoji} {title}']
     for obj in order:
         lines.append(f'')
@@ -210,8 +211,7 @@ def format_tasks_block(title: str, items: list, emoji: str = '📋') -> str:
             d = ''
             if r['deadline']:
                 try:
-                    from datetime import datetime
-                    d = ' — ' + datetime.strptime(r['deadline'], '%Y-%m-%d').strftime('%d.%m')
+                    d = ' — ' + _dt.strptime(r['deadline'], '%Y-%m-%d').strftime('%d.%m')
                 except Exception:
                     pass
             lines.append(f'  ▸ {r["id"]}. {r["title"]}{d}')
@@ -3894,7 +3894,6 @@ async def handle_recognize_receipt(update: Update, context: ContextTypes.DEFAULT
             return
 
         text = result.get('text', '')
-        from modules.ocr import parse_receipt
         parsed = parse_receipt(text)
         parsed['items'] = []
         raw_items = []

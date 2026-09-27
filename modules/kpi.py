@@ -34,12 +34,6 @@ def get_master_kpi(days: int = 30) -> list:
                         in_time += 1
                 except Exception:
                     pass
-            if t['completed_at']:
-                try:
-                    ca = datetime.strptime(t['completed_at'][:10], '%Y-%m-%d').date()
-                    # Не считаем среднее время — нет start
-                except Exception:
-                    pass
         # Открытые задачи
         c.execute("""
             SELECT COUNT(*) FROM tasks

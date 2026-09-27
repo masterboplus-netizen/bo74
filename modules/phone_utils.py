@@ -41,9 +41,9 @@ def parse_phone(raw):
         return {'status': 'ok', 'phone': '+7' + digits}
 
     # 10 цифр с 7 в начале — возможно, человек забыл одну цифру.
-    # Показываем варианты: +7XXXXXXXXXX и 7XXXXXXXXX (без +)
+    # Варианты: +7 + 9 цифр (отбросили 7) или +7 + digits (12 цифр)
     if len(digits) == 10 and digits.startswith('7'):
-        return {'status': 'suggest', 'variants': ['+7' + digits, '+' + digits]}
+        return {'status': 'suggest', 'variants': ['+7' + digits[1:], '+7' + digits]}
 
     # 10-15 цифр с известным кодом — как есть (для +44, +49 и т.д.)
     if len(digits) >= 11 and _is_valid(digits):
