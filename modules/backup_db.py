@@ -101,9 +101,10 @@ def run_daily_backup():
 
 
 async def send_daily_backup(context):
-    """Обёртка для job_queue — запускает бэкап в фоне"""
+    """Обёртка для job_queue — запускает бэкап в фоне (не блокирует event loop)."""
+    import asyncio
     try:
-        run_daily_backup()
+        await asyncio.to_thread(run_daily_backup)
     except Exception as e:
         print(f"❌ Ошибка автобэкапа: {e}")
         try:
