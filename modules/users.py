@@ -32,17 +32,25 @@ def get_user(tg_id: int) -> dict:
     return None
 
 
-def get_all_users(role: str = None) -> list:
-    """Получить всех юзеров (опционально по роли)"""
+def get_all_users(role: str = None, onboarded_only: bool = False) -> list:
+    """Получить всех юзеров (опционально по роли и только онбордившихся)."""
     conn = get_connection()
     c = conn.cursor()
+    query = "SELECT id, tg_id, name, role, onboarded FROM users"
+    params = []
+    conditions = []
     if role:
-        c.execute("SELECT id, tg_id, name, role FROM users WHERE role = ?", (role,))
-    else:
-        c.execute("SELECT id, tg_id, name, role FROM users")
+        conditions.append("role = ?")
+        params.append(role)
+    if onboarded_only:
+        conditions.append("onboarded = 1")
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    c.execute(query, params)
     rows = c.fetchall()
     conn.close()
-    return [{'id': r['id'], 'tg_id': r['tg_id'], 'name': r['name'], 'role': r['role']} for r in rows]
+    return [{'id': r['id'], 'tg_id': r['tg_id'], 'name': r['name'],
+             'role': r['role'], 'onboarded': r['onboarded']} for r in rows]
 
 
 def set_role(tg_id: int, role: str):

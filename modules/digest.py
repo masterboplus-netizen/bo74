@@ -125,7 +125,7 @@ def build_evening_survey() -> str:
 
 async def send_morning_digest(context):
     """Отправляет утренний дайджест всем юзерам"""
-    users = [u for u in get_all_users() if u.get("role") in ("admin", "prorab", "designer", "master")]
+    users = [u for u in get_all_users(onboarded_only=True) if u.get("role") in ("admin", "prorab", "designer", "master")]
     if not users:
         print("⚠️ Дайджест: нет юзеров в БД")
         return
@@ -140,7 +140,7 @@ async def send_morning_digest(context):
 
 async def send_evening_survey(context):
     """Отправляет вечерний опрос всем юзерам"""
-    users = [u for u in get_all_users() if u.get("role") in ("admin", "prorab", "designer", "master")]
+    users = [u for u in get_all_users(onboarded_only=True) if u.get("role") in ("admin", "prorab", "designer", "master")]
     if not users:
         print("⚠️ Вечерний опрос: нет юзеров в БД")
         return
