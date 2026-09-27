@@ -118,11 +118,12 @@ def get_tasks_by_assignee(tg_id: int) -> list:
 
 def set_task_range(task_id: int, start: str = None, end: str = None):
     """Устанавливает диапазон дат для задачи.
-    start/end в формате YYYY-MM-DD. None — убрать."""
+    start/end в формате YYYY-MM-DD. None — убрать.
+    При задании диапазона одиночный deadline обнуляется."""
     conn = get_connection()
     c = conn.cursor()
-    c.execute('UPDATE tasks SET deadline_start = ?, deadline_end = ?, deadline = ? WHERE id = ?',
-              (start, end, start, task_id))
+    c.execute('UPDATE tasks SET deadline_start = ?, deadline_end = ?, deadline = NULL WHERE id = ?',
+              (start, end, task_id))
     conn.commit()
     conn.close()
 
