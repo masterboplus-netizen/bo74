@@ -160,7 +160,12 @@ def format_deals(deals: list = None) -> str:
     return text
 
 
+VALID_DEAL_STATUSES = ('new', 'in_progress', 'won', 'lost', 'paused')
+
+
 def update_deal_status(deal_id: int, status: str):
+    if status not in VALID_DEAL_STATUSES:
+        raise ValueError(f"Недопустимый статус сделки: {status}. Доступно: {VALID_DEAL_STATUSES}")
     conn = get_connection()
     c = conn.cursor()
     c.execute("UPDATE crm_deals SET status = ? WHERE id = ?", (status, deal_id))
