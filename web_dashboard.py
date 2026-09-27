@@ -368,8 +368,7 @@ def render_object_photos(obj_id):
     for p in photos:
         task_str = f"#{p['task_id']} {p['task_title'][:40]}" if p['task_id'] else "Без задачи"
         # file_id уже в p (из get_object_photos)
-        file_id = p.get('file_id', '')
-        img_url = get_telegram_file_url(file_id)
+        img_url = f"/photo/{p['id']}"
         img_html = f'<a href="{img_url}" target="_blank" style="display:block;"><img src="{img_url}" style="width:100%;border-radius:8px;display:block;cursor:zoom-in;" loading="lazy"></a>' if img_url else '<div style="color:#666;padding:20px;text-align:center;">📷</div>'
         tg_link = f'https://t.me/masterbo2026_bot?start=photo_{p["id"]}'
         grid += f"""
@@ -445,6 +444,42 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 html = render_object(obj)
             except Exception as e:
                 html = f"<h1>Ошибка: {e}</h1>"
+        elif path.startswith('/photo/'):
+            # Прокси для фото — токен НЕ светится в URL
+            try:
+                photo_id = int(path.split('/')[-1])
+                conn = get_connection()
+                c = conn.cursor()
+                c.execute("SELECT file_id FROM photos WHERE id = ?", (photo_id,))
+                row = c.fetchone()
+                conn.close()
+                if not row or not row[0]:
+                    self.send_response(404)
+                    self.end_headers()
+                    self.wfile.write(b"Photo not found")
+                    return
+                file_id = row[0]
+                tg_url = get_telegram_file_url(file_id)
+                if not tg_url:
+                    self.send_response(502)
+                    self.end_headers()
+                    self.wfile.write(b"Telegram file unavailable")
+                    return
+                req = urllib.request.Request(tg_url)
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    data = resp.read()
+                    ctype = resp.headers.get('Content-Type', 'image/jpeg')
+                self.send_response(200)
+                self.send_header('Content-Type', ctype)
+                self.send_header('Cache-Control', 'public, max-age=86400')
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            except Exception as e:
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(f"Error: {e}".encode())
+            return
         elif path == '/api/summary':
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
