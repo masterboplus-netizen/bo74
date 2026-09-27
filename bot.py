@@ -83,6 +83,11 @@ def main():
         return
     init_db()
 
+    # === KEEP ALIVE (не даём Replit заснуть) ===
+    import keep_alive
+    keep_alive.start()
+    # ===========================================
+
     app = Application.builder().token(TOKEN).build()
     # Настройка постоянного меню команд + дайджестов
     async def post_init(app):
