@@ -75,10 +75,21 @@ import urllib.request as _ur
 
 TG_TOKEN = _os.getenv("BOT_TOKEN", "")
 
+_file_url_cache = {}  # file_id -> (file_path, timestamp)
+_FILE_CACHE_TTL = 3300  # 55 минут
+
+
 def get_telegram_file_url(file_id: str) -> str:
-    """Возвращает прямую ссылку на файл через Telegram Bot API."""
+    """Возвращает прямую ссылку на файл через Telegram Bot API (с кэшем)."""
     if not TG_TOKEN or not file_id:
         return ""
+    # Проверяем кэш
+    import time as _time
+    cached = _file_url_cache.get(file_id)
+    now = _time.time()
+    if cached and (now - cached[1]) < _FILE_CACHE_TTL:
+        file_path = cached[0]
+        return f"https://api.telegram.org/file/bot{TG_TOKEN}/{file_path}"
     try:
         url = f"https://api.telegram.org/bot{TG_TOKEN}/getFile?file_id={file_id}"
         with _ur.urlopen(url, timeout=5) as resp:
@@ -86,6 +97,7 @@ def get_telegram_file_url(file_id: str) -> str:
         if data.get("ok"):
             file_path = data["result"].get("file_path", "")
             if file_path:
+                _file_url_cache[file_id] = (file_path, now)
                 return f"https://api.telegram.org/file/bot{TG_TOKEN}/{file_path}"
     except Exception:
         pass
