@@ -23,13 +23,13 @@ def _get_urls():
     # Свой дашборд
     domain = os.getenv("REPLIT_DEV_DOMAIN", "").strip()
     if domain:
-        urls.append(f"https://{domain}/")
+        urls.append(f"https://{domain}/api/summary")
     # Основной домен (prod)
     domains = os.getenv("REPLIT_DOMAINS", "").strip()
     if domains:
         first = domains.split(",")[0].strip()
         if first:
-            urls.append(f"https://{first}/")
+            urls.append(f"https://{first}/api/summary")
     # UptimeRobot (если настроен)
     uptime_url = os.getenv("UPTIME_URL", "").strip()
     if uptime_url:
