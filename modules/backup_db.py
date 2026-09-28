@@ -33,8 +33,33 @@ def make_backup():
     return backup_path
 
 
+
+def _ensure_netrc():
+    """Проверяет ~/.netrc. Если нет — пересоздаёт из GITHUB_TOKEN."""
+    import os
+    token = os.getenv('GITHUB_TOKEN', '').strip()
+    if not token:
+        return False
+    netrc_path = os.path.expanduser('~/.netrc')
+    need_write = True
+    if os.path.exists(netrc_path):
+        try:
+            with open(netrc_path) as f:
+                content = f.read()
+            if token in content and 'github.com' in content:
+                need_write = False
+        except Exception:
+            pass
+    if need_write:
+        with open(netrc_path, 'w') as f:
+            f.write('machine github.com\nlogin masterboplus-netizen\npassword ' + token + '\n')
+        os.chmod(netrc_path, 0o600)
+        print('✅ ~/.netrc пересоздан (backup_db)')
+    return True
+
 def git_commit_and_push(message: str) -> bool:
     """Коммитит ТОЛЬКО базу и её бэкап, пушит в GitHub"""
+    _ensure_netrc()
     try:
         # git add — только БД и её бэкап-копия
         result = subprocess.run(
