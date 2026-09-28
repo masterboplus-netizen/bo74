@@ -1340,7 +1340,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith("objexp_cat_"):
         # objexp_cat_<amount>_<obj_id>_<category>
-        parts = data.replace("objexp_cat_", "").split("_")
+        parts = data.replace("objexp_cat_", "").split("_", 2)
         amount = int(parts[0])
         obj_id = int(parts[1])
         category = parts[2] if len(parts) > 2 else 'прочее'
