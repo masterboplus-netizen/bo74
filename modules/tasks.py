@@ -137,3 +137,38 @@ def get_task_range(task_id: int) -> dict:
     if not r:
         return {'deadline': None, 'start': None, 'end': None}
     return {'deadline': r[0], 'start': r[1], 'end': r[2]}
+
+
+def update_task(task_id, title=None, description=None, priority=None,
+                assigned_to=None, deadline=None, status=None):
+    """Обновляет поля задачи. None — не менять."""
+    conn = get_connection()
+    c = conn.cursor()
+    fields = []
+    params = []
+    if title is not None:
+        fields.append("title = ?")
+        params.append(title)
+    if description is not None:
+        fields.append("description = ?")
+        params.append(description)
+    if priority is not None:
+        fields.append("priority = ?")
+        params.append(priority)
+    if assigned_to is not None:
+        fields.append("assigned_to = ?")
+        params.append(assigned_to)
+    if deadline is not None:
+        fields.append("deadline = ?")
+        params.append(deadline)
+    if status is not None:
+        fields.append("status = ?")
+        params.append(status)
+    if not fields:
+        conn.close()
+        return False
+    params.append(task_id)
+    c.execute(f"UPDATE tasks SET {', '.join(fields)} WHERE id = ?", params)
+    conn.commit()
+    conn.close()
+    return True
