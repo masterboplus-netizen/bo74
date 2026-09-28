@@ -1,33 +1,35 @@
-# Бэкапы
-*.bak
-*.bak2
-*.bak3
-*.v1
-*.zip
+# Бэкапы БД
+backups/
+*.db.bak
+bo72*.db.bak
 
-# Кэш Python
+# Тестовые БД
+bo72_test.db
+
+# Python кэш
 __pycache__/
 *.pyc
 *.pyo
 
-# Replit служебные
-.cache/
-.local/
-.upm/
-.pythonlibs/
-.conversation/
-.agents/
-.replit.bak
-
 # Логи
 *.log
 
-# Временные
-*.tmp
-
-# Автобэкапы БД в backups/ — оставляем (нужны в git)
-# но старые .bak-файлы БД — не нужны
-bo72.db.bak*
+# Бэкапы кода
+*.bak
 *.bak_*
-*.bak[0-9]
-*.db.bak*
+*.py.bak_*
+*.sh.bak_*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Replit
+.local/
+.upm/
