@@ -10,10 +10,10 @@ def save_user(tg_id: int, name: str = None, username: str = None, role: str = 'g
     row = c.fetchone()
     if row:
         # НЕ трогаем role у существующего юзера — только имя
-        c.execute("UPDATE users SET name = ? WHERE tg_id = ?", (name, tg_id))
+        c.execute("UPDATE users SET name = ?, username = ? WHERE tg_id = ?", (name, username, tg_id))
         user_id = row['id']
     else:
-        c.execute("INSERT INTO users (tg_id, name, role) VALUES (?, ?, ?)", (tg_id, name, role))
+        c.execute("INSERT INTO users (tg_id, name, username, role) VALUES (?, ?, ?, ?)", (tg_id, name, username, role))
         user_id = c.lastrowid
     conn.commit()
     conn.close()
