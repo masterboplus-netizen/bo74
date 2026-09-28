@@ -77,6 +77,29 @@ def parse_message(text: str) -> dict:
             for w in ['в', 'на', 'для']:
                 title = title.replace(w, '', 1)
             title = title.replace(obj['name'].lower(), '')
+    # === ДОХОД ===
+    income_words = ['получил', 'заработал', 'оплатили', 'перевели', 'пришло', 'доход', 'приход', 'заплатили']
+    has_income_word = any(w in text_lower for w in income_words)
+    if has_income_word:
+        amount_inc = parse_amount(text_lower)
+        found_inc = find_all_objects_in_text(text)
+        if amount_inc and found_inc:
+            if len(found_inc) > 1:
+                return {
+                    'action': 'choose_object',
+                    'objects': found_inc,
+                    'amount': amount_inc,
+                    'category': 'доход',
+                    'original_text': text,
+                    'intent': 'income'
+                }
+            return {
+                'action': 'income',
+                'object': found_inc[0],
+                'amount': amount_inc,
+                'category': 'доход'
+            }
+
             simple = obj['name'].lower().split('(')[0].strip()
             if simple:
                 title = title.replace(simple, '')

@@ -2698,6 +2698,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    if action == 'income':
+        from modules.finance import add_income
+        obj = result['object']
+        amount = result['amount']
+        category = result.get('category', 'доход')
+        add_income(obj['id'], amount, category)
+        await update.message.reply_text(
+            f"💰 Доход {amount} ₽ ({category}) добавлен в «{obj['name']}»"
+        )
+        return
+
     if action == 'expense':
         obj = result['object']
         amount = result['amount']
