@@ -2179,6 +2179,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text or text.startswith('/'):
         return
 
+    # Размеры комнаты
+    if context.user_data.get('waiting_for') in ('measure_first_dim', 'measure_second_dim'):
+        from interfaces.telegram.rooms import handle_measure_input
+        await handle_measure_input(update, context)
+        return
+
     # === ВСЕ CRM-ОЖИДАНИЯ — В САМОМ НАЧАЛЕ, ДО ПАРСЕРА ===
 
     # CRM: ждём имя нового клиента (для сделки)

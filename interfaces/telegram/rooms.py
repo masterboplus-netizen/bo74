@@ -83,7 +83,11 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
     data = query.data
 
     # Карточка комнаты
-    if data.startswith("room_") and not data.startswith(("room_add_", "room_del_", "room_tasks_", "room_measures_", "room_comms_", "room_objects_", "room_photos_")):
+    _room_exclude = ("room_add_", "room_del_", "room_delok_",
+                     "room_tasks_", "room_measures_", "room_measure_add_", "room_measure_cat_",
+                     "room_comms_", "room_objects_", "room_photos_",
+                     "room_conflicts_", "room_forecast_")
+    if data.startswith("room_") and not data.startswith(_room_exclude):
         try:
             room_id = int(data.replace("room_", ""))
         except ValueError:
@@ -169,6 +173,7 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
             "\n".join(lines),
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Добавить размер", callback_data=f"room_measure_add_{room_id}")],
                 [InlineKeyboardButton("⬅️ Назад", callback_data=f"room_{room_id}")]
             ])
         )
@@ -222,6 +227,54 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
 
+    # Добавить размер — шаг 1: выбор категории
+    if data.startswith("room_measure_add_"):
+        room_id = int(data.replace("room_measure_add_", ""))
+        context.user_data['measure_room_id'] = room_id
+        context.user_data['waiting_for'] = 'measure_category'
+        cats = [("wall", "🧱 Стена"), ("floor", "📏 Пол"), ("ceiling", "⬆️ Потолок"),
+                ("window", "🪟 Окно"), ("door", "🚪 Дверь"), ("corner", "📐 Угол")]
+        buttons = [[InlineKeyboardButton(label, callback_data=f"room_measure_cat_{room_id}_{code}")]
+                   for code, label in cats]
+        buttons.append([InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_measures_{room_id}")])
+        await query.edit_message_text(
+            "📐 *Новый размер*\n\nВыбери категорию:",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    # Выбор категории → пошаговый ввод
+    if data.startswith("room_measure_cat_"):
+        parts = data.replace("room_measure_cat_", "").split("_")
+        room_id = int(parts[0])
+        category = parts[1]
+        context.user_data['measure_category'] = category
+        context.user_data['measure_room_id'] = room_id
+
+        cat_info = {
+            'wall':    ('📏 Длина стены', 'горизонталь, от угла до угла'),
+            'floor':   ('📏 Длина пола',  'горизонталь, от стены до стены'),
+            'ceiling': ('📏 Длина потолка','горизонталь'),
+            'window':  ('📏 Ширина окна', 'горизонталь'),
+            'door':    ('📏 Ширина двери','горизонталь'),
+            'opening': ('📏 Ширина проёма','горизонталь'),
+        }
+        label, hint = cat_info.get(category, ('📏 Длина', 'горизонталь'))
+
+        context.user_data['waiting_for'] = 'measure_first_dim'
+        await query.edit_message_text(
+            f"📐 *Новый размер — {category}*\n\n"
+            f"*Шаг 1 из 2*\n\n"
+            f"{label}: __ м\n"
+            f"_({hint})_",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_measures_{room_id}")]
+            ])
+        )
+        return
+
     # Фото (заглушка)
     if data.startswith("room_photos_"):
         room_id = int(data.replace("room_photos_", ""))
@@ -238,3 +291,105 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         object_id = int(data.replace("rooms_list_obj_", ""))
         await show_rooms_list(update, context, object_id)
         return
+
+
+
+async def handle_measure_input(update, context):
+    """Пошаговый ввод: 1) длина, 2) высота/ширина."""
+    room_id = context.user_data.get('measure_room_id')
+    category = context.user_data.get('measure_category')
+    if not room_id or not category:
+        await update.message.reply_text("❌ Потерялась комната, начни заново")
+        return
+
+    text = (update.message.text or '').strip().replace(',', '.')
+    try:
+        val = float(text)
+    except ValueError:
+        await update.message.reply_text(
+            "❌ Нужно число. Например: `2.8`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    step = context.user_data.get('waiting_for')
+
+    # Шаг 1: первая величина (длина)
+    if step == 'measure_first_dim':
+        context.user_data['measure_first_value'] = val
+        context.user_data['waiting_for'] = 'measure_second_dim'
+
+        cat_info2 = {
+            'wall':    ('📐 Высота стены', 'вертикаль, от пола до потолка'),
+            'floor':   ('📏 Ширина пола',  'перпендикулярно длине'),
+            'ceiling': ('📏 Ширина потолка','перпендикулярно длине'),
+            'window':  ('📐 Высота окна',  'вертикаль'),
+            'door':    ('📐 Высота двери', 'вертикаль'),
+            'opening': ('📐 Высота проёма','вертикаль'),
+        }
+        label, hint = cat_info2.get(category, ('📏 Вторая величина', 'вертикаль'))
+
+        await update.message.reply_text(
+            f"✅ Первая: *{val} м*\n\n"
+            f"*Шаг 2 из 2*\n\n"
+            f"{label}: __ м\n"
+            f"_({hint})_",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # Шаг 2: вторая величина → создаём
+    if step == 'measure_second_dim':
+        first = context.user_data.get('measure_first_value')
+
+        from core.measures import add_measure, get_measures
+        existing = get_measures(room_id, category=category)
+
+        if category == 'wall':
+            idx2 = len(existing)
+            label = chr(ord('A') + idx2) if idx2 < 26 else f"Стена{idx2+1}"
+        elif category == 'floor':
+            label = 'Пол'
+        elif category == 'ceiling':
+            label = 'Потолок'
+        elif category == 'window':
+            label = f"Окно{len(existing)+1}"
+        elif category == 'door':
+            label = f"Дверь{len(existing)+1}"
+        else:
+            label = f"Элемент{len(existing)+1}"
+
+        kwargs = {'label': label}
+        if category in ('wall',):
+            kwargs['length'] = first
+            kwargs['height'] = val
+        elif category in ('floor', 'ceiling'):
+            kwargs['length'] = first
+            kwargs['width'] = val
+        elif category in ('window', 'door', 'opening'):
+            kwargs['length'] = first
+            kwargs['height'] = val
+        else:
+            kwargs['length'] = first
+            kwargs['width'] = val
+
+        area = first * val
+        add_measure(room_id, category, **kwargs)
+
+        for k in ['waiting_for', 'measure_room_id', 'measure_category',
+                  'measure_first_value']:
+            context.user_data[k] = None
+
+        await update.message.reply_text(
+            f"✅ *{label}* ({category})\n"
+            f"Размер: {first} × {val} м\n"
+            f"Площадь: {round(area, 2)} м²",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📐 К размерам", callback_data=f"room_measures_{room_id}")],
+                [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")]
+            ])
+        )
+        return
+
+
