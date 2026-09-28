@@ -21,6 +21,7 @@ def log(msg):
         pass
 
 def _is_running(pattern: str) -> bool:
+    """Точная проверка процесса через pgrep с regex."""
     try:
         result = subprocess.run(
             ['pgrep', '-f', pattern],
@@ -31,12 +32,37 @@ def _is_running(pattern: str) -> bool:
         log(f'⚠️ pgrep error: {e}')
         return False
 
+
+def _is_log_fresh(log_path: str, max_age_sec: int = 900) -> bool:
+    """Проверяет, менялся ли файл лога за последние max_age_sec."""
+    import time
+    try:
+        if not os.path.exists(log_path):
+            return False
+        return (time.time() - os.path.getmtime(log_path)) < max_age_sec
+    except Exception:
+        return True  # при ошибке не мешаем watchdog-у
+
+
 def is_bot_running():
-    return _is_running('python bot.py')
+    """Проверяет: процесс жив И лог свежий."""
+    if not _is_running(r'^python bot\.py$'):
+        return False
+    log_path = os.path.join(WORKSPACE, 'bot_start.log')
+    if not _is_log_fresh(log_path, max_age_sec=900):
+        log('⚠️ bot.py жив, но лог не менялся >15 мин — считаем залипшим')
+        return False
+    return True
+
 
 def is_dashboard_running():
-    return _is_running('python web_dashboard.py')
-
+    """Проверяет: процесс жив И лог свежий."""
+    if not _is_running(r'^python web_dashboard\.py$'):
+        return False
+    log_path = os.path.join(WORKSPACE, 'dashboard.log')
+    if not _is_log_fresh(log_path, max_age_sec=1800):
+        return False
+    return True
 def start_bot():
     try:
         log('🚀 Запускаю bot.py...')
