@@ -63,3 +63,32 @@ def update_object_status(object_id: int, status: str):
     c.execute("UPDATE objects SET status = ? WHERE id = ?", (status, object_id))
     conn.commit()
     conn.close()
+
+def update_object(object_id, name=None, address=None, budget=None, status=None):
+    """Обновляет поля объекта. None — не менять."""
+    conn = get_connection()
+    c = conn.cursor()
+    fields = []
+    params = []
+    if name is not None:
+        fields.append("name = ?")
+        params.append(name)
+    if address is not None:
+        fields.append("address = ?")
+        params.append(address)
+    if budget is not None:
+        fields.append("budget = ?")
+        params.append(budget)
+    if status is not None:
+        if status not in VALID_STATUSES:
+            raise ValueError(f'Недопустимый статус: {status}')
+        fields.append("status = ?")
+        params.append(status)
+    if not fields:
+        conn.close()
+        return False
+    params.append(object_id)
+    c.execute(f"UPDATE objects SET {', '.join(fields)} WHERE id = ?", params)
+    conn.commit()
+    conn.close()
+    return True
