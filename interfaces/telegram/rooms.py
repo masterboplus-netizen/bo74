@@ -81,6 +81,7 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     data = query.data
+    print(f"🔍 handle_rooms_callback: data={data!r}")
 
     # Карточка комнаты
     _room_exclude = ("room_add_", "room_del_", "room_delok_",
