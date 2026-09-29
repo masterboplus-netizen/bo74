@@ -298,7 +298,40 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
 
-    # Позиция стены → спрашиваем про угол
+        # Позиция стены → сразу к длине
+    if data.startswith("wall_pos_"):
+        parts = data.replace("wall_pos_", "").split("_", 1)
+        room_id = int(parts[0])
+        pos = parts[1] if len(parts) > 1 else 'напротив'
+        if pos == 'своё':
+            context.user_data['measure_room_id'] = room_id
+            context.user_data['measure_category'] = 'wall'
+            context.user_data['waiting_for'] = 'wall_pos_custom'
+            await query.edit_message_text(
+                "🧱 *Своё название стены*\n\nНапиши как называть:",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        context.user_data['measure_room_id'] = room_id
+        context.user_data['measure_category'] = 'wall'
+        context.user_data['wall_pos'] = pos
+        context.user_data['wall_rounded'] = None
+        context.user_data['wall_bottom'] = None
+        context.user_data['wall_middle'] = None
+        context.user_data['wall_top'] = None
+        context.user_data['waiting_for'] = 'measure_first_dim'
+        await query.edit_message_text(
+            f"🧱 *Стена {pos}*\n\n"
+            f"*Шаг 1 из 2*\n\n"
+            f"📏 Длина: __ м\n"
+            f"_(горизонталь, от угла до угла)_",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")]
+            ])
+        )
+        return
+
     if data.startswith("wall_pos_"):
         parts = data.replace("wall_pos_", "").split("_", 1)
         room_id = int(parts[0])
@@ -402,6 +435,52 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text(
             prompt,
             parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # === ФИНАЛ СТЕНЫ: ровная / закругление / ниша / кривая ===
+    if data.startswith("wall_final_"):
+        parts = data.replace("wall_final_", "").split("_", 1)
+        ftype = parts[0]
+        room_id = int(parts[1])
+        pending = context.user_data.get('wall_pending') or {}
+        kwargs = pending.get('kwargs') or {}
+        label = pending.get('label') or 'Стена'
+        first = pending.get('length') or 0
+        val = pending.get('height') or 0
+        area = pending.get('area') or 0
+
+        from core.measures import add_measure
+        if ftype == 'none':
+            add_measure(room_id, 'wall', **kwargs)
+        elif ftype == 'rounded':
+            kwargs['has_rounded'] = 1
+            add_measure(room_id, 'wall', **kwargs)
+        elif ftype == 'niche':
+            kwargs['rounded_corner'] = 'niche'
+            add_measure(room_id, 'wall', **kwargs)
+        elif ftype == 'wavy':
+            context.user_data['waiting_for'] = 'wall_measured_bottom'
+            await query.edit_message_text(
+                "📏 *Замер внизу* (у пола):\n\nВведи в м:",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
+        # Очищаем состояние
+        for k in ['waiting_for', 'measure_room_id', 'measure_category',
+                  'measure_first_value', 'wall_pending', 'wall_pos']:
+            context.user_data[k] = None
+
+        await query.edit_message_text(
+            f"✅ *{label}*\n"
+            f"Размер: {first} × {val} м\n"
+            f"Площадь: {round(area, 2)} м²",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📐 К размерам", callback_data=f"room_measures_{room_id}")],
+                [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")]
+            ])
         )
         return
 
@@ -607,6 +686,29 @@ async def handle_measure_input(update, context):
             kwargs['width'] = val
 
         area = first * val
+        # Если это стена — сначала спросим про ровная/закругление/ниша
+        if category == 'wall':
+            context.user_data['wall_pending'] = {
+                'length': first, 'height': val, 'label': label,
+                'kwargs': kwargs, 'room_id': room_id, 'area': area
+            }
+            context.user_data['waiting_for'] = 'wall_ask_type'
+            await update.message.reply_text(
+                f"✅ Длина: *{first} м*\n"
+                f"✅ Высота: *{val} м*\n"
+                f"Площадь: *{round(area, 2)} м²*\n\n"
+                f"🧱 *Стена ровная или есть особенности?*",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Ровная", callback_data=f"wall_final_none_{room_id}")],
+                    [InlineKeyboardButton("🔄 Закругление / кривой угол", callback_data=f"wall_final_rounded_{room_id}")],
+                    [InlineKeyboardButton("🕳 С нишей", callback_data=f"wall_final_niche_{room_id}")],
+                    [InlineKeyboardButton("📏 Разная по высоте", callback_data=f"wall_final_wavy_{room_id}")]
+                ])
+            )
+            return
+
+        # Для остальных категорий — как было
         add_measure(room_id, category, **kwargs)
 
         for k in ['waiting_for', 'measure_room_id', 'measure_category',
