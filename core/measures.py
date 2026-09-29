@@ -20,19 +20,25 @@ def add_measure(room_id, category, label=None, length=None, width=None,
                 tenant_id=1, created_by=None,
                 wall_pos=None, angle_value=None, angle_method=None,
                 angle_diagonal_cm=None, has_rounded=None, radius=None,
-                rounded_corner=None):
+                rounded_corner=None,
+                measured_bottom=None, measured_middle=None, measured_top=None,
+                is_wavy=None, deviation_plus=None, deviation_minus=None):
     """Добавляет размер. Возвращает measure_id."""
     return commit(
         "INSERT INTO room_measures "
         "(room_id, category, label, length, width, height, depth, angle, "
         "unit, note, tenant_id, created_by, "
         "wall_pos, angle_value, angle_method, angle_diagonal_cm, "
-        "has_rounded, radius, rounded_corner) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "has_rounded, radius, rounded_corner, "
+        "measured_bottom, measured_middle, measured_top, "
+        "is_wavy, deviation_plus, deviation_minus) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (room_id, category, label, length, width, height, depth, angle,
          unit, note, tenant_id, created_by,
          wall_pos, angle_value, angle_method, angle_diagonal_cm,
-         has_rounded, radius, rounded_corner)
+         has_rounded, radius, rounded_corner,
+         measured_bottom, measured_middle, measured_top,
+         is_wavy, deviation_plus, deviation_minus)
     )
 
 

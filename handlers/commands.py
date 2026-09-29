@@ -2185,6 +2185,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_measure_input(update, context)
         return
 
+    # Стена выбрана, но ровная/закругление не нажато → показать кнопки заново
+    if context.user_data.get('wall_pos') and context.user_data.get('wall_rounded') is None:
+        from interfaces.telegram.rooms import reask_wall_question
+        shown = await reask_wall_question(update, context)
+        if shown:
+            return
+
     # === ВСЕ CRM-ОЖИДАНИЯ — В САМОМ НАЧАЛЕ, ДО ПАРСЕРА ===
 
     # CRM: ждём имя нового клиента (для сделки)
