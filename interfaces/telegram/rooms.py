@@ -70,16 +70,40 @@ async def show_rooms_list(update, context, object_id):
 
 
 async def show_room_card(update, context, room_id):
-    """Показывает карточку комнаты."""
+    """Показывает карточку комнаты. Работает и с текстовыми, и с фото-сообщениями."""
     room = get_room(room_id)
     if not room:
         await update.callback_query.edit_message_text("❌ Комната не найдена")
         return
     text = format_room_card(room_id)
     kb = room_card_keyboard(room_id)
-    await update.callback_query.edit_message_text(
-        text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
-    )
+    query = update.callback_query
+    # Проверяем — если сообщение с фото (без текста), edit_message_text упадёт
+    has_photo = bool(getattr(query.message, "photo", None))
+    if has_photo:
+        # Удаляем фото-сообщение и отправляем новое текстовое
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.chat.send_message(
+            text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
+        )
+    else:
+        try:
+            await query.edit_message_text(
+                text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
+            )
+        except Exception as e:
+            # Fallback: если edit не сработал (например, сообщение слишком старое)
+            if "no text in the message" in str(e).lower() or "message is not modified" not in str(e).lower():
+                try:
+                    await query.message.delete()
+                except Exception:
+                    pass
+                await query.message.chat.send_message(
+                    text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
+                )
 
 
 async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -148,20 +172,111 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await _show_height_step(query, context, room_id, None, step=1)
         return
 
-    # Кнопка «🚀 Начать замер» — пока показываем меню (Этап 1)
+    # Кнопка «🚀 Начать замер» — проверяем, есть ли уже замеры
     if data.startswith("room_start_"):
         room_id = int(data.replace("room_start_", ""))
-        await query.edit_message_text(
-            "🚀 *Пошаговый замер*\n\n"
-            "Начнём с высоты потолка.\n"
-            "Потом — обход стен, особенности, проёмы.",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📏 Начать с высоты", callback_data=f"room_height_ask_{room_id}")],
-                [InlineKeyboardButton("📐 Сразу к размерам", callback_data=f"room_measures_{room_id}")],
-                [InlineKeyboardButton("⬅️ Назад", callback_data=f"room_{room_id}")],
-            ])
-        )
+        room = get_room(room_id)
+        # Проверяем — что уже введено
+        h_bottom = room.get('height_bottom') if room else None
+        h_middle = room.get('height_middle') if room else None
+        h_top = room.get('height_top') if room else None
+        
+        # Определяем — с какого шага продолжить
+        if h_bottom and h_middle and h_top:
+            # Всё уже введено — предлагаем начать заново или к комнате
+            await query.edit_message_text(
+                f"📏 *Высота уже замерена:*\n\n"
+                f"• Центр: {h_bottom} см\n"
+                f"• Левый угол: {h_middle} см\n"
+                f"• Правый угол: {h_top} см\n\n"
+                f"Что дальше?",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📐 Обход стен", callback_data=f"room_measures_{room_id}")],
+                    [InlineKeyboardButton("🔄 Замерить высоту заново", callback_data=f"room_height_ask_{room_id}")],
+                    [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+            return
+        elif h_bottom:
+            # Только точка 1 (центр) — предлагаем продолжить со 2
+            context.user_data['height_room_id'] = room_id
+            context.user_data['height_step'] = 2
+            context.user_data['height_bottom'] = h_bottom
+            context.user_data['height_middle'] = None
+            context.user_data['height_top'] = None
+            context.user_data['waiting_for'] = 'room_height_point'
+            await query.edit_message_text(
+                f"📏 *Продолжаем замер высоты*\n\n"
+                f"✅ Точка 1 (центр): {h_bottom} см\n\n"
+                f"Продолжить с точки 2?",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("▶️ Продолжить (точка 2)", callback_data=f"room_height_continue_{room_id}")],
+                    [InlineKeyboardButton("🔄 Начать заново", callback_data=f"room_height_ask_{room_id}")],
+                    [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+            return
+        else:
+            # Ничего не введено — начинаем с точки 1
+            context.user_data['height_room_id'] = room_id
+            context.user_data['height_step'] = 1
+            context.user_data['height_bottom'] = None
+            context.user_data['height_middle'] = None
+            context.user_data['height_top'] = None
+            context.user_data['waiting_for'] = 'room_height_point'
+            await _show_height_step(query, context, room_id, None, step=1)
+            return
+
+    # Продолжить с точки 2 (после возврата в комнату)
+    if data.startswith("room_height_continue_"):
+        room_id = int(data.replace("room_height_continue_", ""))
+        room = get_room(room_id)
+        h_bottom = room.get('height_bottom') if room else None
+        h_middle = room.get('height_middle') if room else None
+        context.user_data['height_room_id'] = room_id
+        context.user_data['height_bottom'] = h_bottom
+        context.user_data['height_middle'] = h_middle
+        context.user_data['waiting_for'] = 'room_height_point'
+        if h_bottom and not h_middle:
+            # С точки 2
+            context.user_data['height_step'] = 2
+            caption = (
+                f"✅ *Точка 1 (центр):* {h_bottom} см\n\n"
+                f"📏 *Высота — шаг 2 из 3*\n\n"
+                f"📍 *Точка 2 — у ЛЕВОГО угла*\n\n"
+                f"Перейди к левому углу (у левой стены).\n\n"
+                f"*Как замерить:*\n"
+                f"1. ⚙️ Проверь режим дальномера — *«от задней стенки»*\n"
+                f"2. Приложи к полу, наведи на потолок\n"
+                f"3. Нажми — получишь цифру\n"
+                f"4. Введи в СМ\n\n"
+                f"_Например: 272_"
+            )
+            kb_extra = [
+                [InlineKeyboardButton("✅ Все три одинаковые", callback_data=f"room_height_same_{room_id}")],
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+            ]
+            await _send_height_scheme(query, context, room_id, 2, caption, kb_extra)
+        elif h_bottom and h_middle:
+            # С точки 3
+            context.user_data['height_step'] = 3
+            caption = (
+                f"✅ *Точка 2 (левый угол):* {h_middle} см\n\n"
+                f"📏 *Высота — шаг 3 из 3*\n\n"
+                f"📍 *Точка 3 — у ПРАВОГО угла*\n\n"
+                f"Перейди к правому углу (у правой стены).\n\n"
+                f"*Как замерить:*\n"
+                f"1. ⚙️ Проверь режим дальномера — «от задней стенки»\n"
+                f"2. Приложи к полу, наведи на потолок\n"
+                f"3. Нажми — получишь цифру\n"
+                f"4. Введи в СМ\n\n"
+                f"_Например: 271_"
+            )
+            await _send_height_scheme(query, context, room_id, 3, caption)
+        else:
+            await _show_height_step(query, context, room_id, None, step=1)
         return
 
     # Выбор инструмента → инструкция + экран высоты
@@ -176,17 +291,47 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await _show_height_step(query, context, room_id, method, step=1)
         return
 
-    # Ввод высоты потолка
+    # Кнопка «Все три одинаковые» — сразу записываем все 3 = точке 1
     if data.startswith("room_height_same_"):
         room_id = int(data.replace("room_height_same_", ""))
-        context.user_data['height_room_id'] = room_id
-        context.user_data['waiting_for'] = 'room_height_same'
-        context.user_data['height_step'] = 'same'
-        await query.edit_message_text(
-            "📏 *Высота потолка*\n\n"
-            "Одна цифра — если везде одинаково.\n\n"
-            "Введи в СМ:",
-            parse_mode=ParseMode.MARKDOWN
+        # Значение точки 1 (центра) — уже сохранено в height_bottom
+        center = context.user_data.get('height_bottom') or 0
+        if not center:
+            # Если точки 1 нет — просим ввести одну цифру (старый сценарий)
+            context.user_data['height_room_id'] = room_id
+            context.user_data['waiting_for'] = 'room_height_same'
+            context.user_data['height_step'] = 'same'
+            # Удаляем фото-сообщение и отправляем текстовое
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            await query.message.chat.send_message(
+                "📏 *Высота потолка*\n\n"
+                "Введи одну цифру в СМ:",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        # Записываем все три = center
+        from core.rooms import update_room
+        update_room(room_id, height=center, height_bottom=center, height_middle=center, height_top=center)
+        # Чистим состояние
+        for k in ['waiting_for', 'height_room_id', 'height_step',
+                  'height_bottom', 'height_middle', 'height_top']:
+            context.user_data[k] = None
+        # Удаляем фото и отправляем итог
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.chat.send_message(
+            f"✅ *Высота потолка: {center} см* (везде одинаково)\n\n"
+            f"📐 Теперь можно начать обход стен по часовой стрелке.",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📐 Начать обход стен", callback_data=f"room_measures_{room_id}")],
+                [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+            ])
         )
         return
 
@@ -647,6 +792,113 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def handle_measure_input(update, context):
     """Пошаговый ввод: 1) длина, 2) высота/ширина."""
+    step = context.user_data.get('waiting_for')
+    
+    # === ВЫСОТА ПОТОЛКА — отдельная ветка (не требует measure_room_id) ===
+    if step in ('room_height_point', 'room_height_same'):
+        room_id = context.user_data.get('height_room_id')
+        if not room_id:
+            await update.message.reply_text("❌ Потерялась комната, начни заново")
+            return
+        text_val = (update.message.text or '').strip().replace(',', '.')
+        try:
+            val = float(text_val)
+        except ValueError:
+            await update.message.reply_text(
+                "❌ Нужно число. Например: `270`",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        # === ОБРАБОТКА ТОЧЕК ВЫСОТЫ ===
+        if step == 'room_height_same':
+            from core.rooms import update_room
+            update_room(room_id, height=val, height_bottom=val, height_middle=val, height_top=val)
+            for k in ['waiting_for', 'height_room_id', 'height_step', 'height_bottom', 'height_middle', 'height_top']:
+                context.user_data[k] = None
+            await update.message.reply_text(
+                f"✅ *Высота потолка:* {val} см\n\n"
+                f"📐 Теперь можно начать обход стен по часовой стрелке.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📐 Начать обход стен", callback_data=f"room_measures_{room_id}")],
+                    [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+            return
+        # step == 'room_height_point'
+        point = context.user_data.get('height_step') or 1
+        if point == 1:
+            context.user_data['height_bottom'] = val
+            context.user_data['height_step'] = 2
+            # Сохраняем сразу в БД (для восстановления после выхода)
+            from core.rooms import update_room
+            update_room(room_id, height_bottom=val)
+            caption = (
+                f"✅ *Точка 1 (центр):* {val} см\n\n"
+                f"📏 *Высота — шаг 2 из 3*\n\n"
+                f"📍 *Точка 2 — у ЛЕВОГО угла*\n\n"
+                f"Перейди к левому углу (у левой стены).\n\n"
+                f"*Как замерить:*\n"
+                f"1. ⚙️ Проверь режим дальномера — *«от задней стенки»*\n"
+                f"2. Приложи к полу, наведи на потолок\n"
+                f"3. Нажми — получишь цифру\n"
+                f"4. Введи в СМ\n\n"
+                f"_Например: 272_"
+            )
+            kb_extra = [
+                [InlineKeyboardButton("✅ Все три одинаковые", callback_data=f"room_height_same_{room_id}")],
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+            ]
+            await _send_height_scheme(update, context, room_id, 2, caption, kb_extra)
+            return
+        if point == 2:
+            context.user_data['height_middle'] = val
+            context.user_data['height_step'] = 3
+            # Сохраняем сразу в БД
+            from core.rooms import update_room
+            update_room(room_id, height_middle=val)
+            caption = (
+                f"✅ *Точка 2 (левый угол):* {val} см\n\n"
+                f"📏 *Если потолок везде одинаковый* — нажми кнопку ниже.\n"
+                f"Иначе — замерь *точку 3 (правый угол)*.\n\n"
+                f"📍 *Точка 3 — у ПРАВОГО угла*\n\n"
+                f"*Как замерить:*\n"
+                f"1. ⚙️ Проверь режим дальномера — *«от задней стенки»*\n"
+                f"2. Приложи к полу, наведи на потолок\n"
+                f"3. Нажми — получишь цифру\n"
+                f"4. Введи в СМ\n\n"
+                f"_Например: 271_"
+            )
+            await _send_height_scheme(update, context, room_id, 3, caption)
+            return
+        if point == 3:
+            center = context.user_data.get('height_bottom') or 0
+            left = context.user_data.get('height_middle') or 0
+            right = val
+            avg = round((center + left + right) / 3, 1)
+            dev = round(max(center, left, right) - min(center, left, right), 1)
+            from core.rooms import update_room
+            update_room(room_id, height=avg, height_bottom=center, height_middle=left, height_top=right)
+            for k in ['waiting_for', 'height_room_id', 'height_step', 'height_bottom', 'height_middle', 'height_top']:
+                context.user_data[k] = None
+            await update.message.reply_text(
+                f"✅ *Все точки замерены!*\n\n"
+                f"📊 *Итог:*\n"
+                f"• Точка 1 (центр): {center} см\n"
+                f"• Точка 2 (левый угол): {left} см\n"
+                f"• Точка 3 (правый угол): {right} см\n\n"
+                f"Средняя: *{avg} см*\n"
+                f"Отклонение: *{dev} см*\n\n"
+                f"📐 Теперь можно начать обход стен по часовой стрелке.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📐 Начать обход стен", callback_data=f"room_measures_{room_id}")],
+                    [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+            return
+    
+    # === СТАРАЯ ЛОГИКА (замеры стен, ниши, углы) ===
     room_id = context.user_data.get('measure_room_id')
     category = context.user_data.get('measure_category')
     if not room_id or not category:
@@ -689,6 +941,9 @@ async def handle_measure_input(update, context):
         if point == 1:
             context.user_data['height_bottom'] = val
             context.user_data['height_step'] = 2
+            # Сохраняем сразу в БД (для восстановления после выхода)
+            from core.rooms import update_room
+            update_room(room_id, height_bottom=val)
             from core.rooms import update_room
             room_id = context.user_data.get('height_room_id')
             await update.message.reply_text(
@@ -702,6 +957,9 @@ async def handle_measure_input(update, context):
         if point == 2:
             context.user_data['height_middle'] = val
             context.user_data['height_step'] = 3
+            # Сохраняем сразу в БД
+            from core.rooms import update_room
+            update_room(room_id, height_middle=val)
             caption = (
                 f"✅ *Точка 2 (левый угол):* {val} см\n\n"
                 f"📏 *Высота — шаг 3 из 3*\n\n"
@@ -1031,7 +1289,7 @@ def _room_height_scheme(step):
     return scheme
 
 
-async def _send_height_scheme(update, context, room_id, step, caption):
+async def _send_height_scheme(update, context, room_id, step, caption, kb_extra=None):
     """Отправляет PNG-схему + текст-подпись.
     Принимает либо Update, либо CallbackQuery.
     """
@@ -1049,9 +1307,12 @@ async def _send_height_scheme(update, context, room_id, step, caption):
     # Путь к схеме
     base = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     png_path = os.path.join(base, "docs", "images", f"height_scheme_step{step}.png")
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
-    ])
+    if kb_extra:
+        kb = InlineKeyboardMarkup(kb_extra)
+    else:
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+        ])
     if os.path.exists(png_path):
         try:
             with open(png_path, "rb") as f:
