@@ -1,12 +1,13 @@
 """Watchdog — следит за ботом и перезапускает, если упал."""
 import subprocess
+import sys
 import time
 import os
 from datetime import datetime
 
 CHECK_INTERVAL = 60  # секунд
-BOT_CMD = ['python', 'bot.py']
-DASHBOARD_CMD = ['python', 'web_dashboard.py']
+BOT_CMD = [sys.executable, 'bot.py']
+DASHBOARD_CMD = [sys.executable, 'web_dashboard.py']
 WORKSPACE = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(WORKSPACE, 'watchdog.log')
 
