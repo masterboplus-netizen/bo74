@@ -61,12 +61,12 @@ def draw_height_scheme(step=1, room_name="Комната"):
     points = {
         1: (x1 + 100, y1 + 120),           # у левой стены
         2: (x2 - 100, y1 + 120),           # у правой стены
-        3: ((x1 + x2)//2, (y1 + y2)//2 + 20),  # центр
+        3: ((x1 + x2)//2, (y1 + y2)//2),   # ровно центр
     }
     labels = {
-        1: ("Точка 1", "левая стена"),
-        2: ("Точка 2", "правая стена"),
-        3: ("Точка 3", "центр"),
+        1: ("Точка 1", "левая стена", "right"),
+        2: ("Точка 2", "правая стена", "left"),
+        3: ("Точка 3", "центр", "right"),
     }
 
     for num, (px, py) in points.items():
@@ -75,17 +75,26 @@ def draw_height_scheme(step=1, room_name="Комната"):
         d.ellipse([(px-r, py-r), (px+r, py+r)], fill=color, outline="black", width=2)
         # Номер внутри
         d.text((px, py), str(num), fill="white", font=font, anchor="mm")
-        # Подпись — справа от точки
-        lab_title, lab_sub = labels[num]
-        d.text((px + r + 8, py - 10), lab_title, fill="black", font=font_sm, anchor="lm")
-        d.text((px + r + 8, py + 12), lab_sub, fill="gray", font=font_sm, anchor="lm")
+        # Подпись — с нужной стороны
+        lab_title, lab_sub, side = labels[num]
+        if side == "right":
+            # Справа от точки
+            tx = px + r + 10
+            ax = "lm"
+        else:
+            # Слева от точки
+            tx = px - r - 10
+            ax = "rm"
+        d.text((tx, py - 10), lab_title, fill="black", font=font_sm, anchor=ax)
+        d.text((tx, py + 12), lab_sub, fill="gray", font=font_sm, anchor=ax)
 
-    # Стрелка обхода: от двери до точки 1 (простая прямая)
-    d.line([(mid, y2 - 20), (points[1][0], y2 - 20)], fill="#3366CC", width=3)
-    d.line([(points[1][0], y2 - 20), (points[1][0], points[1][1] + 30)], fill="#3366CC", width=3)
-    # Наконечник
+    # Стрелка обхода: от двери к точке 1 — прямая диагональ
     px1, py1 = points[1]
-    d.polygon([(px1-8, py1+40), (px1+8, py1+40), (px1, py1+22)], fill="#3366CC")
+    start = (mid, y2 - 10)
+    # Линия
+    d.line([start, (px1, py1 + 30)], fill="#3366CC", width=4)
+    # Наконечник (стрелка вверх к точке)
+    d.polygon([(px1-10, py1+40), (px1+10, py1+40), (px1, py1+18)], fill="#3366CC")
 
     # Сохраняем
     out_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "docs", "images")
