@@ -253,8 +253,29 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         context.user_data['measure_category'] = category
         context.user_data['measure_room_id'] = room_id
 
+        # Для стен — сначала спрашиваем позицию
+        if category == 'wall':
+            positions = [
+                ('напротив', '⬆️ Напротив (перед тобой)'),
+                ('слева', '⬅️ Слева'),
+                ('справа', '➡️ Справа'),
+                ('у входа', '⬇️ У входа (за спиной)'),
+                ('слева дальняя', '↖️ Слева дальняя'),
+                ('справа дальняя', '↗️ Справа дальняя'),
+            ]
+            buttons = [[InlineKeyboardButton(label, callback_data=f"wall_pos_{room_id}_{code}")]
+                       for code, label in positions]
+            buttons.append([InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_measures_{room_id}")])
+            await query.edit_message_text(
+                f"🧱 *Новая стена*\n\n"
+                f"Встань в дверном проёме, лицом в комнату.\n"
+                f"Где эта стена?",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+            return
+
         cat_info = {
-            'wall':    ('📏 Длина стены', 'горизонталь, от угла до угла'),
             'floor':   ('📏 Длина пола',  'горизонталь, от стены до стены'),
             'ceiling': ('📏 Длина потолка','горизонталь'),
             'window':  ('📏 Ширина окна', 'горизонталь'),
@@ -273,6 +294,78 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_measures_{room_id}")]
             ])
+        )
+        return
+
+    # Позиция стены → спрашиваем про угол
+    if data.startswith("wall_pos_"):
+        parts = data.replace("wall_pos_", "").split("_", 1)
+        room_id = int(parts[0])
+        pos = parts[1] if len(parts) > 1 else 'напротив'
+        context.user_data['measure_room_id'] = room_id
+        context.user_data['measure_category'] = 'wall'
+        context.user_data['wall_pos'] = pos
+        await query.edit_message_text(
+            f"🧱 *Стена {pos}*\n\n"
+            f"Стена ровная или есть закругление?",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Ровная", callback_data=f"wall_angle_none_{room_id}")],
+                [InlineKeyboardButton("🔄 Закругление / кривой угол", callback_data=f"wall_angle_rounded_{room_id}")],
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_measures_{room_id}")]
+            ])
+        )
+        return
+
+    # Ровная → сразу длина
+    if data.startswith("wall_angle_none_"):
+        room_id = int(data.replace("wall_angle_none_", ""))
+        context.user_data['waiting_for'] = 'measure_first_dim'
+        await query.edit_message_text(
+            "📏 *Шаг 1 из 2*\n\n📏 Длина: __ м",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # Закругление → методы
+    if data.startswith("wall_angle_rounded_"):
+        room_id = int(data.replace("wall_angle_rounded_", ""))
+        await query.edit_message_text(
+            "🔄 *Закругление / кривой угол*\n\n"
+            "Как замерить угол?\n\n"
+            "📏 *60-80-100 (рулетка)*\n"
+            "Отмерь 60 и 80 см, замерь диагональ\n"
+            "_Идеал: 100 см_\n\n"
+            "📏 *100-100*\n"
+            "Отмерь по 100 см, замерь расстояние\n"
+            "_Идеал: 141 см_",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📏 60-80-100", callback_data=f"wall_method_60_{room_id}")],
+                [InlineKeyboardButton("📏 100-100", callback_data=f"wall_method_100_{room_id}")],
+                [InlineKeyboardButton("✏️ Угол в °", callback_data=f"wall_method_deg_{room_id}")],
+                [InlineKeyboardButton("⏭ Пропустить", callback_data=f"wall_angle_none_{room_id}")],
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_measures_{room_id}")]
+            ])
+        )
+        return
+
+    # Метод → просим значение
+    if data.startswith("wall_method_"):
+        parts = data.replace("wall_method_", "").split("_", 1)
+        method = parts[0]
+        room_id = int(parts[1])
+        context.user_data['angle_method'] = method
+        if method == '60':
+            prompt = "📏 Диагональ (60-80-100):\n_Идеал 100 см_\n\nВведи в см:"
+        elif method == '100':
+            prompt = "📏 Расстояние (100-100):\n_Идеал 141 см_\n\nВведи в см:"
+        else:
+            prompt = "📐 Угол в градусах (например 93):"
+        context.user_data['waiting_for'] = 'wall_angle_value'
+        await query.edit_message_text(
+            prompt,
+            parse_mode=ParseMode.MARKDOWN
         )
         return
 
@@ -315,6 +408,41 @@ async def handle_measure_input(update, context):
 
     step = context.user_data.get('waiting_for')
 
+    # Угол стены: ввод значения
+    if step == 'wall_angle_value':
+        method = context.user_data.get('angle_method', '60')
+        angle_deg = None
+        if method == '60':
+            # 60-80-100: диагональ
+            import math
+            cos_val = (60*60 + 80*80 - val*val) / (2 * 60 * 80)
+            cos_val = max(-1, min(1, cos_val))
+            angle_deg = round(math.degrees(math.acos(cos_val)), 1)
+        elif method == '100':
+            # 100-100
+            import math
+            cos_val = (100*100 + 100*100 - val*val) / (2 * 100 * 100)
+            cos_val = max(-1, min(1, cos_val))
+            angle_deg = round(math.degrees(math.acos(cos_val)), 1)
+        else:
+            # напрямую градусы
+            angle_deg = val
+
+        context.user_data['angle_value'] = angle_deg
+        context.user_data['wall_angle_diagonal'] = val
+        context.user_data['waiting_for'] = 'measure_first_dim'
+
+        deviation = round(abs(angle_deg - 90), 1)
+        sign = '+' if angle_deg > 90 else '-'
+        await update.message.reply_text(
+            f"✅ Угол: *{angle_deg}°*\n"
+            f"_Отклонение от прямого: {sign}{deviation}°_\n\n"
+            f"Теперь размеры стены:\n"
+            f"📏 Длина: __ м",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
     # Шаг 1: первая величина (длина)
     if step == 'measure_first_dim':
         context.user_data['measure_first_value'] = val
@@ -347,8 +475,11 @@ async def handle_measure_input(update, context):
         existing = get_measures(room_id, category=category)
 
         if category == 'wall':
-            idx2 = len(existing)
-            label = chr(ord('A') + idx2) if idx2 < 26 else f"Стена{idx2+1}"
+            pos = context.user_data.get('wall_pos') or 'напротив'
+            label = f"Стена {pos}"
+            av = context.user_data.get('angle_value')
+            if av:
+                label += f" ({av}°)"
         elif category == 'floor':
             label = 'Пол'
         elif category == 'ceiling':
@@ -364,6 +495,18 @@ async def handle_measure_input(update, context):
         if category in ('wall',):
             kwargs['length'] = first
             kwargs['height'] = val
+            pos = context.user_data.get('wall_pos')
+            if pos:
+                kwargs['wall_pos'] = pos
+            av = context.user_data.get('angle_value')
+            if av:
+                kwargs['angle_value'] = av
+            am = context.user_data.get('angle_method')
+            if am:
+                kwargs['angle_method'] = am
+            ad = context.user_data.get('wall_angle_diagonal')
+            if ad:
+                kwargs['angle_diagonal_cm'] = ad
         elif category in ('floor', 'ceiling'):
             kwargs['length'] = first
             kwargs['width'] = val

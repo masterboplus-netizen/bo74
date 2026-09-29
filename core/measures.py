@@ -17,15 +17,22 @@ MEASURE_CATEGORIES = [
 
 def add_measure(room_id, category, label=None, length=None, width=None,
                 height=None, depth=None, angle=None, unit="м", note=None,
-                tenant_id=1, created_by=None):
+                tenant_id=1, created_by=None,
+                wall_pos=None, angle_value=None, angle_method=None,
+                angle_diagonal_cm=None, has_rounded=None, radius=None,
+                rounded_corner=None):
     """Добавляет размер. Возвращает measure_id."""
     return commit(
         "INSERT INTO room_measures "
         "(room_id, category, label, length, width, height, depth, angle, "
-        "unit, note, tenant_id, created_by) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "unit, note, tenant_id, created_by, "
+        "wall_pos, angle_value, angle_method, angle_diagonal_cm, "
+        "has_rounded, radius, rounded_corner) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (room_id, category, label, length, width, height, depth, angle,
-         unit, note, tenant_id, created_by)
+         unit, note, tenant_id, created_by,
+         wall_pos, angle_value, angle_method, angle_diagonal_cm,
+         has_rounded, radius, rounded_corner)
     )
 
 
