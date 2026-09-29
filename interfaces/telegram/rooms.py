@@ -315,21 +315,12 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         context.user_data['measure_room_id'] = room_id
         context.user_data['measure_category'] = 'wall'
         context.user_data['wall_pos'] = pos
-        context.user_data['wall_rounded'] = None
-        context.user_data['wall_bottom'] = None
-        context.user_data['wall_middle'] = None
-        context.user_data['wall_top'] = None
-        context.user_data['waiting_for'] = 'measure_first_dim'
-        await query.edit_message_text(
-            f"🧱 *Стена {pos}*\n\n"
-            f"*Шаг 1 из 2*\n\n"
-            f"📏 Длина: __ м\n"
-            f"_(горизонталь, от угла до угла)_",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")]
-            ])
-        )
+        # Инициализируем флаги (если ещё нет)
+        context.user_data['wall_flags'] = {
+            'niche': False, 'rounded': False,
+            'wavy': False, 'hidden': False
+        }
+        await _show_wall_flags(query, context, room_id, pos)
         return
 
     if data.startswith("wall_pos_"):
@@ -484,6 +475,54 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
 
+    # Toggle галочки особенностей стены
+    if data.startswith("wall_flag_"):
+        parts = data.replace("wall_flag_", "").rsplit("_", 1)
+        flag = parts[0]
+        room_id = int(parts[1])
+        flags = context.user_data.get('wall_flags') or {
+            'niche': False, 'rounded': False, 'wavy': False, 'hidden': False
+        }
+        flags[flag] = not flags.get(flag, False)
+        context.user_data['wall_flags'] = flags
+        pos = context.user_data.get('wall_pos') or 'слева'
+        await _show_wall_flags(query, context, room_id, pos)
+        return
+
+    # Готово → идём по выбранным особенностям
+    if data.startswith("wall_flags_done_"):
+        room_id = int(data.replace("wall_flags_done_", ""))
+        flags = context.user_data.get('wall_flags') or {}
+        # Порядок: сначала ниша, потом закругление, потом разная высота, потом скрытые
+        if flags.get('niche'):
+            context.user_data['waiting_for'] = 'wall_niche_count'
+            await query.edit_message_text(
+                "🕳 *Сколько нишей на этой стене?*",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("1", callback_data=f"wall_niche_count_1_{room_id}")],
+                    [InlineKeyboardButton("2", callback_data=f"wall_niche_count_2_{room_id}")],
+                    [InlineKeyboardButton("3", callback_data=f"wall_niche_count_3_{room_id}")],
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")]
+                ])
+            )
+            return
+        if flags.get('rounded'):
+            context.user_data['waiting_for'] = 'measure_first_dim'
+            await query.edit_message_text(
+                "🔄 *Закругление*\n\n"
+                "📏 *Длина прямой части* (без закругления): __ м",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        # Ничего не выбрано → стандартные размеры
+        context.user_data['waiting_for'] = 'measure_first_dim'
+        await query.edit_message_text(
+            "📏 *Длина стены:* __ м",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
     # Фото (заглушка)
     if data.startswith("room_photos_"):
         room_id = int(data.replace("room_photos_", ""))
@@ -558,6 +597,59 @@ async def handle_measure_input(update, context):
         )
         context.user_data['waiting_for'] = 'measure_first_dim'
         return
+
+    # Ниша: ширина → глубина → высота
+    if step == 'wall_niche_width':
+        current = context.user_data.get('wall_niche_current') or 1
+        context.user_data['wall_niche_temp'] = {'width': val}
+        context.user_data['waiting_for'] = 'wall_niche_depth'
+        await update.message.reply_text(
+            f"🕳 *Ниша {current}*\n\n"
+            f"📏 Глубина (в стене): __ м",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    if step == 'wall_niche_depth':
+        temp = context.user_data.get('wall_niche_temp') or {}
+        temp['depth'] = val
+        context.user_data['wall_niche_temp'] = temp
+        context.user_data['waiting_for'] = 'wall_niche_height'
+        await update.message.reply_text(
+            f"📏 Высота ниши: __ м",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    if step == 'wall_niche_height':
+        temp = context.user_data.get('wall_niche_temp') or {}
+        temp['height'] = val
+        niches = context.user_data.get('wall_niches') or []
+        niches.append(temp)
+        context.user_data['wall_niches'] = niches
+        total = context.user_data.get('wall_niche_count') or 1
+        current = context.user_data.get('wall_niche_current') or 1
+
+        if current < total:
+            context.user_data['wall_niche_current'] = current + 1
+            context.user_data['wall_niche_temp'] = {}
+            context.user_data['waiting_for'] = 'wall_niche_width'
+            await update.message.reply_text(
+                f"✅ Ниша {current} записана\n\n"
+                f"🕳 *Ниша {current + 1} из {total}*\n\n"
+                f"📏 Ширина: __ м",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        else:
+            # Все ниши записаны → длина стены
+            context.user_data['waiting_for'] = 'measure_first_dim'
+            await update.message.reply_text(
+                f"✅ Все ниши записаны\n\n"
+                f"📏 *Длина стены* (общая, включая ниши): __ м",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
 
     # Угол стены: ввод значения
     if step == 'wall_angle_value':
@@ -750,3 +842,27 @@ async def reask_wall_question(update, context):
         ])
     )
     return True
+
+
+
+async def _show_wall_flags(query, context, room_id, pos):
+    """Показывает экран с галочками особенностей стены."""
+    flags = context.user_data.get('wall_flags') or {}
+    f_niche = '✅' if flags.get('niche') else '⬜'
+    f_rounded = '✅' if flags.get('rounded') else '⬜'
+    f_wavy = '✅' if flags.get('wavy') else '⬜'
+    f_hidden = '✅' if flags.get('hidden') else '⬜'
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"{f_niche} С нишей", callback_data=f"wall_flag_niche_{room_id}")],
+        [InlineKeyboardButton(f"{f_rounded} С закруглением", callback_data=f"wall_flag_rounded_{room_id}")],
+        [InlineKeyboardButton(f"{f_wavy} Разная по высоте", callback_data=f"wall_flag_wavy_{room_id}")],
+        [InlineKeyboardButton(f"{f_hidden} Скрытые коммуникации", callback_data=f"wall_flag_hidden_{room_id}")],
+        [InlineKeyboardButton("✅ Готово", callback_data=f"wall_flags_done_{room_id}")],
+        [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")]
+    ])
+    await query.edit_message_text(
+        f"🧱 *Стена {pos}*\n\n"
+        f"Отметь особенности (можно несколько):",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=kb
+    )

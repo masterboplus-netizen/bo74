@@ -2180,7 +2180,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Размеры комнаты
-    if context.user_data.get('waiting_for') in ('measure_first_dim', 'measure_second_dim', 'wall_angle_value'):
+    if context.user_data.get('waiting_for') in ('measure_first_dim', 'measure_second_dim', 'wall_angle_value', 'wall_niche_width', 'wall_niche_depth', 'wall_niche_height'):
         from interfaces.telegram.rooms import handle_measure_input
         await handle_measure_input(update, context)
         return
