@@ -12,7 +12,7 @@ DEFAULT_ROOMS = [
 ]
 
 
-def create_room(object_id, name, is_default=False, order_num=0, tenant_id=1):
+def create_room(object_id, name, is_default=False, order_num=0, tenant_id=1, room_type='rough'):
     """Создаёт комнату. Возвращает room_id или None если уже есть."""
     name = (name or "").strip()
     if not name:
@@ -24,9 +24,9 @@ def create_room(object_id, name, is_default=False, order_num=0, tenant_id=1):
     if existing:
         return existing['id']
     return commit(
-        "INSERT INTO rooms (object_id, name, is_default, order_num, tenant_id) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (object_id, name, 1 if is_default else 0, order_num, tenant_id)
+        "INSERT INTO rooms (object_id, name, is_default, order_num, tenant_id, room_type) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (object_id, name, 1 if is_default else 0, order_num, tenant_id, room_type)
     )
 
 
@@ -34,7 +34,8 @@ def get_room(room_id):
     """Возвращает комнату по id."""
     row = fetchone(
         "SELECT id, object_id, name, is_default, order_num, note, "
-        "area_sqm, height, tenant_id, created_at "
+        "area_sqm, height, tenant_id, created_at, room_type, "
+        "height_bottom, height_middle, height_top "
         "FROM rooms WHERE id = ?",
         (room_id,)
     )
@@ -62,7 +63,8 @@ def get_room_by_name(object_id, name):
     return dict(row) if row else None
 
 
-def update_room(room_id, name=None, note=None, area_sqm=None, height=None):
+def update_room(room_id, name=None, note=None, area_sqm=None, height=None,
+                room_type=None, height_bottom=None, height_middle=None, height_top=None):
     """Обновляет комнату. None — не трогать."""
     fields, params = [], []
     if name is not None:
@@ -73,6 +75,14 @@ def update_room(room_id, name=None, note=None, area_sqm=None, height=None):
         fields.append("area_sqm = ?"); params.append(area_sqm)
     if height is not None:
         fields.append("height = ?"); params.append(height)
+    if room_type is not None:
+        fields.append("room_type = ?"); params.append(room_type)
+    if height_bottom is not None:
+        fields.append("height_bottom = ?"); params.append(height_bottom)
+    if height_middle is not None:
+        fields.append("height_middle = ?"); params.append(height_middle)
+    if height_top is not None:
+        fields.append("height_top = ?"); params.append(height_top)
     if not fields:
         return False
     fields.append("updated_at = CURRENT_TIMESTAMP")

@@ -88,7 +88,7 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
     _room_exclude = ("room_add_", "room_del_", "room_delok_",
                      "room_tasks_", "room_measures_", "room_measure_add_", "room_measure_cat_",
                      "room_comms_", "room_objects_", "room_photos_",
-                     "room_conflicts_", "room_forecast_")
+                     "room_conflicts_", "room_forecast_", "room_type_")
     if data.startswith("room_") and not data.startswith(_room_exclude):
         try:
             room_id = int(data.replace("room_", ""))
@@ -111,6 +111,21 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
                 [InlineKeyboardButton("⬅️ Отмена", callback_data=f"rooms_list_obj_{object_id}")]
             ])
         )
+        return
+
+    # Выбор типа помещения → создание
+    if data.startswith("room_type_"):
+        parts = data.replace("room_type_", "").split("_", 1)
+        object_id = int(parts[0])
+        room_type = parts[1]
+        name = context.user_data.get('room_name_pending') or 'Комната'
+        new_room_id = create_room(object_id, name, room_type=room_type)
+        if new_room_id:
+            context.user_data['room_name_pending'] = None
+            context.user_data['waiting_for'] = None
+            await show_rooms_list(update, context, object_id)
+        else:
+            await query.edit_message_text("❌ Не удалось создать комнату")
         return
 
     # Удалить комнату — подтверждение
@@ -158,8 +173,10 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         measures = get_measures(room_id)
         if not measures:
             await query.edit_message_text(
-                "📐 Размеров пока нет.",
+                "📐 Размеров пока нет.\n\nНажми «➕ Добавить» — Бо поведёт тебя по шагам замеров.",
+                parse_mode=ParseMode.MARKDOWN,
                 reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("➕ Добавить размер", callback_data=f"room_measure_add_{room_id}")],
                     [InlineKeyboardButton("⬅️ Назад", callback_data=f"room_{room_id}")]
                 ])
             )
@@ -475,6 +492,22 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
 
+    # Сколько нишей → запросы по каждой
+    if data.startswith("wall_niche_count_"):
+        parts = data.replace("wall_niche_count_", "").split("_", 1)
+        count = int(parts[0])
+        room_id = int(parts[1])
+        context.user_data['wall_niche_count'] = count
+        context.user_data['wall_niche_current'] = 1
+        context.user_data['wall_niches'] = []
+        context.user_data['waiting_for'] = 'wall_niche_width'
+        await query.edit_message_text(
+            f"🕳 *Ниша 1 из {count}*\n\n"
+            f"📏 Ширина (по горизонтали) в СМ: __",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
     # Toggle галочки особенностей стены
     if data.startswith("wall_flag_"):
         parts = data.replace("wall_flag_", "").rsplit("_", 1)
@@ -493,34 +526,31 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
     if data.startswith("wall_flags_done_"):
         room_id = int(data.replace("wall_flags_done_", ""))
         flags = context.user_data.get('wall_flags') or {}
-        # Порядок: сначала ниша, потом закругление, потом разная высота, потом скрытые
+        # Запоминаем порядок оставшихся шагов
+        steps = []
         if flags.get('niche'):
-            context.user_data['waiting_for'] = 'wall_niche_count'
-            await query.edit_message_text(
-                "🕳 *Сколько нишей на этой стене?*",
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("1", callback_data=f"wall_niche_count_1_{room_id}")],
-                    [InlineKeyboardButton("2", callback_data=f"wall_niche_count_2_{room_id}")],
-                    [InlineKeyboardButton("3", callback_data=f"wall_niche_count_3_{room_id}")],
-                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")]
-                ])
-            )
-            return
+            steps.append('niche')
         if flags.get('rounded'):
+            steps.append('rounded')
+        if flags.get('wavy'):
+            steps.append('wavy')
+        if flags.get('hidden'):
+            steps.append('hidden')
+        context.user_data['wall_remaining_steps'] = steps
+
+        # Первый шаг
+        if not steps:
+            # Ничего не выбрано → сразу длина
             context.user_data['waiting_for'] = 'measure_first_dim'
             await query.edit_message_text(
-                "🔄 *Закругление*\n\n"
-                "📏 *Длина прямой части* (без закругления): __ м",
+                "📏 *Длина стены* в СМ: __",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
-        # Ничего не выбрано → стандартные размеры
-        context.user_data['waiting_for'] = 'measure_first_dim'
-        await query.edit_message_text(
-            "📏 *Длина стены:* __ м",
-            parse_mode=ParseMode.MARKDOWN
-        )
+
+        first = steps[0]
+        context.user_data['wall_remaining_steps'] = steps[1:]
+        await _do_wall_step(query, context, room_id, first)
         return
 
     # Фото (заглушка)
@@ -598,32 +628,32 @@ async def handle_measure_input(update, context):
         context.user_data['waiting_for'] = 'measure_first_dim'
         return
 
-    # Ниша: ширина → глубина → высота
+    # Ниша: ширина → глубина → высота (ввод в СМ!)
     if step == 'wall_niche_width':
         current = context.user_data.get('wall_niche_current') or 1
-        context.user_data['wall_niche_temp'] = {'width': val}
+        context.user_data['wall_niche_temp'] = {'width': round(val / 100, 4)}
         context.user_data['waiting_for'] = 'wall_niche_depth'
         await update.message.reply_text(
             f"🕳 *Ниша {current}*\n\n"
-            f"📏 Глубина (в стене): __ м",
+            f"📏 Глубина (в стене) в СМ: __",
             parse_mode=ParseMode.MARKDOWN
         )
         return
 
     if step == 'wall_niche_depth':
         temp = context.user_data.get('wall_niche_temp') or {}
-        temp['depth'] = val
+        temp['depth'] = round(val / 100, 4)
         context.user_data['wall_niche_temp'] = temp
         context.user_data['waiting_for'] = 'wall_niche_height'
         await update.message.reply_text(
-            f"📏 Высота ниши: __ м",
+            f"📏 Высота ниши в СМ: __",
             parse_mode=ParseMode.MARKDOWN
         )
         return
 
     if step == 'wall_niche_height':
         temp = context.user_data.get('wall_niche_temp') or {}
-        temp['height'] = val
+        temp['height'] = round(val / 100, 4)
         niches = context.user_data.get('wall_niches') or []
         niches.append(temp)
         context.user_data['wall_niches'] = niches
@@ -642,11 +672,18 @@ async def handle_measure_input(update, context):
             )
             return
         else:
-            # Все ниши записаны → длина стены
+            # Все ниши записаны → следующий шаг или длина
+            remaining = context.user_data.get('wall_remaining_steps') or []
+            if remaining:
+                next_step = remaining[0]
+                context.user_data['wall_remaining_steps'] = remaining[1:]
+                await _do_wall_step_next(update, context, room_id, next_step)
+                return
+            # Все шаги пройдены → длина
             context.user_data['waiting_for'] = 'measure_first_dim'
             await update.message.reply_text(
                 f"✅ Все ниши записаны\n\n"
-                f"📏 *Длина стены* (общая, включая ниши): __ м",
+                f"📏 *Длина стены* (общая, включая ниши) в СМ: __",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
@@ -778,24 +815,23 @@ async def handle_measure_input(update, context):
             kwargs['width'] = val
 
         area = first * val
-        # Если это стена — сначала спросим про ровная/закругление/ниша
+
+        # Для стены — СОЗДАЁМ сразу (вопрос про особенности — уже был в начале)
         if category == 'wall':
-            context.user_data['wall_pending'] = {
-                'length': first, 'height': val, 'label': label,
-                'kwargs': kwargs, 'room_id': room_id, 'area': area
-            }
-            context.user_data['waiting_for'] = 'wall_ask_type'
+            add_measure(room_id, category, **kwargs)
+            for k in ['waiting_for', 'measure_room_id', 'measure_category',
+                      'measure_first_value', 'wall_pending', 'wall_pos',
+                      'wall_flags', 'wall_niches', 'wall_niche_count',
+                      'wall_niche_current', 'wall_niche_temp']:
+                context.user_data[k] = None
             await update.message.reply_text(
-                f"✅ Длина: *{first} м*\n"
-                f"✅ Высота: *{val} м*\n"
-                f"Площадь: *{round(area, 2)} м²*\n\n"
-                f"🧱 *Стена ровная или есть особенности?*",
+                f"✅ *{label}*\n"
+                f"Размер: {first} × {val} м\n"
+                f"Площадь: {round(area, 2)} м²",
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("✅ Ровная", callback_data=f"wall_final_none_{room_id}")],
-                    [InlineKeyboardButton("🔄 Закругление / кривой угол", callback_data=f"wall_final_rounded_{room_id}")],
-                    [InlineKeyboardButton("🕳 С нишей", callback_data=f"wall_final_niche_{room_id}")],
-                    [InlineKeyboardButton("📏 Разная по высоте", callback_data=f"wall_final_wavy_{room_id}")]
+                    [InlineKeyboardButton("📐 К размерам", callback_data=f"room_measures_{room_id}")],
+                    [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")]
                 ])
             )
             return
@@ -866,3 +902,67 @@ async def _show_wall_flags(query, context, room_id, pos):
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=kb
     )
+
+
+async def _do_wall_step(query, context, room_id, step):
+    """Обрабатывает один шаг из очереди wall_remaining_steps."""
+    if step == 'niche':
+        context.user_data['waiting_for'] = 'wall_niche_count'
+        await query.edit_message_text(
+            "🕳 *Сколько нишей на этой стене?*",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("1", callback_data=f"wall_niche_count_1_{room_id}")],
+                [InlineKeyboardButton("2", callback_data=f"wall_niche_count_2_{room_id}")],
+                [InlineKeyboardButton("3", callback_data=f"wall_niche_count_3_{room_id}")],
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")]
+            ])
+        )
+        return
+    if step == 'rounded':
+        context.user_data['waiting_for'] = 'wall_rounded_radius'
+        await query.edit_message_text(
+            "🔄 *Закругление*\\n\\n"
+            "📏 Радиус в СМ: __",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+    if step == 'wavy':
+        context.user_data['waiting_for'] = 'wall_wavy_note'
+        await query.edit_message_text(
+            "📏 *Разная по высоте*\\n\\n"
+            "Напиши комментарий (где больше/меньше):",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+    if step == 'hidden':
+        context.user_data['waiting_for'] = 'wall_hidden_note'
+        await query.edit_message_text(
+            "🔧 *Скрытые коммуникации*\\n\\n"
+            "Опиши что и где (трубы, кабели):",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+
+
+async def _do_wall_step_next(update, context, room_id, step):
+    """Как _do_wall_step, но для update.message."""
+    if step == 'rounded':
+        context.user_data['waiting_for'] = 'wall_rounded_radius'
+        await update.message.reply_text(
+            "🔄 *Закругление*\n\n📏 Радиус в СМ: __",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    elif step == 'wavy':
+        context.user_data['waiting_for'] = 'wall_wavy_note'
+        await update.message.reply_text(
+            "📏 *Разная по высоте*\n\nНапиши комментарий:",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    elif step == 'hidden':
+        context.user_data['waiting_for'] = 'wall_hidden_note'
+        await update.message.reply_text(
+            "🔧 *Скрытые коммуникации*\n\nОпиши что и где:",
+            parse_mode=ParseMode.MARKDOWN
+        )
