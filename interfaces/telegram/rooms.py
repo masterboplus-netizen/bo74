@@ -553,6 +553,108 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
             )
         return
 
+    # === ОТМЕНА ДОБАВЛЕНИЯ ПРОЁМА ===
+    if data.startswith("opening_cancel_"):
+        room_id = int(data.replace("opening_cancel_", ""))
+        # Чистим
+        for k in ['opening_room_id', 'opening_type', 'opening_wall_pos',
+                  'opening_width', 'opening_height', 'opening_sill',
+                  'opening_offset_x']:
+            context.user_data[k] = None
+        context.user_data['waiting_for'] = None
+        # Возвращаемся к списку проёмов
+        from core.measures import get_openings, format_opening, OPENING_TYPES
+        openings = get_openings(room_id)
+        room = get_room(room_id)
+        room_name = room['name'] if room else '?'
+
+        text = f"🚪 *Проёмы в комнате «{room_name}»*\n\n"
+        if not openings:
+            text += "_Пока проёмов нет._"
+        else:
+            text += f"Найдено: {len(openings)}\n\n"
+            for i, o in enumerate(openings, 1):
+                text += f"{i}. {format_opening(o)}\n"
+
+        buttons = []
+        for o in openings:
+            label = OPENING_TYPES.get(o.get('opening_type'), '?')
+            buttons.append([InlineKeyboardButton(
+                f"{label} ({o.get('wall_pos') or '?'})",
+                callback_data=f"opening_show_{o['id']}"
+            )])
+        buttons.append([InlineKeyboardButton("➕ Добавить проём", callback_data=f"opening_add_{room_id}")])
+        buttons.append([InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")])
+
+        await query.edit_message_text(
+            text, parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    # === НАЗАД НА ПРЕДЫДУЩИЙ ШАГ ПРОЁМА ===
+    if data.startswith("opening_back_"):
+        parts = data.replace("opening_back_", "").split("_", 1)
+        field = parts[0]
+        room_id = int(parts[1])
+        context.user_data['opening_room_id'] = room_id
+
+        if field == 'width':
+            context.user_data['waiting_for'] = 'opening_width'
+            context.user_data['opening_width'] = None
+            await query.edit_message_text(
+                "✏️ *Изменение ширины*\n\n"
+                "📏 *Ширина проёма* (СМ):\n\n"
+                "_Напиши число и отправь._",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("❌ Отмена", callback_data=f"opening_cancel_{room_id}")],
+                ])
+            )
+            return
+
+        if field == 'height':
+            context.user_data['waiting_for'] = 'opening_height'
+            context.user_data['opening_height'] = None
+            await query.edit_message_text(
+                "✏️ *Изменение высоты*\n\n"
+                "📏 *Высота проёма* (СМ):\n\n"
+                "_Напиши число и отправь._",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("❌ Отмена", callback_data=f"opening_cancel_{room_id}")],
+                ])
+            )
+            return
+
+        if field == 'sill':
+            context.user_data['waiting_for'] = 'opening_sill'
+            context.user_data['opening_sill'] = None
+            await query.edit_message_text(
+                "✏️ *Изменение подоконника*\n\n"
+                "📏 *Высота подоконника* (СМ):\n\n"
+                "_Напиши число и отправь._",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("❌ Отмена", callback_data=f"opening_cancel_{room_id}")],
+                ])
+            )
+            return
+
+        if field == 'offset':
+            context.user_data['waiting_for'] = 'opening_offset'
+            context.user_data['opening_offset_x'] = None
+            await query.edit_message_text(
+                "✏️ *Изменение смещения*\n\n"
+                "📐 *Смещение от левого угла стены* (СМ):\n\n"
+                "_Напиши число и отправь._",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("❌ Отмена", callback_data=f"opening_cancel_{room_id}")],
+                ])
+            )
+            return
+
     # === 🚀 МАСТЕР ЗАМЕРОВ ===
     if data.startswith("room_start_"):
         room_id = int(data.replace("room_start_", ""))
@@ -2570,10 +2672,15 @@ async def _handle_opening_input(update, context, step):
         context.user_data['opening_width'] = val
         context.user_data['waiting_for'] = 'opening_height'
         await update.message.reply_text(
-            f"✅ Ширина: *{val} см*\n\n"
-            f"📏 *Высота проёма* (СМ):\n\n"
-            f"_Напиши число и отправь._",
-            parse_mode=ParseMode.MARKDOWN
+            f"🪟 *Проём*\n"
+            f"📏 Ширина: *{val} см*\n"
+            f"📏 Высота: *?*\n\n"
+            f"*Замерь высоту (СМ):*",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✏️ Изменить ширину", callback_data=f"opening_back_width_{room_id}")],
+                [InlineKeyboardButton("❌ Отмена", callback_data=f"opening_cancel_{room_id}")],
+            ])
         )
         return
 
@@ -2591,7 +2698,10 @@ async def _handle_opening_input(update, context, step):
                 f"📏 *Высота подоконника* (СМ):\n\n"
                 f"_Это расстояние от пола до нижнего края окна._\n"
                 f"_Напиши число и отправь._",
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"opening_cancel_{room_id}")],
+                ])
             )
         else:
             # Для двери / вентиляции — сразу к offset
@@ -2601,7 +2711,10 @@ async def _handle_opening_input(update, context, step):
                 f"📐 *Смещение от левого угла стены* (СМ):\n\n"
                 f"_Если ровно в углу — напиши 0._\n"
                 f"_Если по центру — примерно половину длины стены._",
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"opening_cancel_{room_id}")],
+                ])
             )
         return
 
@@ -2613,7 +2726,10 @@ async def _handle_opening_input(update, context, step):
             f"📐 *Смещение от левого угла стены* (СМ):\n\n"
             f"_Если ровно в углу — напиши 0._\n"
             f"_Если по центру — примерно половину длины стены._",
-            parse_mode=ParseMode.MARKDOWN
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"opening_cancel_{room_id}")],
+            ])
         )
         return
 
