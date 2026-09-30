@@ -120,6 +120,13 @@ def calculate_room_areas(room_id):
         elif cat == 'floor':
             area = L * W if (L and W) else 0
             floor_area += area
+        elif cat == 'ceiling':
+            area = L * W if (L and W) else 0
+            ceiling_area += area
+        elif cat in ('window', 'door', 'opening'):
+            area = L * H if (L and H) else (L * W if (L and W) else 0)
+            openings_total += area
+            openings.append({'label': m.get('label') or cat, 'area': round(area, 2)})
     
     # Если floor не замерен явно — считаем через 2 смежные стены (прямоугольник)
     if floor_area == 0:
@@ -131,10 +138,6 @@ def calculate_room_areas(room_id):
             if len(wall_measures) >= 2:
                 lengths = sorted([(m.get('length') or 0) for m in wall_measures], reverse=True)
                 floor_area = lengths[0] * lengths[1]
-        elif cat == 'ceiling':
-            area = L * W if (L and W) else 0
-            ceiling_area += area
-        elif cat in ('window', 'door', 'opening'):
             area = L * H if (L and H) else (L * W if (L and W) else 0)
             openings_total += area
             openings.append({'label': m.get('label') or cat, 'area': round(area, 2)})
