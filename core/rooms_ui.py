@@ -6,49 +6,46 @@ from core.room_objects import get_room_objects, format_room_object
 
 
 def format_room_card(room_id):
-    """Полная карточка комнаты — текст для Telegram."""
+    """Краткая карточка комнаты — что замерено."""
     room = get_room(room_id)
     if not room:
         return "❌ Комната не найдена"
+
     lines = [f"📦 {room['name']}"]
 
-    if room.get('area_sqm'):
-        lines.append(f"Площадь: {room['area_sqm']} м²")
+    # Высота
     if room.get('height'):
         _h = room['height']
         _h_str = f"{_h:.2f}".rstrip('0').rstrip('.').replace('.', ',')
         lines.append(f"Высота: {_h_str} см")
-    if room.get('note'):
-        lines.append(f"📝 {room['note']}")
 
-    # Задачи
-    t = count_tasks_by_room(room_id)
-    if t['total'] > 0:
-        lines.append("")
-        lines.append(f"📋 Задачи: {t['done']}/{t['total']} ({t['open']} в работе)")
+    # Тип помещения
+    rt = room.get('room_type')
+    if rt:
+        rt_names = {'rough': 'Черновая', 'finish': 'Чистовая', 'mid': 'Промежуточная'}
+        if rt in rt_names:
+            lines.append(f"Тип: {rt_names[rt]}")
 
     # Размеры
     measures = get_measures(room_id)
     if measures:
-        lines.append("")
-        lines.append(f"📐 Размеров: {len(measures)}")
         areas = calculate_room_areas(room_id)
-        if areas['walls_net']:
-            lines.append(f"  Стены (чистые): {areas['walls_net']} м²")
-        if areas['floor']:
-            lines.append(f"  Пол: {areas['floor']} м²")
-
-    # Коммуникации
-    comms = get_comms(room_id)
-    if comms:
         lines.append("")
-        lines.append(f"🔧 Коммуникации: {len(comms)}")
-
-    # Мебель/техника
-    objects = get_room_objects(room_id)
-    if objects:
+        # Считаем количество по типам
+        walls_count = len([m for m in measures if m.get('category') == 'wall'])
+        if walls_count:
+            lines.append(f"🧱 Стены: {walls_count} шт.")
+        if areas.get('walls_net') is not None:
+            lines.append(f"📐 Площадь стен: {areas['walls_net']} м²")
+        if areas.get('floor'):
+            lines.append(f"📐 Площадь пола: {areas['floor']} м²")
+    else:
         lines.append("")
-        lines.append(f"🪑 Мебель/техника: {len(objects)}")
+        lines.append("_Замеры ещё не начаты_")
+
+    if room.get('note'):
+        lines.append("")
+        lines.append(f"📝 {room['note']}")
 
     return "\n".join(lines)
 

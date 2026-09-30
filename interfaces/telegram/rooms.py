@@ -5,7 +5,7 @@ from telegram.constants import ParseMode
 
 from core.rooms import get_rooms, get_room, create_room, delete_room
 from core.rooms_ui import format_room_card, format_rooms_list
-from core.measures import get_measures, calculate_room_areas, format_measure
+from core.measures import get_measures, calculate_room_areas, format_measure, get_walls_ordered
 from core.comms import get_comms, format_comm
 from core.room_objects import get_room_objects, format_room_object
 
@@ -265,11 +265,11 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
         # Высота
         if height_ok:
-            text += f"📏 Высота: ✅ {h_avg} см\n"
+            text += f"📏 Высота: ✅ {int(h_avg) if h_avg == int(h_avg) else round(h_avg, 1)} см\n"
             if h_bottom == h_middle == h_top:
                 text += f"   • везде одинаковая\n"
             else:
-                text += f"   • центр {h_bottom}, левый {h_middle}, правый {h_top}\n"
+                text += f"   • центр {int(h_bottom)}, левый {int(h_middle)}, правый {int(h_top)}\n"
         elif height_part:
             text += f"📏 Высота: ⚠️ частично (только 1 точка)\n"
         else:
@@ -278,8 +278,6 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         # Стены
         if walls_ok:
             text += f"🧱 Стены: ✅ {len(walls)} шт.\n"
-            total = sum((w['length'] if w['length'] else 0) for w in walls)
-            text += f"   • сумма длин: {total:.0f} см\n"
         elif walls_part:
             text += f"🧱 Стены: ⚠️ {len(walls)} из 4\n"
         else:
@@ -383,7 +381,7 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
             return
 
         # Всё замерено — итог
-        from core.measures import calculate_room_areas
+        # (импорт calculate_room_areas уже сверху)
         areas = calculate_room_areas(room_id)
         total_length = sum((w['length'] if w['length'] else 0) for w in walls)
 
@@ -584,7 +582,7 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
             return
         lines = [f"📐 *Размеры комнаты* ({len(measures)}):\n"]
         for m in measures:
-            lines.append(format_measure(m))
+            lines.append(format_measure(m, show_area=True))
         areas = calculate_room_areas(room_id)
         lines.append("")
         lines.append(f"Стены (чистые): {areas['walls_net']} м²")
@@ -2070,10 +2068,11 @@ async def _wall_save_and_next(update_or_query, context, room_id, step):
 
 
 async def _wall_finish(update_or_query, context, room_id, summary_prefix=''):
-    """Финал обхода стен."""
+    """Финал обхода стен — с генерацией контура."""
     from core.measures import get_walls_ordered, calculate_room_areas
     from core.rooms import get_room
     from telegram import CallbackQuery, Update
+    import os
 
     walls = get_walls_ordered(room_id)
     room = get_room(room_id)
@@ -2084,27 +2083,57 @@ async def _wall_finish(update_or_query, context, room_id, summary_prefix=''):
     text += f"\n🎉 *Все 4 стены замерены!*\n\n"
     text += f"📊 *Итог комнаты «{room['name'] if room else '?'}»:*\n"
     text += f"• Стены: {len(walls)} шт.\n"
-    text += f"• Сумма длин: {total_length:.0f} см\n"
-    text += f"• Площадь стен (чистая): {areas['walls_net']} м²\n"
-    text += f"• Площадь пола: {areas['floor']} м²\n"
+    if areas.get('walls_net') is not None:
+        text += f"• Площадь стен: {areas['walls_net']} м²\n"
+    if areas.get('floor'):
+        text += f"• Площадь пола: {areas['floor']} м²\n"
+
+    # Генерируем контур
+    png_path = None
+    try:
+        from scripts.draw_room_scheme import draw_room_final
+        png_path, info = draw_room_final(room_id, room_name=room['name'] if room else 'Комната')
+        if png_path and os.path.exists(png_path):
+            text += f"\n📐 Контур: расхождение {info['gap_percent']}%\n"
+            if info['closed']:
+                text += f"✅ Контур замкнут\n"
+            else:
+                text += f"⚠️ Не замкнут (>5%)\n"
+    except Exception as e:
+        print(f"⚠️ draw_room_final: {e}")
 
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("📐 К размерам", callback_data=f"room_measures_{room_id}")],
         [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
     ])
+
     try:
         if isinstance(update_or_query, CallbackQuery):
             try:
                 await update_or_query.message.delete()
             except Exception:
                 pass
-            await update_or_query.message.chat.send_message(
-                text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
-            )
+            if png_path and os.path.exists(png_path):
+                with open(png_path, "rb") as f:
+                    await update_or_query.message.chat.send_photo(
+                        photo=f, caption=text,
+                        parse_mode=ParseMode.MARKDOWN, reply_markup=kb,
+                    )
+            else:
+                await update_or_query.message.chat.send_message(
+                    text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                )
         elif isinstance(update_or_query, Update):
-            await update_or_query.message.reply_text(
-                text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
-            )
+            if png_path and os.path.exists(png_path):
+                with open(png_path, "rb") as f:
+                    await update_or_query.message.reply_photo(
+                        photo=f, caption=text,
+                        parse_mode=ParseMode.MARKDOWN, reply_markup=kb,
+                    )
+            else:
+                await update_or_query.message.reply_text(
+                    text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                )
     except Exception as e:
         print(f"⚠️ _wall_finish: {e}")
 

@@ -91,8 +91,8 @@ def delete_measure(measure_id):
 
 
 def calculate_room_areas(room_id):
-    """Считает площади: стены, пол, потолок. Учитывает окна/двери.
-    Если у стены нет height — берём height комнаты."""
+    """Считает площади: стены, пол, потолок.
+    Все размеры в СМ, результат в м² (делим на 10000)."""
     measures = get_measures(room_id)
     # Получаем высоту комнаты (по умолчанию)
     from core.rooms import get_room
@@ -105,17 +105,32 @@ def calculate_room_areas(room_id):
     openings_total = 0.0
     openings = []
 
+    has_height = False
+
     for m in measures:
         L = m.get('length') or 0
         W = m.get('width') or 0
         H = m.get('height') or _room_height or 0
         cat = m.get('category')
         if cat == 'wall':
+            if H:
+                has_height = True
             area = L * H if (L and H) else (W * H if (W and H) else 0)
             walls_total += area
         elif cat == 'floor':
             area = L * W if (L and W) else 0
             floor_area += area
+    
+    # Если floor не замерен явно — считаем через 2 смежные стены (прямоугольник)
+    if floor_area == 0:
+        from core.rooms import get_room as _get_room
+        _room = _get_room(room_id)
+        if _room:
+            # Ищем 2 самые длинные стены
+            wall_measures = [m for m in measures if m.get('category') == 'wall']
+            if len(wall_measures) >= 2:
+                lengths = sorted([(m.get('length') or 0) for m in wall_measures], reverse=True)
+                floor_area = lengths[0] * lengths[1]
         elif cat == 'ceiling':
             area = L * W if (L and W) else 0
             ceiling_area += area
@@ -127,31 +142,72 @@ def calculate_room_areas(room_id):
     walls_without_openings = max(walls_total - openings_total, 0)
 
     return {
-        'walls_total': round(walls_total, 2),
-        'walls_net': round(walls_without_openings, 2),
-        'floor': round(floor_area, 2),
-        'ceiling': round(ceiling_area, 2),
-        'openings_total': round(openings_total, 2),
+        'walls_total': round(walls_total / 10000, 2) if has_height else None,
+        'walls_net': round(walls_without_openings / 10000, 2) if has_height else None,
+        'floor': round(floor_area / 10000, 2),
+        'ceiling': round(ceiling_area / 10000, 2),
+        'openings_total': round(openings_total / 10000, 2),
         'openings': openings,
+        'has_height': has_height,
     }
 
 
-def format_measure(m):
-    """Форматирует один размер в строку."""
-    cat_icons = dict(MEASURE_CATEGORIES)
+def format_measure(m, show_area=False):
+    """Форматирует размер в строку. Если show_area — добавляет площадь."""
+    cat_icons = {
+        "wall": "🧱", "floor": "📏", "ceiling": "⬆️",
+        "window": "🪟", "door": "🚪", "opening": "🕳", "corner": "📐",
+    }
     icon = cat_icons.get(m.get('category'), '📏')
     label = m.get('label') or m.get('category')
+    if label.startswith('Стена '):
+        label = label[6:]
+
+    L = m.get('length') or 0
+    W = m.get('width') or 0
+    H = m.get('height') or 0
+    D = m.get('depth') or 0
+    angle = m.get('angle')
+
+    def fmt(v):
+        if v is None or v == 0:
+            return None
+        return str(int(v)) if v == int(v) else str(round(v, 1))
+
     parts = []
-    for key, symb in [('length', 'Д'), ('width', 'Ш'), ('height', 'В'),
-                      ('depth', 'Г'), ('angle', '°')]:
-        v = m.get(key)
-        if v:
-            if key == 'angle':
-                parts.append(f"{int(v)}°")
-            else:
-                parts.append(f"{symb}{v}")
-    dims = ' × '.join(parts) if parts else '—'
-    return f"{icon} {label}: {dims}"
+    if L: parts.append(f"{fmt(L)}")
+    if W: parts.append(f"{fmt(W)}")
+    if H: parts.append(f"{fmt(H)}")
+    if D: parts.append(f"{fmt(D)}")
+    if angle: parts.append(f"{int(angle)}°")
+
+    dims = " × ".join(parts) if parts else "—"
+
+    # Площадь стены — через height из комнаты, если у стены нет
+    area_str = ""
+    if show_area and m.get('category') == 'wall' and L:
+        _H = H
+        if not _H:
+            # Берём из комнаты
+            try:
+                _rid = m.get('room_id')
+                if _rid:
+                    from core.rooms import get_room
+                    _r = get_room(_rid)
+                    if _r:
+                        _H = _r.get('height') or 0
+            except Exception:
+                pass
+        if _H:
+            area_m2 = (L * _H) / 10000
+            area_str = f" — {area_m2:.2f} м²"
+
+    angle_str = ""
+    av = m.get('angle_value')
+    if av and av != 90:
+        angle_str = f" ({av}°)"
+
+    return f"{icon} {label}: {fmt(L) or '—'} см{angle_str}{area_str}"
 
 
 def group_measures_by_category(room_id):
