@@ -59,8 +59,9 @@ def room_card_keyboard(room_id):
         [start_btn],
         [InlineKeyboardButton("📐 Размеры", callback_data=f"room_measures_{room_id}"),
          InlineKeyboardButton("👁 Что замерено", callback_data=f"room_progress_{room_id}")],
-        [InlineKeyboardButton("🔧 Коммуникации", callback_data=f"room_comms_{room_id}"),
-         InlineKeyboardButton("🪑 Мебель", callback_data=f"room_objects_{room_id}")],
+        [InlineKeyboardButton("🚪 Проёмы", callback_data=f"openings_list_{room_id}"),
+         InlineKeyboardButton("🔧 Коммуникации", callback_data=f"room_comms_{room_id}")],
+        [InlineKeyboardButton("🪑 Мебель", callback_data=f"room_objects_{room_id}")],
         [InlineKeyboardButton("📋 Задачи", callback_data=f"room_tasks_{room_id}"),
          InlineKeyboardButton("📸 Фото", callback_data=f"room_photos_{room_id}")],
         [InlineKeyboardButton("🗑 Удалить", callback_data=f"room_del_{room_id}")],
@@ -306,6 +307,250 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
                 [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
             ])
         )
+        return
+
+    # === 🚪 ПРОЁМЫ ===
+    if data.startswith("openings_list_"):
+        room_id = int(data.replace("openings_list_", ""))
+        from core.measures import get_openings, format_opening, OPENING_TYPES
+        openings = get_openings(room_id)
+        room = get_room(room_id)
+        room_name = room['name'] if room else '?'
+
+        text = f"🚪 *Проёмы в комнате «{room_name}»*\n\n"
+        if not openings:
+            text += "_Пока проёмов нет._\n\n"
+            text += "Добавь окна, двери или вентиляцию."
+        else:
+            text += f"Найдено: {len(openings)}\n\n"
+            for i, o in enumerate(openings, 1):
+                text += f"{i}. {format_opening(o)}\n"
+
+        buttons = []
+        for o in openings:
+            label = OPENING_TYPES.get(o.get('opening_type'), '?')
+            wall = o.get('wall_pos') or '?'
+            buttons.append([InlineKeyboardButton(
+                f"{label} ({wall})",
+                callback_data=f"opening_show_{o['id']}"
+            )])
+        buttons.append([InlineKeyboardButton("➕ Добавить проём", callback_data=f"opening_add_{room_id}")])
+        buttons.append([InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")])
+
+        await query.edit_message_text(
+            text,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    # Добавить проём — выбор типа
+    if data.startswith("opening_add_"):
+        room_id = int(data.replace("opening_add_", ""))
+        from core.measures import OPENING_TYPES
+        buttons = []
+        for code, label in OPENING_TYPES.items():
+            buttons.append([InlineKeyboardButton(label, callback_data=f"opening_type_{room_id}_{code}")])
+        buttons.append([InlineKeyboardButton("⬅️ Отмена", callback_data=f"openings_list_{room_id}")])
+        await query.edit_message_text(
+            f"🚪 *Новый проём*\n\nВыбери тип:",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    # Выбор стены
+    if data.startswith("opening_type_"):
+        parts = data.replace("opening_type_", "").split("_", 1)
+        room_id = int(parts[0])
+        otype = parts[1]
+        context.user_data['opening_room_id'] = room_id
+        context.user_data['opening_type'] = otype
+        from core.measures import OPENING_TYPES
+        label = OPENING_TYPES.get(otype, otype)
+        buttons = [
+            [InlineKeyboardButton("1. Напротив", callback_data=f"opening_wall_{room_id}_напротив")],
+            [InlineKeyboardButton("2. Слева", callback_data=f"opening_wall_{room_id}_слева")],
+            [InlineKeyboardButton("3. У входа", callback_data=f"opening_wall_{room_id}_у входа")],
+            [InlineKeyboardButton("4. Справа", callback_data=f"opening_wall_{room_id}_справа")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data=f"openings_list_{room_id}")],
+        ]
+        await query.edit_message_text(
+            f"🚪 *{label}*\n\nНа какой стене?",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    # Выбор стены → запрос ширины
+    if data.startswith("opening_wall_"):
+        parts = data.replace("opening_wall_", "").split("_", 1)
+        room_id = int(parts[0])
+        wall_pos = parts[1] if len(parts) > 1 else 'напротив'
+        context.user_data['opening_wall_pos'] = wall_pos
+        context.user_data['waiting_for'] = 'opening_width'
+        await query.edit_message_text(
+            f"📏 *Ширина проёма* (СМ):\n\n_Напиши число и отправь._",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"openings_list_{room_id}")],
+            ])
+        )
+        return
+
+    # Показать проём
+    if data.startswith("opening_show_"):
+            opening_id = int(data.replace("opening_show_", ""))
+            from core.measures import get_opening, format_opening, OPENING_TYPES
+            o = get_opening(opening_id)
+            if not o:
+                await query.edit_message_text("❌ Проём не найден")
+                return
+
+            otype = o.get('opening_type') or '?'
+            label = OPENING_TYPES.get(otype, otype)
+            wall_pos = o.get('wall_pos') or '?'
+            width = o.get('width')
+            height = o.get('height')
+            sill = o.get('sill_height')
+            offset = o.get('offset_x') or 0
+
+            def fmt(v):
+                if v is None or v == 0:
+                    return "0"
+                return str(int(v)) if v == int(v) else str(round(v, 1))
+
+            text = f"🚪 *Проём #{opening_id}*\n\n"
+            text += f"{label}\n"
+            text += f"🧱 Стена: {wall_pos}\n"
+            text += f"📏 Ширина: {fmt(width)} см\n"
+            text += f"📏 Высота: {fmt(height)} см\n"
+            if sill:
+                text += f"📏 Подоконник: {fmt(sill)} см\n"
+            if offset:
+                text += f"📐 Смещение от угла: {fmt(offset)} см\n"
+
+            buttons = [
+                [InlineKeyboardButton("✏️ Ширина", callback_data=f"opening_edit_{opening_id}_width")],
+                [InlineKeyboardButton("✏️ Высота", callback_data=f"opening_edit_{opening_id}_height")],
+            ]
+            if otype == 'window':
+                buttons.append([InlineKeyboardButton("✏️ Подоконник", callback_data=f"opening_edit_{opening_id}_sill")])
+            buttons.append([InlineKeyboardButton("✏️ Смещение от угла", callback_data=f"opening_edit_{opening_id}_offset")])
+            buttons.append([InlineKeyboardButton("✏️ Стена", callback_data=f"opening_edit_{opening_id}_wall")])
+            buttons.append([InlineKeyboardButton("🗑 Удалить", callback_data=f"opening_del_{opening_id}")])
+            buttons.append([InlineKeyboardButton("⬅️ К проёмам", callback_data=f"openings_list_{o['room_id']}")])
+
+            await query.edit_message_text(
+                text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+            return
+
+    # === РЕДАКТИРОВАНИЕ ПРОЁМА ===
+    if data.startswith("opening_edit_"):
+        parts = data.replace("opening_edit_", "").split("_")
+        opening_id = int(parts[0])
+        field = parts[1] if len(parts) > 1 else None
+
+        from core.measures import get_opening
+        o = get_opening(opening_id)
+        if not o:
+            await query.edit_message_text("❌ Проём не найден")
+            return
+
+        if field == 'wall':
+            # Выбор стены
+            buttons = [
+                [InlineKeyboardButton("1. Напротив", callback_data=f"opening_set_{opening_id}_wall_напротив")],
+                [InlineKeyboardButton("2. Слева", callback_data=f"opening_set_{opening_id}_wall_слева")],
+                [InlineKeyboardButton("3. У входа", callback_data=f"opening_set_{opening_id}_wall_у входа")],
+                [InlineKeyboardButton("4. Справа", callback_data=f"opening_set_{opening_id}_wall_справа")],
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"opening_show_{opening_id}")],
+            ]
+            await query.edit_message_text(
+                f"✏️ *Смена стены*\n\nНа какой стене?",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+            return
+
+        # Для остальных — просим значение
+        prompt_text = {
+            'width': '📏 *Новая ширина* (СМ):',
+            'height': '📏 *Новая высота* (СМ):',
+            'sill': '📏 *Новая высота подоконника* (СМ):',
+            'offset': '📐 *Новое смещение от угла* (СМ):',
+        }.get(field, 'Значение')
+
+        context.user_data['opening_edit_id'] = opening_id
+        context.user_data['opening_edit_field'] = field
+        context.user_data['waiting_for'] = 'opening_edit_value'
+
+        await query.edit_message_text(
+            f"{prompt_text}\n\n_Напиши число и отправь._",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"opening_show_{opening_id}")],
+            ])
+        )
+        return
+
+    if data.startswith("opening_set_"):
+        # opening_set_<id>_<field>_<value>
+        parts = data.replace("opening_set_", "").split("_")
+        opening_id = int(parts[0])
+        field = parts[1]
+        value = "_".join(parts[2:])
+        from core.measures import update_opening
+        if field == 'wall':
+            update_opening(opening_id, wall_pos=value)
+        # Показываем карточку
+        from core.measures import get_opening
+        o = get_opening(opening_id)
+        if o:
+            # Перенаправляем на opening_show_
+            await query.edit_message_text("✅ Обновлено")
+            # Имитируем открытие
+            from core.measures import OPENING_TYPES
+            otype = o.get('opening_type') or '?'
+            label = OPENING_TYPES.get(otype, otype)
+            text = f"🚪 *Проём #{opening_id}*\n\n{label}\n🧱 Стена: {o.get('wall_pos')}"
+            buttons = [
+                [InlineKeyboardButton("✏️ Ширина", callback_data=f"opening_edit_{opening_id}_width")],
+                [InlineKeyboardButton("✏️ Высота", callback_data=f"opening_edit_{opening_id}_height")],
+                [InlineKeyboardButton("⬅️ К проёму", callback_data=f"opening_show_{opening_id}")],
+                [InlineKeyboardButton("⬅️ К проёмам", callback_data=f"openings_list_{o['room_id']}")],
+            ]
+            await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(buttons))
+        return
+
+        text = f"🚪 *Проём #{opening_id}*\n\n{format_opening(o)}"
+        await query.edit_message_text(
+            text,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🗑 Удалить", callback_data=f"opening_del_{opening_id}")],
+                [InlineKeyboardButton("⬅️ К проёмам", callback_data=f"openings_list_{o['room_id']}")],
+            ])
+        )
+        return
+
+    # Удалить проём
+    if data.startswith("opening_del_"):
+        opening_id = int(data.replace("opening_del_", ""))
+        from core.measures import get_opening, delete_opening
+        o = get_opening(opening_id)
+        room_id = o['room_id'] if o else None
+        delete_opening(opening_id)
+        if room_id:
+            await query.edit_message_text(
+                "✅ Проём удалён",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К проёмам", callback_data=f"openings_list_{room_id}")],
+                ])
+            )
         return
 
     # === 🚀 МАСТЕР ЗАМЕРОВ ===
@@ -1161,6 +1406,11 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
 async def handle_measure_input(update, context):
     """Пошаговый ввод: 1) длина, 2) высота/ширина."""
     step = context.user_data.get('waiting_for')
+
+    # === ПРОЁМЫ — в самом начале, ДО старой логики ===
+    if step in ('opening_width', 'opening_height', 'opening_sill'):
+        await _handle_opening_input(update, context, step)
+        return
 
     # === ОБХОД СТЕН (Этап 3) — ПЕРВЫМ ДЕЛОМ, до старой логики ===
     if step in ('wall_round_length', 'wall_round_angle_val',
@@ -2297,3 +2547,159 @@ async def _handle_wall_round_input(update, context, step):
                 print(f"⚠️ send_photo length: {e}")
         await update.message.reply_text(caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
         return
+
+
+async def _handle_opening_input(update, context, step):
+    """Обработка ввода для проёмов."""
+    room_id = context.user_data.get('opening_room_id')
+    if not room_id:
+        await update.message.reply_text("❌ Потерялась комната. Начни заново: карточка → Проёмы")
+        context.user_data['waiting_for'] = None
+        return
+
+    try:
+        val = int(float((update.message.text or '').replace(',', '.')))
+    except ValueError:
+        await update.message.reply_text("❌ Нужно число", parse_mode=ParseMode.MARKDOWN)
+        return
+
+    if step == 'opening_width':
+        if val <= 0 or val > 2000:
+            await update.message.reply_text("❌ Ширина от 1 до 2000 см")
+            return
+        context.user_data['opening_width'] = val
+        context.user_data['waiting_for'] = 'opening_height'
+        await update.message.reply_text(
+            f"✅ Ширина: *{val} см*\n\n"
+            f"📏 *Высота проёма* (СМ):\n\n"
+            f"_Напиши число и отправь._",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    if step == 'opening_height':
+        if val <= 0 or val > 2000:
+            await update.message.reply_text("❌ Высота от 1 до 2000 см")
+            return
+        context.user_data['opening_height'] = val
+        otype = context.user_data.get('opening_type')
+        if otype == 'window':
+            # Для окна — спрашиваем подоконник
+            context.user_data['waiting_for'] = 'opening_sill'
+            await update.message.reply_text(
+                f"✅ Высота: *{val} см*\n\n"
+                f"📏 *Высота подоконника* (СМ):\n\n"
+                f"_Это расстояние от пола до нижнего края окна._\n"
+                f"_Напиши число и отправь._",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            # Для двери / вентиляции — сразу к offset
+            context.user_data['waiting_for'] = 'opening_offset'
+            await update.message.reply_text(
+                f"✅ Высота: *{val} см*\n\n"
+                f"📐 *Смещение от левого угла стены* (СМ):\n\n"
+                f"_Если ровно в углу — напиши 0._\n"
+                f"_Если по центру — примерно половину длины стены._",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        return
+
+    if step == 'opening_sill':
+        context.user_data['opening_sill'] = val
+        context.user_data['waiting_for'] = 'opening_offset'
+        await update.message.reply_text(
+            f"✅ Подоконник: *{val} см*\n\n"
+            f"📐 *Смещение от левого угла стены* (СМ):\n\n"
+            f"_Если ровно в углу — напиши 0._\n"
+            f"_Если по центру — примерно половину длины стены._",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    if step == 'opening_offset':
+        context.user_data['opening_offset_x'] = val
+        await _opening_save(update, context)
+        return
+
+    if step == 'opening_edit_value':
+        opening_id = context.user_data.get('opening_edit_id')
+        field = context.user_data.get('opening_edit_field')
+        if not opening_id or not field:
+            await update.message.reply_text("❌ Данные потерялись")
+            context.user_data['waiting_for'] = None
+            return
+        from core.measures import update_opening
+        if field == 'width':
+            update_opening(opening_id, width=val)
+        elif field == 'height':
+            update_opening(opening_id, height=val)
+        elif field == 'sill':
+            update_opening(opening_id, sill_height=val)
+        elif field == 'offset':
+            update_opening(opening_id, offset_x=val)
+        context.user_data['opening_edit_id'] = None
+        context.user_data['opening_edit_field'] = None
+        context.user_data['waiting_for'] = None
+        await update.message.reply_text(
+            f"✅ Обновлено: {field} = {val} см",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ К проёму", callback_data=f"opening_show_{opening_id}")],
+            ])
+        )
+        return
+
+async def _opening_save(update, context):
+    """Сохраняет проём и возвращает к списку."""
+    from core.measures import add_opening, OPENING_TYPES
+    room_id = context.user_data.get('opening_room_id')
+    otype = context.user_data.get('opening_type')
+    wall_pos = context.user_data.get('opening_wall_pos')
+    width = context.user_data.get('opening_width')
+    height = context.user_data.get('opening_height')
+    sill = context.user_data.get('opening_sill')
+
+    if not all([room_id, otype, wall_pos, width, height]):
+        await update.message.reply_text("❌ Данные потерялись. Начни заново.")
+        return
+
+    offset_x = context.user_data.get('opening_offset_x') or 0
+
+    opening_id = add_opening(
+        room_id=room_id,
+        opening_type=otype,
+        wall_pos=wall_pos,
+        offset_x=offset_x,
+        width=width,
+        height=height,
+        sill_height=sill,
+        created_by=update.effective_user.id
+    )
+
+    # Очищаем
+    for k in ['opening_room_id', 'opening_type', 'opening_wall_pos',
+              'opening_width', 'opening_height', 'opening_sill',
+              'opening_offset_x']:
+        context.user_data[k] = None
+    context.user_data['waiting_for'] = None
+
+    label = OPENING_TYPES.get(otype, otype)
+    text = (
+        f"✅ *Проём добавлен!*\n\n"
+        f"{label} на стене «{wall_pos}»\n"
+        f"📏 {width} × {height} см"
+    )
+    if sill:
+        text += f"\n📏 Подоконник: {sill} см"
+    if offset_x:
+        text += f"\n📐 Смещение: {offset_x} см от угла"
+
+    await update.message.reply_text(
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Добавить ещё", callback_data=f"opening_add_{room_id}")],
+            [InlineKeyboardButton("🚪 К проёмам", callback_data=f"openings_list_{room_id}")],
+            [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+        ])
+    )

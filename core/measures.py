@@ -510,3 +510,100 @@ def get_walls_ordered(room_id):
     )
     return [dict(r) for r in rows]
 
+
+
+# ============================================================
+# ПРОЁМЫ (окна, двери, вентиляция)
+# ============================================================
+
+OPENING_TYPES = {
+    'window':        '🪟 Окно',
+    'door_entrance': '🚪 Входная дверь',
+    'door_interior': '🚪 Межкомнатная дверь',
+    'door_balcony':  '🌅 Дверь на балкон',
+    'door_exit':     '🚶 Выход наружу',
+    'vent':          '💨 Вентиляция',
+}
+
+def add_opening(room_id, opening_type, wall_pos=None,
+                offset_x=None, width=None, height=None, depth=None,
+                sill_height=None, from_room_id=None, to_room_id=None,
+                to_outside=0, is_main=0, vent_type=None, door_kind=None,
+                note=None, created_by=None):
+    """Добавляет проём. Возвращает opening_id."""
+    return commit(
+        "INSERT INTO openings "
+        "(room_id, opening_type, wall_pos, offset_x, width, height, depth, "
+        "sill_height, from_room_id, to_room_id, to_outside, is_main, "
+        "vent_type, door_kind, note, created_by) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (room_id, opening_type, wall_pos, offset_x, width, height, depth,
+         sill_height, from_room_id, to_room_id, to_outside, is_main,
+         vent_type, door_kind, note, created_by)
+    )
+
+def get_openings(room_id):
+    """Все проёмы комнаты."""
+    rows = fetchall(
+        "SELECT * FROM openings WHERE room_id = ? ORDER BY id",
+        (room_id,)
+    )
+    return [dict(r) for r in rows]
+
+def get_openings_by_wall(room_id, wall_pos):
+    """Проёмы конкретной стены."""
+    rows = fetchall(
+        "SELECT * FROM openings WHERE room_id = ? AND wall_pos = ? ORDER BY offset_x",
+        (room_id, wall_pos)
+    )
+    return [dict(r) for r in rows]
+
+def get_opening(opening_id):
+    """Конкретный проём."""
+    row = fetchone("SELECT * FROM openings WHERE id = ?", (opening_id,))
+    return dict(row) if row else None
+
+def update_opening(opening_id, **kwargs):
+    """Обновляет поля проёма."""
+    allowed = {"opening_type", "wall_pos", "offset_x", "width", "height",
+               "depth", "sill_height", "from_room_id", "to_room_id",
+               "to_outside", "is_main", "vent_type", "door_kind", "note"}
+    fields, params = [], []
+    for k, v in kwargs.items():
+        if k in allowed:
+            fields.append(f"{k} = ?")
+            params.append(v)
+    if not fields:
+        return False
+    params.append(opening_id)
+    commit(f"UPDATE openings SET {', '.join(fields)} WHERE id = ?", params)
+    return True
+
+def delete_opening(opening_id):
+    commit("DELETE FROM openings WHERE id = ?", (opening_id,))
+    return True
+
+def format_opening(o):
+    """Форматирует проём для UI."""
+    otype = o.get('opening_type') or '?'
+    label = OPENING_TYPES.get(otype, otype)
+    wall_pos = o.get('wall_pos') or '?'
+    width = o.get('width')
+    height = o.get('height')
+    sill = o.get('sill_height')
+
+    parts = [label]
+    if wall_pos and wall_pos != '?':
+        parts.append(f"на стене «{wall_pos}»")
+
+    dims = ""
+    if width and height:
+        w_str = str(int(width)) if width == int(width) else str(width)
+        h_str = str(int(height)) if height == int(height) else str(height)
+        dims = f" — {w_str}×{h_str} см"
+        if sill:
+            s_str = str(int(sill)) if sill == int(sill) else str(sill)
+            dims += f", подоконник {s_str} см"
+
+    return " ".join(parts) + dims
+
