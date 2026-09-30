@@ -15,7 +15,9 @@ def format_room_card(room_id):
     if room.get('area_sqm'):
         lines.append(f"Площадь: {room['area_sqm']} м²")
     if room.get('height'):
-        lines.append(f"Высота: {room['height']} м")
+        _h = room['height']
+        _h_str = f"{_h:.2f}".rstrip('0').rstrip('.').replace('.', ',')
+        lines.append(f"Высота: {_h_str} см")
     if room.get('note'):
         lines.append(f"📝 {room['note']}")
 

@@ -12,7 +12,7 @@ DEFAULT_ROOMS = [
 ]
 
 
-def create_room(object_id, name, is_default=False, order_num=0, tenant_id=1, room_type='rough'):
+def create_room(object_id, name, is_default=False, order_num=0, tenant_id=1, room_type='rough', measure_method='laser'):
     """Создаёт комнату. Возвращает room_id или None если уже есть."""
     name = (name or "").strip()
     if not name:
@@ -24,9 +24,9 @@ def create_room(object_id, name, is_default=False, order_num=0, tenant_id=1, roo
     if existing:
         return existing['id']
     return commit(
-        "INSERT INTO rooms (object_id, name, is_default, order_num, tenant_id, room_type) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (object_id, name, 1 if is_default else 0, order_num, tenant_id, room_type)
+        "INSERT INTO rooms (object_id, name, is_default, order_num, tenant_id, room_type, measure_method) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (object_id, name, 1 if is_default else 0, order_num, tenant_id, room_type, measure_method)
     )
 
 
@@ -35,7 +35,7 @@ def get_room(room_id):
     row = fetchone(
         "SELECT id, object_id, name, is_default, order_num, note, "
         "area_sqm, height, tenant_id, created_at, room_type, "
-        "height_bottom, height_middle, height_top "
+        "height_bottom, height_middle, height_top, measure_method "
         "FROM rooms WHERE id = ?",
         (room_id,)
     )
@@ -64,7 +64,8 @@ def get_room_by_name(object_id, name):
 
 
 def update_room(room_id, name=None, note=None, area_sqm=None, height=None,
-                room_type=None, height_bottom=None, height_middle=None, height_top=None):
+                room_type=None, height_bottom=None, height_middle=None, height_top=None,
+                measure_method=None):
     """Обновляет комнату. None — не трогать."""
     fields, params = [], []
     if name is not None:
@@ -83,6 +84,8 @@ def update_room(room_id, name=None, note=None, area_sqm=None, height=None,
         fields.append("height_middle = ?"); params.append(height_middle)
     if height_top is not None:
         fields.append("height_top = ?"); params.append(height_top)
+    if measure_method is not None:
+        fields.append("measure_method = ?"); params.append(measure_method)
     if not fields:
         return False
     fields.append("updated_at = CURRENT_TIMESTAMP")

@@ -22,7 +22,9 @@ def add_measure(room_id, category, label=None, length=None, width=None,
                 angle_diagonal_cm=None, has_rounded=None, radius=None,
                 rounded_corner=None,
                 measured_bottom=None, measured_middle=None, measured_top=None,
-                is_wavy=None, deviation_plus=None, deviation_minus=None):
+                is_wavy=None, deviation_plus=None, deviation_minus=None,
+                order_num=None, has_hidden=None, hidden_note=None,
+                lean_angle=None, lean_direction=None):
     """Добавляет размер. Возвращает measure_id."""
     return commit(
         "INSERT INTO room_measures "
@@ -31,14 +33,16 @@ def add_measure(room_id, category, label=None, length=None, width=None,
         "wall_pos, angle_value, angle_method, angle_diagonal_cm, "
         "has_rounded, radius, rounded_corner, "
         "measured_bottom, measured_middle, measured_top, "
-        "is_wavy, deviation_plus, deviation_minus) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "is_wavy, deviation_plus, deviation_minus, "
+        "order_num, has_hidden, hidden_note, lean_angle, lean_direction) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (room_id, category, label, length, width, height, depth, angle,
          unit, note, tenant_id, created_by,
          wall_pos, angle_value, angle_method, angle_diagonal_cm,
          has_rounded, radius, rounded_corner,
          measured_bottom, measured_middle, measured_top,
-         is_wavy, deviation_plus, deviation_minus)
+         is_wavy, deviation_plus, deviation_minus,
+         order_num, has_hidden, hidden_note, lean_angle, lean_direction)
     )
 
 
@@ -87,8 +91,13 @@ def delete_measure(measure_id):
 
 
 def calculate_room_areas(room_id):
-    """Считает площади: стены, пол, потолок. Учитывает окна/двери."""
+    """Считает площади: стены, пол, потолок. Учитывает окна/двери.
+    Если у стены нет height — берём height комнаты."""
     measures = get_measures(room_id)
+    # Получаем высоту комнаты (по умолчанию)
+    from core.rooms import get_room
+    _room = get_room(room_id)
+    _room_height = (_room.get('height') if _room else None) or 0
     walls_total = 0.0
     walls_without_openings = 0.0
     floor_area = 0.0
@@ -99,7 +108,7 @@ def calculate_room_areas(room_id):
     for m in measures:
         L = m.get('length') or 0
         W = m.get('width') or 0
-        H = m.get('height') or 0
+        H = m.get('height') or _room_height or 0
         cat = m.get('category')
         if cat == 'wall':
             area = L * H if (L and H) else (W * H if (W and H) else 0)
@@ -417,9 +426,9 @@ def get_walls_progress(room_id):
     walls_count = len(walls)
 
     return {
-        'started': bool(room.get('walls_started_at')),
-        'completed': bool(room.get('walls_completed_at')),
-        'contour_passed': bool(room.get('contour_check_passed')),
+        'started': bool(room['walls_started_at']),
+        'completed': bool(room['walls_completed_at']),
+        'contour_passed': bool(room['contour_check_passed']),
         'walls_count': walls_count,
         'current_step': walls_count + 1 if walls_count < 4 else 4,
         'walls': [dict(w) for w in walls],

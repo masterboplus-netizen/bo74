@@ -62,6 +62,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             print(f"⚠️ admin save: {e}")
 
+        # Сброс контекста при старте
+        context.user_data.clear()
+
         await update.message.reply_text(
             f"👋 Привет, {user.first_name}!\n\n"
             f"Я *Бо 7.7* — твой помощник по стройке.\n"
@@ -2278,24 +2281,15 @@ async def handle_photo_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print(f"🚨 HANDLE_TEXT CALLED: text={update.message.text!r}", flush=True)
     text = update.message.text
-    # DEBUG: печатаем всё, что приходит
-    try:
-        with open('/tmp/handle_text.log', 'a') as _f:
-            _f.write(f"HANDLE_TEXT: text={text!r}, waiting_for={context.user_data.get('waiting_for')!r}\n")
-    except Exception:
-        pass
-    print(f"🔵 HANDLE_TEXT: text={text!r}, waiting_for={context.user_data.get('waiting_for')!r}", flush=True)
     if not text or text.startswith('/'):
-        print(f"⚠️ RETURN на строке 2283", flush=True)
         return
 
     # Размеры комнаты
-    if context.user_data.get('waiting_for') in ('measure_first_dim', 'measure_second_dim', 'wall_angle_value', 'wall_niche_width', 'wall_niche_depth', 'wall_niche_height', 'room_height_point', 'room_height_same', 'wall_round_length', 'wall_round_angle_val', 'wall_round_plane_bottom', 'wall_round_plane_middle', 'wall_round_plane_top',
-                                                  'wall_round_length', 'wall_round_angle_val', 'wall_round_plane_bottom', 'wall_round_plane_middle', 'wall_round_plane_top'):
+    if context.user_data.get('waiting_for') in ('measure_first_dim', 'measure_second_dim', 'wall_angle_value', 'wall_niche_width', 'wall_niche_depth', 'wall_niche_height', 'room_height_point', 'room_height_same'):
         from interfaces.telegram.rooms import handle_measure_input
         await handle_measure_input(update, context)
-        print(f"⚠️ RETURN на строке 2289", flush=True)
         return
 
     # Новая комната — просим тип (черновая/чистовая/промежуточная)
@@ -2314,7 +2308,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("⬅️ Отмена", callback_data=f"rooms_list_obj_{object_id}")],
             ])
         )
-        print(f"⚠️ RETURN на строке 2307", flush=True)
         return
 
     # Стена выбрана, но ровная/закругление не нажато → показать кнопки заново
@@ -2322,7 +2315,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from interfaces.telegram.rooms import reask_wall_question
         shown = await reask_wall_question(update, context)
         if shown:
-            print(f"⚠️ RETURN на строке 2314", flush=True)
             return
 
     # === ВСЕ CRM-ОЖИДАНИЯ — В САМОМ НАЧАЛЕ, ДО ПАРСЕРА ===
@@ -2339,7 +2331,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("❌ Отмена", callback_data="menu_crm")],
             ])
         )
-        print(f"⚠️ RETURN на строке 2330", flush=True)
         return
 
     # CRM: ждём имя клиента (обычный сценарий)
@@ -2352,7 +2343,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_phone")],
             ])
         )
-        print(f"⚠️ RETURN на строке 2342", flush=True)
         return
 
     if context.user_data.get('waiting_for') == 'crm_client_phone':
@@ -2375,7 +2365,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_address")],
                 ])
             )
-            print(f"⚠️ RETURN на строке 2364", flush=True)
             return
 
         if status == 'suggest':
@@ -2392,7 +2381,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Выбери подходящий вариант:",
                 reply_markup=InlineKeyboardMarkup(buttons)
             )
-            print(f"⚠️ RETURN на строке 2380", flush=True)
             return
 
         # invalid
@@ -2409,7 +2397,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_phone")],
             ])
         )
-        print(f"⚠️ RETURN на строке 2396", flush=True)
         return
 
     if context.user_data.get('waiting_for') == 'crm_client_address':
@@ -2426,13 +2413,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_source")],
             ])
         )
-        print(f"⚠️ RETURN на строке 2412", flush=True)
         return
 
     if context.user_data.get('waiting_for') == 'crm_client_source':
         context.user_data['crm_new_client_source'] = text.strip()
         await _finalize_new_client(update, context)
-        print(f"⚠️ RETURN на строке 2417", flush=True)
         return
 
     # CRM: ждём бюджет сделки — ВАЖНО до парсера
@@ -2446,7 +2431,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not client_id:
             await update.message.reply_text("❌ Клиент потерялся. Начни заново.")
             context.user_data['waiting_for'] = None
-            print(f"⚠️ RETURN на строке 2430", flush=True)
             return
         from modules.crm import add_deal, get_client
         deal_id = add_deal(client_id=client_id, object_id=None, status='new', budget=budget)
@@ -2464,7 +2448,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
             ])
         )
-        print(f"⚠️ RETURN на строке 2447", flush=True)
         return
 
     # CRM: пользователь ввёл имя в режиме выбора клиента
@@ -2483,7 +2466,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 f"💼 Клиент: «{found['name']}»\n\nНапиши сумму бюджета сделки (₽):"
             )
-            print(f"⚠️ RETURN на строке 2465", flush=True)
             return
         else:
             context.user_data['crm_new_client_name'] = name
@@ -2496,7 +2478,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("❌ Отмена", callback_data="menu_crm")],
                 ])
             )
-            print(f"⚠️ RETURN на строке 2477", flush=True)
             return
 
     # === ЗАПЛАНИРОВАННЫЙ ЗВОНОК ===
@@ -2507,7 +2488,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not client_id:
             context.user_data['waiting_for'] = None
             await update.message.reply_text('❌ Клиент потерялся.')
-            print(f"⚠️ RETURN на строке 2487", flush=True)
             return
         # Парсим дату и время из текста
         parsed = parse_date(text)
@@ -2533,7 +2513,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton('📋 Активности', callback_data=f'activity_list_{client_id}')],
             ])
         )
-        print(f"⚠️ RETURN на строке 2512", flush=True)
         return
 
     # === ДИАПАЗОН СРОКА (обработка ввода) ===
@@ -2541,7 +2520,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         d = parse_date(text)
         if not d:
             await update.message.reply_text('❌ Не понял дату начала. Попробуй: «завтра», «1.10», «пн», «10.10.2025»')
-            print(f"⚠️ RETURN на строке 2519", flush=True)
             return
         context.user_data['range_start'] = d.strftime('%Y-%m-%d')
         context.user_data['range_step'] = 'end'
@@ -2549,14 +2527,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📆 Старт: {d.strftime('%d.%m.%Y')}\n\n"
             f"Теперь дата конца:"
         )
-        print(f"⚠️ RETURN на строке 2526", flush=True)
         return
 
     if context.user_data.get('range_step') == 'end':
         d_end = parse_date(text)
         if not d_end:
             await update.message.reply_text('❌ Не понял дату конца. Попробуй: «8.10», «+5», «пятница»')
-            print(f"⚠️ RETURN на строке 2532", flush=True)
             return
         task_id = context.user_data.get('range_task')
         start = context.user_data.get('range_start')
@@ -2565,7 +2541,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         d_start = _dt.strptime(start, '%Y-%m-%d').date()
         if d_end < d_start:
             await update.message.reply_text('❌ Конец раньше старта. Введи ещё раз.')
-            print(f"⚠️ RETURN на строке 2540", flush=True)
             return
         set_task_range(task_id, start, d_end.strftime('%Y-%m-%d'))
         days = (d_end - d_start).days + 1
@@ -2579,7 +2554,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton('🏠 Меню', callback_data='menu_back')],
             ])
         )
-        print(f"⚠️ RETURN на строке 2553", flush=True)
         return
 
     # === ДЛИТЕЛЬНОСТЬ (обработка ввода) ===
@@ -2587,7 +2561,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         d = parse_date(text)
         if not d:
             await update.message.reply_text('❌ Не понял дату старта. Попробуй: «завтра», «1.10»')
-            print(f"⚠️ RETURN на строке 2560", flush=True)
             return
         context.user_data['duration_start'] = d.strftime('%Y-%m-%d')
         context.user_data['duration_step'] = 'days'
@@ -2595,7 +2568,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"⏳ Старт: {d.strftime('%d.%m.%Y')}\n\n"
             f"Сколько дней? Напиши число (например, 3):"
         )
-        print(f"⚠️ RETURN на строке 2567", flush=True)
         return
 
     if context.user_data.get('duration_step') == 'days':
@@ -2603,11 +2575,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             n = int(text.strip())
         except ValueError:
             await update.message.reply_text('❌ Нужно число. Напиши, сколько дней.')
-            print(f"⚠️ RETURN на строке 2574", flush=True)
             return
         if n < 1 or n > 365:
             await update.message.reply_text('❌ От 1 до 365 дней.')
-            print(f"⚠️ RETURN на строке 2577", flush=True)
             return
         task_id = context.user_data.get('duration_task')
         start = context.user_data.get('duration_start')
@@ -2626,7 +2596,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton('🏠 Меню', callback_data='menu_back')],
             ])
         )
-        print(f"⚠️ RETURN на строке 2595", flush=True)
         return
 
     # === АКТИВНОСТИ КЛИЕНТА ===
@@ -2637,7 +2606,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not client_id or not atype:
             context.user_data['waiting_for'] = None
             await update.message.reply_text('❌ Клиент потерялся. Начни заново.')
-            print(f"⚠️ RETURN на строке 2605", flush=True)
             return
         add_activity(client_id=client_id, user_id=update.effective_user.id, type_=atype, description=text.strip())
         cl = get_client(client_id)
@@ -2652,7 +2620,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton('🏠 Меню', callback_data='menu_back')],
             ])
         )
-        print(f"⚠️ RETURN на строке 2619", flush=True)
         return
 
     # === ДАЛЬШЕ — СТАРАЯ ЛОГИКА (новые задачи, расходы и т.д.) ===
@@ -2677,7 +2644,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("⚙️ Помощь", callback_data="menu_help")],
             ])
         )
-        print(f"⚠️ RETURN на строке 2643", flush=True)
         return
 
     # Обработка создания новой задачи
@@ -2695,7 +2661,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
                 ])
             )
-            print(f"⚠️ RETURN на строке 2660", flush=True)
             return
 
     # Обработка создания нового расхода
@@ -2710,7 +2675,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
                 ])
             )
-            print(f"⚠️ RETURN на строке 2674", flush=True)
             return
         if obj:
             amount = parse_amount(text)
@@ -2732,7 +2696,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             [InlineKeyboardButton("\U0001F3E0 Меню", callback_data="menu_back")],
                         ])
                     )
-                    print(f"⚠️ RETURN на строке 2695", flush=True)
                     return
                 else:
                     context.user_data['pending_expense'] = {
@@ -2751,13 +2714,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             [InlineKeyboardButton("\U0001F4E6 Прочее", callback_data="cat_прочее")],
                         ])
                     )
-                    print(f"⚠️ RETURN на строке 2713", flush=True)
                     return
             else:
                 await update.message.reply_text(
                     "\u274c Не понял сумму. Попробуй: \u00ab500\u00bb"
                 )
-                print(f"⚠️ RETURN на строке 2718", flush=True)
                 return
 
     # Обработка личного расхода
@@ -2776,7 +2737,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     "❌ Не понял сумму. Попробуй: «300 еда»"
                 )
-                print(f"⚠️ RETURN на строке 2736", flush=True)
                 return
         add_personal_expense(amount, category)
         context.user_data['waiting_for'] = None
@@ -2787,23 +2747,21 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
             ])
         )
-        print(f"⚠️ RETURN на строке 2746", flush=True)
         return
 
     # Обработка создания нового объекта
-    if context.user_data.get('waiting_for') == 'new_object':
-        object_id = create_object(text, user_id=update.effective_user.id)
-        context.user_data['waiting_for'] = None
-        await update.message.reply_text(
-            f"✅ Объект «{text}» создан",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🏗️ К объекту", callback_data=f"obj_{object_id}")],
-                [InlineKeyboardButton("🏗️ К объектам", callback_data="menu_objects")],
-                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-            ])
-        )
-        print(f"⚠️ RETURN на строке 2760", flush=True)
-        return
+    # # if context.user_data.get('waiting_for') == 'new_object':
+        # object_id = create_object(text, user_id=update.effective_user.id)
+        # context.user_data['waiting_for'] = None
+        # await update.message.reply_text(
+            # f"✅ Объект «{text}» создан",
+            # reply_markup=InlineKeyboardMarkup([
+                # [InlineKeyboardButton("🏗️ К объекту", callback_data=f"obj_{object_id}")],
+                # [InlineKeyboardButton("🏗️ К объектам", callback_data="menu_objects")],
+                # [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            # ])
+        # )
+        # return
 
     # Обработка ввода даты для задачи
     setdate_task = context.user_data.get('setdate_task')
@@ -2844,13 +2802,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 },
                 name=f"confirm_{setdate_task}"
             )
-            print(f"⚠️ RETURN на строке 2801", flush=True)
             return
         else:
             await update.message.reply_text(
                 "❌ Не понял дату. Попробуй: «завтра», «20.09», «пн», «+3»"
             )
-            print(f"⚠️ RETURN на строке 2806", flush=True)
             return
 
     # Обработка переименования задачи
@@ -2863,7 +2819,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.close()
         context.user_data['rename_task'] = None
         await update.message.reply_text(f"✅ Задача переименована: «{text}»")
-        print(f"⚠️ RETURN на строке 2818", flush=True)
         return
 
     result = parse_message(text)
@@ -2880,7 +2835,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("❌ Отмена", callback_data="menu_back")],
             ])
         )
-        print(f"⚠️ RETURN на строке 2834", flush=True)
         return
 
     if action == 'income':
@@ -2892,7 +2846,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"💰 Доход {amount} ₽ ({category}) добавлен в «{obj['name']}»"
         )
-        print(f"⚠️ RETURN на строке 2845", flush=True)
         return
 
     if action == 'expense':
@@ -2907,7 +2860,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 f"✅ Расход {amount} ₽ ({category}) добавлен в «{obj['name']}»"
             )
-            print(f"⚠️ RETURN на строке 2859", flush=True)
             return
         # Иначе — спрашиваем категорию
         context.user_data['pending_expense'] = {
@@ -2919,7 +2871,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"💰 Расход {amount} ₽ в «{obj['name']}»\n\nЗа что?",
             reply_markup=expense_category_keyboard()
         )
-        print(f"⚠️ RETURN на строке 2870", flush=True)
         return
 
     if action == 'add_task':
@@ -2929,7 +2880,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"✅ Задача «{title}» добавлена в «{obj['name']}». ID: {tid}"
         )
-        print(f"⚠️ RETURN на строке 2879", flush=True)
         return
 
     if action == 'done_task':
@@ -2939,7 +2889,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"✅ Задача «{task['title']}» в «{obj['name']}» выполнена!"
         )
-        print(f"⚠️ RETURN на строке 2888", flush=True)
         return
 
     if action == 'done_task_not_found':
@@ -2947,7 +2896,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"❌ В «{obj['name']}» не нашёл задачу с «{result['query']}». Посмотри /tasks"
         )
-        print(f"⚠️ RETURN на строке 2895", flush=True)
         return
 
     if action == 'finance':
@@ -2956,20 +2904,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             f"💰 {obj['name']}\n\nДоход: {f['income']} ₽\nРасход: {f['expense']} ₽\nБаланс: {f['balance']} ₽"
         )
-        print(f"⚠️ RETURN на строке 2903", flush=True)
         return
 
     if action == 'list_tasks':
         tasks = get_active_tasks()
         if not tasks:
             await update.message.reply_text("✅ Нет активных задач")
-            print(f"⚠️ RETURN на строке 2909", flush=True)
             return
         text_out = f"📋 Активные задачи ({len(tasks)}):\n\n"
         for t in tasks[:15]:
             text_out += f"• #{t['id']} {t['title']}\n"
         await update.message.reply_text(text_out)
-        print(f"⚠️ RETURN на строке 2914", flush=True)
         return
 
     if action == 'list_objects':
@@ -2978,7 +2923,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for o in objs:
             text_out += f"• {o['name']}\n"
         await update.message.reply_text(text_out)
-        print(f"⚠️ RETURN на строке 2922", flush=True)
         return
 
     if action == 'choose_object':
@@ -2992,70 +2936,79 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🤔 Нашёл несколько объектов. Какой именно?",
             reply_markup=make_choose_keyboard(objects, intent, amount, category)
         )
-        print(f"⚠️ RETURN на строке 2935", flush=True)
         return
 
     # === CRM: ожидаем бюджет сделки ===
 
-    # === УМНЫЙ FALLBACK: сразу ищем похожие объекты ===
-    context.user_data['unknown_text'] = text
+        # === УМНЫЙ FALLBACK: сразу ищем похожие объекты ===
+        context.user_data['unknown_text'] = text
 
-    # Ищем похожие объекты через rapidfuzz
-    print(f"🔍 UNKNOWN: text={text!r}", flush=True)
-    from rapidfuzz import process as rf_process, fuzz as rf_fuzz
-    all_objs = get_all_objects()
-    print(f"🔍 UNKNOWN: all_objs={len(all_objs)}", flush=True)
-    text_lower = text.strip().lower()
-    exact_match = None
-    similar = []
-    for o in all_objs:
-        if (o.get('name') or '').lower() == text_lower:
-            exact_match = o
-            break
-    if not exact_match and all_objs:
-        names = [o.get('name') or '' for o in all_objs]
-        matches = rf_process.extract(text, names, scorer=rf_fuzz.WRatio, limit=5)
-        for name, score, idx in matches:
-            if score >= 55:
-                similar.append((all_objs[idx], score))
+        # Ищем похожие объекты через rapidfuzz
+        print(f"🔍 UNKNOWN: text={text!r}", flush=True)
+        from rapidfuzz import process as rf_process, fuzz as rf_fuzz
+        all_objs = get_all_objects()
+        print(f"🔍 UNKNOWN: all_objs={len(all_objs)}", flush=True)
+        text_lower = text.strip().lower()
+        exact_match = None
+        similar = []
+        for o in all_objs:
+            if (o.get('name') or '').lower() == text_lower:
+                exact_match = o
+                break
+        if not exact_match and all_objs:
+            names = [o.get('name') or '' for o in all_objs]
+            matches = rf_process.extract(text, names, scorer=rf_fuzz.WRatio, limit=5)
+            for name, score, idx in matches:
+                if score >= 55:
+                    similar.append((all_objs[idx], score))
 
-    if exact_match:
-        context.user_data['unknown_text'] = None
+        if exact_match:
+            context.user_data['unknown_text'] = None
+            await update.message.reply_text(
+                f"✅ *Нашёл объект!*\\n\\n"
+                f"🏗️ {exact_match['name']}",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🏗️ Открыть объект", callback_data=f"obj_{exact_match['id']}")],
+                    [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+                ])
+            )
+            return
+
+        buttons = []
+        if similar:
+            buttons.append([InlineKeyboardButton("🔍 Похожие объекты:", callback_data="noop")])
+            for o, score in similar:
+                buttons.append([InlineKeyboardButton(
+                    f"🏗️ {o['name']} ({int(score)}%)",
+                    callback_data=f"obj_{o['id']}"
+                )])
+            buttons.append([InlineKeyboardButton("➖➖➖➖➖", callback_data="noop")])
+        buttons.append([InlineKeyboardButton(f"➕ Создать новый «{text[:40]}»", callback_data="unknown_as_object")])
+        buttons.append([InlineKeyboardButton("👤 Это клиент", callback_data="unknown_as_client"),
+                        InlineKeyboardButton("📋 Это задача", callback_data="unknown_as_task")])
+        buttons.append([InlineKeyboardButton("💰 Расход на объект", callback_data="unknown_as_expense"),
+                        InlineKeyboardButton("💸 Личный расход", callback_data="unknown_as_personal")])
+        buttons.append([InlineKeyboardButton("❌ Ничего", callback_data="unknown_cancel")])
+
+        # Добавляем кнопки похожих объектов (rapidfuzz)
+        if similar:
+            for _obj, _score in similar[:5]:
+                buttons.insert(0, [InlineKeyboardButton(
+                    f"🎯 {_obj['name']} ({int(_score)}%)",
+                    callback_data=f"choose_obj_unknown_{_obj['id']}_none_прочее"
+                )])
+        
+        header = f"🤔 Не распознал: «{text[:80]}»\\n\\n"
+        if similar:
+            header += f"🔍 Нашёл {len(similar)} похожих объектов.\\nВыбери:"
+        else:
+            header += "Что с этим сделать?"
+
         await update.message.reply_text(
-            f"✅ *Нашёл объект!*\n\n"
-            f"🏗️ {exact_match['name']}",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🏗️ Открыть объект", callback_data=f"obj_{exact_match['id']}")],
-                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-            ])
+            header,
+            reply_markup=InlineKeyboardMarkup(buttons)
         )
-        return
-
-    buttons = []
-    if similar:
-        for o, score in similar:
-            buttons.append([InlineKeyboardButton(
-                f"🏗️ {o['name']} ({int(score)}%)",
-                callback_data=f"obj_{o['id']}"
-            )])
-    buttons.append([InlineKeyboardButton(f"➕ Создать новый объект «{text[:40]}»", callback_data="unknown_as_object")])
-    buttons.append([InlineKeyboardButton("👤 Это клиент", callback_data="unknown_as_client"),
-                    InlineKeyboardButton("📋 Это задача", callback_data="unknown_as_task")])
-    buttons.append([InlineKeyboardButton("💰 Расход на объект", callback_data="unknown_as_expense"),
-                    InlineKeyboardButton("💸 Личный расход", callback_data="unknown_as_personal")])
-    buttons.append([InlineKeyboardButton("❌ Ничего", callback_data="unknown_cancel")])
-
-    header = f"🤔 Не распознал: «{text[:80]}»\n\n"
-    if similar:
-        header += f"🔍 Нашёл {len(similar)} похожих объектов.\nВыбери:"
-    else:
-        header += "Что с этим сделать?"
-
-    await update.message.reply_text(
-        header,
-        reply_markup=InlineKeyboardMarkup(buttons)
-    )
 
 
 # === УТОЧНЕНИЕ ОБЪЕКТА ===

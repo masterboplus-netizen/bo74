@@ -33,6 +33,22 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 async def error_handler(update, context):
+    import traceback
+    print("=" * 60, flush=True)
+    print(f"❌ ERROR_HANDLER CALLED", flush=True)
+    if update:
+        try:
+            print(f"   update type: {type(update).__name__}", flush=True)
+            if hasattr(update, 'message') and update.message:
+                print(f"   text: {update.message.text!r}", flush=True)
+        except Exception:
+            pass
+    if context and context.error:
+        print(f"   error: {context.error!r}", flush=True)
+        print(f"   traceback:", flush=True)
+        traceback.print_exception(type(context.error), context.error, context.error.__traceback__)
+    print("=" * 60, flush=True)
+    
     """Ловит ошибки. Сетевые — тихо логирует, остальные — отправляет админу."""
     err_name = type(context.error).__name__
     err_str = str(context.error)
@@ -171,6 +187,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_receipt_category, pattern="^receipt_cat_"))
     app.add_handler(CallbackQueryHandler(handle_receipt_show, pattern="^receipt_show_"))
     app.add_handler(CallbackQueryHandler(handle_rooms_callback, pattern="^(rooms_list_|room_|wall_)"))
+    app.add_handler(CallbackQueryHandler(handle_callback, pattern="^(menu_crm|crm_|unknown_|deal_|client_|activity_)"))
     app.add_handler(CallbackQueryHandler(handle_callback, pattern="^(?!room_|rooms_|wall_|cat_|choose_obj_|task_|taskdone_|taskdel_|setdate_|taskdate_|taskprio_|setprio_|taskrename_|taskassign_|setassigned_|setrange_|setduration_|cal_|dur_days_).*"))
 
     app.add_error_handler(error_handler)
