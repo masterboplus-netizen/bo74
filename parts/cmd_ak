@@ -1,3 +1,9 @@
+    if data.startswith("newtask_obj_"):
+        object_id = int(data.replace("newtask_obj_", ""))
+        obj = get_object(object_id)
+        context.user_data['pending_task_object'] = obj
+        context.user_data['waiting_for'] = 'new_task_text'
+        await query.edit_message_text(
             f"📋 Новая задача в «{obj['name']}»\n\nНапиши задачу:",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("⬅️ Назад", callback_data="add_task")]

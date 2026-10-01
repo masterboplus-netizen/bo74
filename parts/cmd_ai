@@ -1,3 +1,9 @@
+    )
+
+
+def tasks_keyboard():
+    """Клавиатура активных задач"""
+    from modules.tasks import get_active_tasks
     tasks = get_active_tasks()
     buttons = []
     for t in tasks[:20]:
@@ -392,9 +398,3 @@ async def handle_task_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
         c.execute("UPDATE tasks SET deadline = NULL WHERE id = ?", (task_id,))
         conn.commit()
         c.execute("SELECT t.title, o.name as obj FROM tasks t LEFT JOIN objects o ON t.object_id = o.id WHERE t.id = ?", (task_id,))
-        row = c.fetchone()
-        conn.close()
-        title = row['title'] if row else '?'
-        obj = row['obj'] if row and row['obj'] else 'Без объекта'
-        await query.edit_message_text(
-            f"🚫 Срок убран у задачи «{title}» ({obj})"

@@ -1,3 +1,11 @@
+            f"Введи в формате:\n"
+            f"• +79991234567 (Россия)\n"
+            f"• 89991234567 (Россия)\n"
+            f"• 9991234567 (Россия, 10 цифр)\n"
+            f"• +491234567890 (Европа)\n\n"
+            f"Или нажми «Пропустить».",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✏️ Ввести заново", callback_data="crm_phone_edit")],
                 [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_phone")],
             ])
         )
@@ -390,11 +398,3 @@
             f"✅ Объект «{text}» создан",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🏗️ К объекту", callback_data=f"obj_{object_id}")],
-                [InlineKeyboardButton("🏗️ К объектам", callback_data="menu_objects")],
-                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-            ])
-        )
-        print(f"⚠️ RETURN на строке 2760", flush=True)
-        return
-
-    # Обработка ввода даты для задачи
