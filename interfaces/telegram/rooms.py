@@ -136,7 +136,8 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
                      "room_tasks_", "room_measures_", "room_measure_add_", "room_measure_cat_",
                      "room_comms_", "room_objects_", "room_photos_",
                      "room_conflicts_", "room_forecast_", "room_type_",
-                     "room_method_", "room_height_", "room_start_", "room_progress_")
+                     "room_method_", "room_height_", "room_start_", "room_progress_",
+                     "comm_")
     if data.startswith("room_") and not data.startswith(_room_exclude):
         try:
             room_id = int(data.replace("room_", ""))
@@ -945,27 +946,354 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     # Коммуникации
+    # === 🔧 КОММУНИКАЦИИ ===
     if data.startswith("room_comms_"):
         room_id = int(data.replace("room_comms_", ""))
+        from core.comms import get_comms, format_comm, get_comm_type_label
         comms = get_comms(room_id)
+        room = get_room(room_id)
+        room_name = room['name'] if room else '?'
+        text = f"🔧 *Коммуникации в «{room_name}»*\n\n"
         if not comms:
+            text += "_Пока ничего не добавлено._\n\n"
+            text += "Добавь воду, канализацию, электрику, газ, вентиляцию."
+        else:
+            text += f"Найдено: {len(comms)}\n\n"
+            for i, c in enumerate(comms, 1):
+                text += f"{i}. {format_comm(c)}\n"
+        buttons = []
+        for c in comms:
+            label = get_comm_type_label(c.get('comm_type'))
+            wall = c.get('wall') or '?'
+            buttons.append([InlineKeyboardButton(
+                f"{label} ({wall})",
+                callback_data=f"comm_show_{c['id']}"
+            )])
+        buttons.append([InlineKeyboardButton("➕ Добавить", callback_data=f"comm_add_{room_id}")])
+        buttons.append([InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")])
+        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(buttons))
+        return
+
+    if data.startswith("comm_add_"):
+        room_id = int(data.replace("comm_add_", ""))
+        from core.comms import COMM_TYPES
+        buttons = []
+        for code, label, _ in COMM_TYPES:
+            buttons.append([InlineKeyboardButton(label, callback_data=f"comm_type_{room_id}_{code}")])
+        buttons.append([InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_comms_{room_id}")])
+        await query.edit_message_text(
+            f"🔧 *Новая коммуникация*\n\nВыбери тип:",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    if data.startswith("comm_type_"):
+        parts = data.replace("comm_type_", "").split("_", 1)
+        room_id = int(parts[0])
+        ctype = parts[1]
+        context.user_data['comm_room_id'] = room_id
+        context.user_data['comm_type'] = ctype
+        from core.comms import get_comm_type_label
+        label = get_comm_type_label(ctype)
+        buttons = [
+            [InlineKeyboardButton("1. Напротив", callback_data=f"comm_wall_{room_id}_напротив")],
+            [InlineKeyboardButton("2. Слева", callback_data=f"comm_wall_{room_id}_слева")],
+            [InlineKeyboardButton("3. У входа", callback_data=f"comm_wall_{room_id}_у входа")],
+            [InlineKeyboardButton("4. Справа", callback_data=f"comm_wall_{room_id}_справа")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_comms_{room_id}")],
+        ]
+        await query.edit_message_text(
+            f"🔧 *{label}*\n\nНа какой стене?",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    if data.startswith("comm_wall_"):
+        parts = data.replace("comm_wall_", "").split("_", 1)
+        room_id = int(parts[0])
+        wall = parts[1] if len(parts) > 1 else 'напротив'
+        context.user_data['comm_wall'] = wall
+        context.user_data['waiting_for'] = 'comm_offset_x'
+        await query.edit_message_text(
+            f"📐 *Расстояние от угла* (СМ):\n\n_Сколько от угла до коммуникации вдоль стены._\n_Например: 50_",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_comms_{room_id}")],
+            ])
+        )
+        return
+
+    if data.startswith("comm_show_"):
+        comm_id = int(data.replace("comm_show_", ""))
+        from core.comms import get_comm, get_comm_type_label
+        c = get_comm(comm_id)
+        if not c:
+            await query.edit_message_text("❌ Не найдено")
+            return
+        label = get_comm_type_label(c.get('comm_type'))
+        text = f"🔧 *Коммуникация #{comm_id}*\n\n"
+        text += f"{label}\n"
+        text += f"🧱 Стена: {c.get('wall') or '?'}\n"
+        if c.get('offset_x') is not None:
+            text += f"📐 От угла: {c['offset_x']} см\n"
+        if c.get('offset_y') is not None:
+            text += f"📏 От пола: {c['offset_y']} см\n"
+        if c.get('diameter'):
+            text += f"⭕ Диаметр: {c['diameter']} мм\n"
+        if c.get('voltage'):
+            text += f"⚡ Напряжение: {c['voltage']} В\n"
+        if c.get('size'):
+            text += f"📦 Размер: {c['size']} см\n"
+        buttons = [
+            [InlineKeyboardButton("✏️ От угла", callback_data=f"comm_edit_{comm_id}_offset_x"),
+             InlineKeyboardButton("✏️ От пола", callback_data=f"comm_edit_{comm_id}_offset_y")],
+        ]
+        ctype = c.get('comm_type')
+        if ctype == 'elec_panel':
+            buttons.append([InlineKeyboardButton("✏️ Размер щита", callback_data=f"comm_edit_{comm_id}_size")])
+        elif ctype in ('water_cold', 'water_hot', 'sewer', 'heating', 'gas', 'drain', 'vent'):
+            buttons.append([InlineKeyboardButton("✏️ Диаметр", callback_data=f"comm_edit_{comm_id}_diameter")])
+        buttons.append([InlineKeyboardButton("✏️ Стена", callback_data=f"comm_edit_{comm_id}_wall")])
+        buttons.append([InlineKeyboardButton("🗑 Удалить", callback_data=f"comm_del_{comm_id}")])
+        buttons.append([InlineKeyboardButton("⬅️ К коммуникациям", callback_data=f"room_comms_{c['room_id']}")])
+        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(buttons))
+        return
+
+    if data.startswith("comm_del_"):
+        comm_id = int(data.replace("comm_del_", ""))
+        from core.comms import get_comm, delete_comm
+        c = get_comm(comm_id)
+        room_id = c['room_id'] if c else None
+        delete_comm(comm_id)
+        if room_id:
             await query.edit_message_text(
-                "🔧 Коммуникаций пока нет.",
+                "✅ Удалено",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ Назад", callback_data=f"room_{room_id}")]
+                    [InlineKeyboardButton("⬅️ К коммуникациям", callback_data=f"room_comms_{room_id}")],
+                ])
+            )
+        return
+
+    if data.startswith("comm_volt_"):
+        # comm_volt_220_<room_id> или comm_volt_380_<room_id>
+        parts = data.replace("comm_volt_", "").split("_")
+        volt = int(parts[0])
+        room_id = int(parts[1])
+        context.user_data['comm_voltage'] = volt
+        context.user_data['waiting_for'] = None
+        # Сохраняем через внутреннюю логику — вызываем _comm_save не можем (нужен update),
+        # поэтому сохраняем вручную
+        from core.comms import add_comm, get_comm_type_label
+        ctype = context.user_data.get('comm_type')
+        wall = context.user_data.get('comm_wall')
+        offset_x = context.user_data.get('comm_offset_x')
+        offset_y = context.user_data.get('comm_offset_y')
+        if not all([room_id, ctype, wall]):
+            await query.edit_message_text("❌ Данные потерялись")
+            return
+        comm_id = add_comm(room_id=room_id, comm_type=ctype, wall=wall,
+                           offset_x=offset_x, offset_y=offset_y, voltage=volt)
+        for k in ['comm_room_id', 'comm_type', 'comm_wall', 'comm_offset_x',
+                  'comm_offset_y', 'comm_diameter', 'comm_voltage', 'waiting_for']:
+            context.user_data[k] = None
+        label = get_comm_type_label(ctype)
+        await query.edit_message_text(
+            f"✅ *{label}* добавлена!\n\n🧱 Стена: {wall}\n📏 X: {offset_x} см\n📏 Y: {offset_y} см\n⚡ {volt} В",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Ещё", callback_data=f"comm_add_{room_id}")],
+                [InlineKeyboardButton("🔧 К коммуникациям", callback_data=f"room_comms_{room_id}")],
+            ])
+        )
+        return
+
+    if data.startswith("comm_skip_depth_"):
+        room_id = int(data.replace("comm_skip_depth_", ""))
+        w = context.user_data.get('comm_size_w') or 0
+        h = context.user_data.get('comm_size_h') or 0
+        context.user_data['comm_size'] = f"{w}×{h}×?"
+        await query.edit_message_text("⏭ Сохраняем без глубины...")
+        # Вызываем сохранение — нужен update с message, сделаем через query.message
+        from core.comms import add_comm, get_comm_type_label
+        ctype = context.user_data.get('comm_type')
+        wall = context.user_data.get('comm_wall')
+        offset_x = context.user_data.get('comm_offset_x')
+        offset_y = context.user_data.get('comm_offset_y')
+        size = context.user_data.get('comm_size')
+        if not all([room_id, ctype, wall]):
+            await query.edit_message_text("❌ Данные потерялись")
+            return
+        add_comm(room_id=room_id, comm_type=ctype, wall=wall,
+                 offset_x=offset_x, offset_y=offset_y, size=size)
+        for k in ['comm_room_id', 'comm_type', 'comm_wall', 'comm_offset_x',
+                  'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_size',
+                  'comm_size_w', 'comm_size_h', 'comm_size_d', 'waiting_for']:
+            context.user_data[k] = None
+        label = get_comm_type_label(ctype)
+        await query.edit_message_text(
+            f"✅ *{label}* добавлена!\n\n🧱 Стена: {wall}\n📐 От угла: {offset_x} см\n📏 От пола: {offset_y} см\n📦 Размер: {size} см",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Ещё", callback_data=f"comm_add_{room_id}")],
+                [InlineKeyboardButton("🔧 К коммуникациям", callback_data=f"room_comms_{room_id}")],
+            ])
+        )
+        return
+
+    if data.startswith("comm_skip_size_"):
+        room_id = int(data.replace("comm_skip_size_", ""))
+        from core.comms import add_comm, get_comm_type_label
+        ctype = context.user_data.get('comm_type')
+        wall = context.user_data.get('comm_wall')
+        offset_x = context.user_data.get('comm_offset_x')
+        offset_y = context.user_data.get('comm_offset_y')
+        if not all([room_id, ctype, wall]):
+            await query.edit_message_text("❌ Данные потерялись")
+            return
+        comm_id = add_comm(room_id=room_id, comm_type=ctype, wall=wall,
+                           offset_x=offset_x, offset_y=offset_y)
+        for k in ['comm_room_id', 'comm_type', 'comm_wall', 'comm_offset_x',
+                  'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_size', 'waiting_for']:
+            context.user_data[k] = None
+        label = get_comm_type_label(ctype)
+        await query.edit_message_text(
+            f"✅ *{label}* добавлена!\n\n🧱 Стена: {wall}\n📐 От угла: {offset_x} см\n📏 От пола: {offset_y} см",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Ещё", callback_data=f"comm_add_{room_id}")],
+                [InlineKeyboardButton("🔧 К коммуникациям", callback_data=f"room_comms_{room_id}")],
+            ])
+        )
+        return
+
+    if data.startswith("comm_skip_diam_"):
+        room_id = int(data.replace("comm_skip_diam_", ""))
+        # Сохраняем без диаметра
+        from core.comms import add_comm, get_comm_type_label
+        ctype = context.user_data.get('comm_type')
+        wall = context.user_data.get('comm_wall')
+        offset_x = context.user_data.get('comm_offset_x')
+        offset_y = context.user_data.get('comm_offset_y')
+        if not all([room_id, ctype, wall]):
+            await query.edit_message_text("❌ Данные потерялись")
+            return
+        comm_id = add_comm(room_id=room_id, comm_type=ctype, wall=wall,
+                           offset_x=offset_x, offset_y=offset_y)
+        for k in ['comm_room_id', 'comm_type', 'comm_wall', 'comm_offset_x',
+                  'comm_offset_y', 'comm_diameter', 'comm_voltage', 'waiting_for']:
+            context.user_data[k] = None
+        label = get_comm_type_label(ctype)
+        await query.edit_message_text(
+            f"✅ *{label}* добавлена!\n\n🧱 Стена: {wall}\n📏 X: {offset_x} см\n📏 Y: {offset_y} см",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Ещё", callback_data=f"comm_add_{room_id}")],
+                [InlineKeyboardButton("🔧 К коммуникациям", callback_data=f"room_comms_{room_id}")],
+            ])
+        )
+        return
+
+    if data.startswith("comm_edit_"):
+        # Проверяем — это редактирование части размера?
+        _parts = data.replace("comm_edit_", "").split("_")
+        if len(_parts) == 3 and _parts[1] == "size":
+            comm_id = int(_parts[0])
+            sub = _parts[2]  # w / h / d
+            context.user_data['comm_edit_id'] = comm_id
+            context.user_data['comm_edit_field'] = f"size_{sub}"
+            context.user_data['waiting_for'] = 'comm_edit_size_part'
+            names = {'w': 'ШИРИНА', 'h': 'ВЫСОТА', 'd': 'ГЛУБИНА'}
+            name = names.get(sub, sub)
+            await query.edit_message_text(
+                f"📦 *{name} щита* (мм):\n\n_Напиши число._",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"comm_show_{comm_id}")],
                 ])
             )
             return
-        lines = [f"🔧 *Коммуникации* ({len(comms)}):\n"]
-        for c in comms:
-            lines.append(format_comm(c))
+
+    if data.startswith("comm_edit_"):
+        parts = data.replace("comm_edit_", "").split("_")
+        comm_id = int(parts[0])
+        field = parts[1]
+        if field == 'wall':
+            buttons = [
+                [InlineKeyboardButton("1. Напротив", callback_data=f"comm_set_{comm_id}_wall_напротив")],
+                [InlineKeyboardButton("2. Слева", callback_data=f"comm_set_{comm_id}_wall_слева")],
+                [InlineKeyboardButton("3. У входа", callback_data=f"comm_set_{comm_id}_wall_у входа")],
+                [InlineKeyboardButton("4. Справа", callback_data=f"comm_set_{comm_id}_wall_справа")],
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"comm_show_{comm_id}")],
+            ]
+            await query.edit_message_text(
+                "✏️ *Смена стены*\n\nНа какой стене?",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+            return
+        # Особый случай: size (размер щита) — редактируем Ш/В/Г по отдельности
+        if field == 'size':
+            from core.comms import get_comm
+            c = get_comm(comm_id)
+            size_str = c.get('size') or '?×?×?'
+            parts = size_str.split('×')
+            w = parts[0] if len(parts) > 0 else '?'
+            h = parts[1] if len(parts) > 1 else '?'
+            d = parts[2] if len(parts) > 2 else '?'
+            buttons = [
+                [InlineKeyboardButton(f"✏️ Ширина: {w}", callback_data=f"comm_edit_{comm_id}_size_w")],
+                [InlineKeyboardButton(f"✏️ Высота: {h}", callback_data=f"comm_edit_{comm_id}_size_h")],
+                [InlineKeyboardButton(f"✏️ Глубина: {d}", callback_data=f"comm_edit_{comm_id}_size_d")],
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"comm_show_{comm_id}")],
+            ]
+            await query.edit_message_text(
+                f"📦 *Размер щита*\n\nЧто изменить?",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+            return
+
+        context.user_data['comm_edit_id'] = comm_id
+        context.user_data['comm_edit_field'] = field
+        context.user_data['waiting_for'] = 'comm_edit_value'
+        prompts = {
+            'offset_x': '📐 *Новое расстояние от угла* (СМ):',
+            'offset_y': '📏 *Новая высота от пола* (СМ):',
+            'diameter': '⭕ *Новый диаметр* (мм):',
+            'voltage': '⚡ *Напряжение* (220 или 380):',
+        }
+        prompt = prompts.get(field, '✏️ Новое значение:')
         await query.edit_message_text(
-            "\n".join(lines),
+            f"{prompt}\n\n_Напиши и отправь._",
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⬅️ Назад", callback_data=f"room_{room_id}")]
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"comm_show_{comm_id}")],
             ])
         )
+        return
+
+    if data.startswith("comm_set_"):
+        parts = data.replace("comm_set_", "").split("_")
+        comm_id = int(parts[0])
+        field = parts[1]
+        value = "_".join(parts[2:])
+        from core.comms import update_comm
+        if field == 'wall':
+            update_comm(comm_id, wall=value)
+        from core.comms import get_comm, get_comm_type_label
+        c = get_comm(comm_id)
+        if c:
+            label = get_comm_type_label(c.get('comm_type'))
+            text = f"🔧 *Коммуникация #{comm_id}*\n\n{label}\n🧱 Стена: {c.get('wall') or '?'}"
+            buttons = [
+                [InlineKeyboardButton("✏️ От угла", callback_data=f"comm_edit_{comm_id}_offset_x"),
+                 InlineKeyboardButton("✏️ От пола", callback_data=f"comm_edit_{comm_id}_offset_y")],
+                [InlineKeyboardButton("⬅️ К коммуникации", callback_data=f"comm_show_{comm_id}")],
+                [InlineKeyboardButton("⬅️ К коммуникациям", callback_data=f"room_comms_{c['room_id']}")],
+            ]
+            await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(buttons))
         return
 
     # Мебель/техника
@@ -1508,6 +1836,242 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
 async def handle_measure_input(update, context):
     """Пошаговый ввод: 1) длина, 2) высота/ширина."""
     step = context.user_data.get('waiting_for')
+
+    # === 🔧 КОММУНИКАЦИИ — ввод значений ===
+    if step == 'comm_offset_x':
+        room_id = context.user_data.get('comm_room_id')
+        ctype = context.user_data.get('comm_type')
+        wall = context.user_data.get('comm_wall')
+        if not all([room_id, ctype, wall]):
+            await update.message.reply_text("❌ Потерялись данные, начни заново")
+            context.user_data['waiting_for'] = None
+            return
+        text_val = (update.message.text or '').strip().replace(',', '.')
+        try:
+            val = float(text_val)
+        except ValueError:
+            await update.message.reply_text("❌ Введи число (например 50)")
+            return
+        context.user_data['comm_offset_x'] = val
+        context.user_data['waiting_for'] = 'comm_offset_y'
+        await update.message.reply_text(
+            f"📏 *Высота от пола* (СМ):\n\n_На какой высоте от пола находится._\n_Например: 30_",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_comms_{room_id}")],
+            ])
+        )
+        return
+
+    if step == 'comm_offset_y':
+        room_id = context.user_data.get('comm_room_id')
+        text_val = (update.message.text or '').strip().replace(',', '.')
+        try:
+            val = float(text_val)
+        except ValueError:
+            await update.message.reply_text("❌ Введи число (например 30)")
+            return
+        context.user_data['comm_offset_y'] = val
+        # Следующий шаг зависит от типа
+        ctype = context.user_data.get('comm_type')
+
+        # 💧 Вода / канализация / газ / отопление / дренаж → диаметр
+        if ctype in ('water_cold', 'water_hot', 'sewer', 'heating', 'gas', 'drain'):
+            context.user_data['waiting_for'] = 'comm_diameter'
+            await update.message.reply_text(
+                f"⭕ *Диаметр трубы* (мм):\n\n_Например: 20, 32, 50_",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⏭ Пропустить", callback_data=f"comm_skip_diam_{room_id}")],
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_comms_{room_id}")],
+                ])
+            )
+        # 🌬 Вентиляция → размер
+        elif ctype == 'vent':
+            context.user_data['waiting_for'] = 'comm_diameter'
+            await update.message.reply_text(
+                f"⭕ *Размер вентиляции* (мм):\n\n_Например: 100, 150_",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⏭ Пропустить", callback_data=f"comm_skip_diam_{room_id}")],
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_comms_{room_id}")],
+                ])
+            )
+        # ⚡ Щит → размер (Ш, В, Г — по шагам)
+        elif ctype == 'elec_panel':
+            context.user_data['waiting_for'] = 'comm_size_w'
+            await update.message.reply_text(
+                f"📦 *Размер щита* — ШИРИНА (см):\n\n_Например: 45_",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⏭ Пропустить размер", callback_data=f"comm_skip_size_{room_id}")],
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_comms_{room_id}")],
+                ])
+            )
+        # 🔌 Розетка / 💡 Выключатель / 🔌 Вывод кабеля / Слаботочка → сразу сохраняем
+        else:
+            await _comm_save(update, context)
+        return
+
+    if step == 'comm_size_w':
+        room_id = context.user_data.get('comm_room_id')
+        text_val = (update.message.text or '').strip().replace(',', '.')
+        try:
+            val = int(float(text_val))
+        except ValueError:
+            await update.message.reply_text("❌ Введи число (например 450)")
+            return
+        context.user_data['comm_size_w'] = val
+        context.user_data['waiting_for'] = 'comm_size_h'
+        await update.message.reply_text(
+            f"📦 *Размер щита* — ВЫСОТА (см):\n\n_Например: 60_",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⏭ Пропустить", callback_data=f"comm_skip_size_{room_id}")],
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_comms_{room_id}")],
+            ])
+        )
+        return
+
+    if step == 'comm_size_h':
+        room_id = context.user_data.get('comm_room_id')
+        text_val = (update.message.text or '').strip().replace(',', '.')
+        try:
+            val = int(float(text_val))
+        except ValueError:
+            await update.message.reply_text("❌ Введи число (например 600)")
+            return
+        context.user_data['comm_size_h'] = val
+        context.user_data['waiting_for'] = 'comm_size_d'
+        await update.message.reply_text(
+            f"📦 *Размер щита* — ГЛУБИНА (см):\n\n"
+            f"_Например: 12_\n\n"
+            f"_Если не знаешь — нажми «Не знаю»_",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⏭ Не знаю", callback_data=f"comm_skip_depth_{room_id}")],
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_comms_{room_id}")],
+            ])
+        )
+        return
+
+    if step == 'comm_size_d':
+        room_id = context.user_data.get('comm_room_id')
+        text_val = (update.message.text or '').strip().replace(',', '.')
+        try:
+            val = int(float(text_val))
+        except ValueError:
+            await update.message.reply_text("❌ Введи число (например 120)")
+            return
+        context.user_data['comm_size_d'] = val
+        # Собираем строку Ш×В×Г
+        w = context.user_data.get('comm_size_w') or 0
+        h = context.user_data.get('comm_size_h') or 0
+        d = val
+        context.user_data['comm_size'] = f"{w}×{h}×{d}"
+        await _comm_save(update, context)
+        return
+
+    if step == 'comm_diameter':
+        room_id = context.user_data.get('comm_room_id')
+        text_val = (update.message.text or '').strip().replace(',', '.')
+        try:
+            val = float(text_val)
+        except ValueError:
+            await update.message.reply_text("❌ Введи число (например 20)")
+            return
+        context.user_data['comm_diameter'] = val
+        await _comm_save(update, context)
+        return
+
+    if step == 'comm_voltage':
+        room_id = context.user_data.get('comm_room_id')
+        text_val = (update.message.text or '').strip().replace(',', '.')
+        try:
+            val = int(float(text_val))
+        except ValueError:
+            await update.message.reply_text("❌ Введи 220 или 380")
+            return
+        context.user_data['comm_voltage'] = val
+        await _comm_save(update, context)
+        return
+
+    if step == 'comm_edit_size_part':
+        comm_id = context.user_data.get('comm_edit_id')
+        field = context.user_data.get('comm_edit_field')  # size_w / size_h / size_d
+        text_val = (update.message.text or '').strip().replace(',', '.')
+        try:
+            val = int(float(text_val))
+        except ValueError:
+            await update.message.reply_text("❌ Введи число")
+            return
+        from core.comms import get_comm, update_comm, get_comm_type_label
+        c = get_comm(comm_id)
+        if not c:
+            await update.message.reply_text("❌ Не найдено")
+            context.user_data['waiting_for'] = None
+            return
+        # Разбираем текущий размер
+        size_str = c.get('size') or '?×?×?'
+        parts = size_str.split('×')
+        while len(parts) < 3:
+            parts.append('?')
+        idx = {'size_w': 0, 'size_h': 1, 'size_d': 2}.get(field, 0)
+        parts[idx] = str(val)
+        new_size = '×'.join(parts)
+        update_comm(comm_id, size=new_size)
+        context.user_data['waiting_for'] = None
+        context.user_data['comm_edit_id'] = None
+        context.user_data['comm_edit_field'] = None
+        label = get_comm_type_label(c.get('comm_type'))
+        await update.message.reply_text(
+            f"✅ Обновлено!\n\n🔧 *{label}* #{comm_id}\n📦 Размер: {new_size} мм",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ К коммуникации", callback_data=f"comm_show_{comm_id}")],
+            ])
+        )
+        return
+
+    if step == 'comm_edit_value':
+        comm_id = context.user_data.get('comm_edit_id')
+        field = context.user_data.get('comm_edit_field')
+        text_val = (update.message.text or '').strip().replace(',', '.')
+        if not all([comm_id, field]):
+            await update.message.reply_text("❌ Потерялись данные")
+            context.user_data['waiting_for'] = None
+            return
+        try:
+            if field in ('offset_x', 'offset_y', 'diameter'):
+                val = float(text_val)
+            elif field == 'voltage':
+                val = int(float(text_val))
+            elif field == 'size':
+                # Не должно сюда попадать — size правится через size_w/h/d
+                val = text_val
+            else:
+                val = text_val
+        except ValueError:
+            await update.message.reply_text("❌ Введи число")
+            return
+        from core.comms import update_comm, get_comm, get_comm_type_label
+        update_comm(comm_id, **{field: val})
+        c = get_comm(comm_id)
+        context.user_data['waiting_for'] = None
+        context.user_data['comm_edit_id'] = None
+        context.user_data['comm_edit_field'] = None
+        if c:
+            label = get_comm_type_label(c.get('comm_type'))
+            await update.message.reply_text(
+                f"✅ Обновлено!\n\n🔧 *{label}* #{comm_id}\n🧱 Стена: {c.get('wall')}",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К коммуникации", callback_data=f"comm_show_{comm_id}")],
+                    [InlineKeyboardButton("⬅️ К списку", callback_data=f"room_comms_{c['room_id']}")],
+                ])
+            )
+        return
+
 
     # === ПРОЁМЫ — в самом начале, ДО старой логики ===
     if step in ('opening_width', 'opening_height', 'opening_sill'):
@@ -2819,3 +3383,75 @@ async def _opening_save(update, context):
             [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
         ])
     )
+
+async def _comm_save(update, context):
+    """Сохраняет коммуникацию после ввода всех полей."""
+    room_id = context.user_data.get('comm_room_id')
+    ctype = context.user_data.get('comm_type')
+    wall = context.user_data.get('comm_wall')
+    offset_x = context.user_data.get('comm_offset_x')
+    offset_y = context.user_data.get('comm_offset_y')
+    diameter = context.user_data.get('comm_diameter')
+    voltage = context.user_data.get('comm_voltage')
+    size = context.user_data.get('comm_size')
+
+    if not all([room_id, ctype, wall]):
+        await update.message.reply_text("❌ Потерялись данные, начни заново")
+        context.user_data['waiting_for'] = None
+        return
+
+    from core.comms import add_comm, get_comm_type_label
+    from core.db import commit
+
+    kwargs = {
+        'room_id': room_id,
+        'comm_type': ctype,
+        'wall': wall,
+        'offset_x': offset_x,
+        'offset_y': offset_y,
+    }
+    if diameter is not None:
+        kwargs['diameter'] = diameter
+    if voltage is not None:
+        kwargs['voltage'] = voltage
+    if size is not None:
+        kwargs['size'] = size
+
+    try:
+        comm_id = add_comm(**kwargs)
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка: {e}")
+        return
+
+    label = get_comm_type_label(ctype)
+
+    # Чистим
+    for k in ['comm_room_id', 'comm_type', 'comm_wall', 'comm_offset_x',
+              'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_size',
+              'comm_size_w', 'comm_size_h', 'comm_size_d', 'waiting_for']:
+        context.user_data[k] = None
+
+    text = f"✅ *Коммуникация добавлена!*\n\n"
+    text += f"🔧 {label}\n"
+    text += f"🧱 Стена: {wall}\n"
+    if offset_x is not None:
+        text += f"📏 X: {offset_x} см\n"
+    if offset_y is not None:
+        text += f"📏 Y: {offset_y} см\n"
+    if diameter is not None:
+        text += f"⭕ Диаметр: {diameter} мм\n"
+    if voltage is not None:
+        text += f"⚡ Напряжение: {voltage} В\n"
+    if size is not None:
+        text += f"📦 Размер: {size} см\n"
+
+    await update.message.reply_text(
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Добавить ещё", callback_data=f"comm_add_{room_id}")],
+            [InlineKeyboardButton("🔧 К коммуникациям", callback_data=f"room_comms_{room_id}")],
+            [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+        ])
+    )
+

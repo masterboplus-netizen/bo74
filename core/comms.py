@@ -3,15 +3,27 @@ from core.db import fetchone, fetchall, commit
 
 
 COMM_TYPES = [
-    ("water_cold", "💧 ХВС", "cold water"),
-    ("water_hot",  "🔥 ГВС", "hot water"),
-    ("sewer",      "🚽 Слив", "sewer"),
-    ("heating",    "♨️ Отопление", "heating"),
-    ("electric",   "⚡ Электрика", "electric"),
-    ("gas",        "🔵 Газ", "gas"),
-    ("vent",       "🌬 Вентиляция", "vent"),
-    ("weak",       "📡 Слаботочка", "weak current"),
-    ("drain",      "🚰 Дренаж", "drain"),
+    # Вода / канализация
+    ("water_cold",   "💧 ХВС (холодная вода)", "cold water"),
+    ("water_hot",    "🔥 ГВС (горячая вода)", "hot water"),
+    ("sewer",        "🚽 Канализация", "sewer"),
+    ("drain",        "🚰 Дренаж", "drain"),
+    ("heating",      "♨️ Отопление", "heating"),
+    ("gas",          "🔵 Газ", "gas"),
+    ("vent",         "🌬 Вентиляция", "vent"),
+    # Электрика (силовая)
+    ("elec_panel",   "⚡ Щит / автоматы", "electric panel"),
+    ("elec_socket",  "🔌 Розетка", "socket"),
+    ("elec_switch",  "💡 Выключатель", "switch"),
+    ("elec_cable",   "🔌 Вывод кабеля (свет)", "cable outlet"),
+    # Слаботочка
+    ("net_internet", "🌐 Интернет", "internet"),
+    ("net_tv",       "📺 ТВ-кабель", "tv"),
+    ("net_phone",    "📞 Телефон", "phone"),
+    ("net_cctv",     "🎥 Видеонаблюдение", "cctv"),
+    ("net_audio",    "🔊 Аудио", "audio"),
+    ("net_domofon",  "🚪 Домофон", "domofon"),
+    ("net_bell",     "🔔 Звонок", "bell"),
 ]
 
 WALLS = [("A", "Стена A"), ("B", "Стена B"), ("C", "Стена C"), ("D", "Стена D")]
@@ -19,16 +31,16 @@ WALLS = [("A", "Стена A"), ("B", "Стена B"), ("C", "Стена C"), ("
 
 def add_comm(room_id, comm_type, label=None, wall=None,
              offset_x=None, offset_y=None, depth=None,
-             diameter=None, voltage=None, note=None,
+             diameter=None, voltage=None, size=None, note=None,
              photo_id=None, tenant_id=1, created_by=None):
     """Добавляет коммуникацию. Возвращает comm_id."""
     return commit(
         "INSERT INTO room_comms "
         "(room_id, comm_type, label, wall, offset_x, offset_y, depth, "
-        "diameter, voltage, note, photo_id, tenant_id, created_by) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "diameter, voltage, size, note, photo_id, tenant_id, created_by) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (room_id, comm_type, label, wall, offset_x, offset_y, depth,
-         diameter, voltage, note, photo_id, tenant_id, created_by)
+         diameter, voltage, size, note, photo_id, tenant_id, created_by)
     )
 
 
@@ -55,7 +67,7 @@ def get_comms(room_id, comm_type=None):
 def update_comm(comm_id, **kwargs):
     """Обновляет поля коммуникации."""
     allowed = {"label", "wall", "offset_x", "offset_y", "depth",
-               "diameter", "voltage", "note", "photo_id", "comm_type"}
+               "diameter", "voltage", "size", "note", "photo_id", "comm_type"}
     fields, params = [], []
     for k, v in kwargs.items():
         if k in allowed:
@@ -82,20 +94,28 @@ def get_comm_type_label(comm_type):
 
 
 def format_comm(c):
-    """Форматирует коммуникацию в строку."""
+    """Форматирует коммуникацию в строку (человекочитаемо)."""
     label = get_comm_type_label(c.get('comm_type'))
     name = c.get('label') or label
+
+    def fmt_num(v):
+        if v is None:
+            return None
+        return str(int(v)) if v == int(v) else str(round(v, 1))
+
     parts = []
     if c.get('wall'):
-        parts.append(f"стена {c['wall']}")
+        parts.append(f"стена «{c['wall']}»")
     if c.get('offset_x') is not None:
-        parts.append(f"X={c['offset_x']}м")
+        parts.append(f"от угла {fmt_num(c['offset_x'])} см")
     if c.get('offset_y') is not None:
-        parts.append(f"Y={c['offset_y']}м")
+        parts.append(f"от пола {fmt_num(c['offset_y'])} см")
     if c.get('diameter'):
-        parts.append(f"Ø{c['diameter']}мм")
+        parts.append(f"Ø {fmt_num(c['diameter'])} мм")
     if c.get('voltage'):
-        parts.append(c['voltage'])
+        parts.append(f"{fmt_num(c['voltage'])} В")
+    if c.get('size'):
+        parts.append(f"{c['size']} см")
     dims = ' · '.join(parts) if parts else '—'
     return f"{label} {name}: {dims}"
 
