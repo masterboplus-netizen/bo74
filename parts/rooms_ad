@@ -1,0 +1,700 @@
+            context.user_data['waiting_for'] = None
+            return
+        # Разбираем текущий размер
+        size_str = c.get('size') or '?×?×?'
+        parts = size_str.split('×')
+        while len(parts) < 3:
+            parts.append('?')
+        idx = {'size_w': 0, 'size_h': 1, 'size_d': 2}.get(field, 0)
+        parts[idx] = str(val)
+        new_size = '×'.join(parts)
+        update_comm(comm_id, size=new_size)
+        context.user_data['waiting_for'] = None
+        context.user_data['comm_edit_id'] = None
+        context.user_data['comm_edit_field'] = None
+        label = get_comm_type_label(c.get('comm_type'))
+        await update.message.reply_text(
+            f"✅ Обновлено!\n\n🔧 *{label}* #{comm_id}\n📦 Размер: {new_size} мм",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ К коммуникации", callback_data=f"comm_show_{comm_id}")],
+            ])
+        )
+        return
+
+    if step == 'comm_edit_value':
+        comm_id = context.user_data.get('comm_edit_id')
+        field = context.user_data.get('comm_edit_field')
+        text_val = (update.message.text or '').strip().replace(',', '.')
+        if not all([comm_id, field]):
+            await update.message.reply_text("❌ Потерялись данные")
+            context.user_data['waiting_for'] = None
+            return
+        try:
+            if field in ('offset_x', 'offset_y', 'diameter'):
+                val = float(text_val)
+            elif field == 'voltage':
+                val = int(float(text_val))
+            elif field == 'size':
+                # Не должно сюда попадать — size правится через size_w/h/d
+                val = text_val
+            else:
+                val = text_val
+        except ValueError:
+            await update.message.reply_text("❌ Введи число")
+            return
+        from core.comms import update_comm, get_comm, get_comm_type_label
+        update_comm(comm_id, **{field: val})
+        c = get_comm(comm_id)
+        context.user_data['waiting_for'] = None
+        context.user_data['comm_edit_id'] = None
+        context.user_data['comm_edit_field'] = None
+        if c:
+            label = get_comm_type_label(c.get('comm_type'))
+            await update.message.reply_text(
+                f"✅ Обновлено!\n\n🔧 *{label}* #{comm_id}\n🧱 Стена: {c.get('wall')}",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К коммуникации", callback_data=f"comm_show_{comm_id}")],
+                    [InlineKeyboardButton("⬅️ К списку", callback_data=f"room_comms_{c['room_id']}")],
+                ])
+            )
+        return
+
+
+    # === ПРОЁМЫ — в самом начале, ДО старой логики ===
+    if step in ('opening_width', 'opening_height', 'opening_sill'):
+        await _handle_opening_input(update, context, step)
+        return
+
+    # === ОБХОД СТЕН (Этап 3) — ПЕРВЫМ ДЕЛОМ, до старой логики ===
+    if step in ('wall_round_opening_width', 'wall_round_opening_height'):
+        await _handle_wall_round_opening_input(update, context, step)
+        return
+
+    if step in ('wall_round_length', 'wall_round_angle_val',
+                'wall_round_plane_bottom', 'wall_round_plane_middle',
+                'wall_round_plane_top'):
+        await _handle_wall_round_input(update, context, step)
+        return
+    
+    # === ВЫСОТА ПОТОЛКА — отдельная ветка (не требует measure_room_id) ===
+    if step in ('room_height_point', 'room_height_same'):
+        room_id = context.user_data.get('height_room_id')
+        if not room_id:
+            await update.message.reply_text("❌ Потерялась комната, начни заново")
+            return
+        text_val = (update.message.text or '').strip().replace(',', '.')
+        try:
+            val = float(text_val)
+        except ValueError:
+            await update.message.reply_text(
+                "❌ Нужно число. Например: `270`",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        # === ОБРАБОТКА ТОЧЕК ВЫСОТЫ ===
+        if step == 'room_height_same':
+            from core.rooms import update_room
+            update_room(room_id, height=val, height_bottom=val, height_middle=val, height_top=val)
+            for k in ['waiting_for', 'height_room_id', 'height_step', 'height_bottom', 'height_middle', 'height_top']:
+                context.user_data[k] = None
+            await update.message.reply_text(
+                f"✅ *Высота потолка:* {val} см\n\n"
+                f"📐 Теперь можно начать обход стен по часовой стрелке.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📐 Начать обход стен", callback_data=f"wall_round_start_{room_id}")],
+                    [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+            return
+        # step == 'room_height_point'
+        point = context.user_data.get('height_step') or 1
+        mode = context.user_data.get('height_mode') or 'three'  # 'same' или 'three'
+        if point == 1:
+            context.user_data['height_bottom'] = val
+            # Если режим «одинаковая» — сохраняем все 3 = val
+            if mode == 'same':
+                from core.rooms import update_room
+                update_room(room_id, height=val, height_bottom=val, height_middle=val, height_top=val)
+                for k in ['waiting_for', 'height_room_id', 'height_step',
+                          'height_bottom', 'height_middle', 'height_top', 'height_mode']:
+                    context.user_data[k] = None
+                await update.message.reply_text(
+                    f"✅ *Высота: {val} см* (одинаковая везде)\n\n"
+                    f"📐 *Теперь обход стен.*",
+                    parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("📐 Начать обход стен", callback_data=f"wall_round_start_{room_id}")],
+                        [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+                    ])
+                )
+                return
+            # Иначе — режим «3 точки»
+            context.user_data['height_step'] = 2
+            from core.rooms import update_room
+            update_room(room_id, height_bottom=val)
+            caption = (
+                f"✅ *Точка 1 (центр):* {val} см\n\n"
+                f"📏 *Высота — шаг 2 из 3*\n\n"
+                f"📍 *Точка 2 — у ЛЕВОГО угла*\n\n"
+                f"Перейди к левому углу (у левой стены).\n\n"
+                f"*Как замерить:*\n"
+                f"1. ⚙️ Проверь режим дальномера — *«от задней стенки»*\n"
+                f"2. Приложи к полу, наведи на потолок\n"
+                f"3. Нажми — получишь цифру\n"
+                f"4. Введи в СМ\n\n"
+                f"_Например: 272_"
+            )
+            kb_extra = [
+                [InlineKeyboardButton("✅ Все три одинаковые", callback_data=f"room_height_same_{room_id}")],
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+            ]
+            await _send_height_scheme(update, context, room_id, 2, caption, kb_extra)
+            return
+        if point == 2:
+            context.user_data['height_middle'] = val
+            context.user_data['height_step'] = 3
+            # Сохраняем сразу в БД
+            from core.rooms import update_room
+            update_room(room_id, height_middle=val)
+            caption = (
+                f"✅ *Точка 2 (левый угол):* {val} см\n\n"
+                f"📏 *Если потолок везде одинаковый* — нажми кнопку ниже.\n"
+                f"Иначе — замерь *точку 3 (правый угол)*.\n\n"
+                f"📍 *Точка 3 — у ПРАВОГО угла*\n\n"
+                f"*Как замерить:*\n"
+                f"1. ⚙️ Проверь режим дальномера — *«от задней стенки»*\n"
+                f"2. Приложи к полу, наведи на потолок\n"
+                f"3. Нажми — получишь цифру\n"
+                f"4. Введи в СМ\n\n"
+                f"_Например: 271_"
+            )
+            await _send_height_scheme(update, context, room_id, 3, caption)
+            return
+        if point == 3:
+            center = context.user_data.get('height_bottom') or 0
+            left = context.user_data.get('height_middle') or 0
+            right = val
+            avg = round((center + left + right) / 3, 1)
+            dev = round(max(center, left, right) - min(center, left, right), 1)
+            from core.rooms import update_room
+            update_room(room_id, height=avg, height_bottom=center, height_middle=left, height_top=right)
+            for k in ['waiting_for', 'height_room_id', 'height_step', 'height_bottom', 'height_middle', 'height_top']:
+                context.user_data[k] = None
+            await update.message.reply_text(
+                f"✅ *Все точки замерены!*\n\n"
+                f"📊 *Итог:*\n"
+                f"• Точка 1 (центр): {center} см\n"
+                f"• Точка 2 (левый угол): {left} см\n"
+                f"• Точка 3 (правый угол): {right} см\n\n"
+                f"Средняя: *{avg} см*\n"
+                f"Отклонение: *{dev} см*\n\n"
+                f"📐 *Теперь обход стен по часовой от двери.*\n"
+                f"Начнём со стены 1 (напротив).",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📐 Начать обход стен", callback_data=f"wall_round_start_{room_id}")],
+                    [InlineKeyboardButton("📐 К размерам", callback_data=f"room_measures_{room_id}")],
+                    [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+            return
+    
+    # === СТАРАЯ ЛОГИКА (замеры стен, ниши, углы) ===
+    room_id = context.user_data.get('measure_room_id')
+    category = context.user_data.get('measure_category')
+    if not room_id or not category:
+        await update.message.reply_text("❌ Потерялась комната, начни заново")
+        return
+
+    text = (update.message.text or '').strip().replace(',', '.')
+    try:
+        val = float(text)
+    except ValueError:
+        await update.message.reply_text(
+            "❌ Нужно число. Например: `2.8`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    step = context.user_data.get('waiting_for')
+
+    # Высота потолка — одна цифра (одинаковая)
+    if step == 'room_height_same':
+        from core.rooms import update_room
+        room_id = context.user_data.get('height_room_id')
+        update_room(room_id, height=val, height_bottom=val, height_middle=val, height_top=val)
+        for k in ['waiting_for', 'height_room_id', 'height_step', 'height_bottom', 'height_middle', 'height_top']:
+            context.user_data[k] = None
+        await update.message.reply_text(
+            f"✅ *Высота потолка:* {val} см\n\n"
+            f"📐 Теперь можно начать обход стен по часовой стрелке.",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📐 Начать обход стен", callback_data=f"wall_round_start_{room_id}")],
+                [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+            ])
+        )
+        return
+
+    # Высота потолка — 3 точки
+    if step == 'room_height_point':
+        point = context.user_data.get('height_step') or 1
+        if point == 1:
+            context.user_data['height_bottom'] = val
+            context.user_data['height_step'] = 2
+            # Сохраняем сразу в БД (для восстановления после выхода)
+            from core.rooms import update_room
+            update_room(room_id, height_bottom=val)
+            from core.rooms import update_room
+            room_id = context.user_data.get('height_room_id')
+            await update.message.reply_text(
+                f"✅ *1 — левая:* {val} см\n\n"
+                f"{_room_height_scheme(2)}\n\n"
+                f"📏 *Точка 2 — у правой стены*\n"
+                f"Введи в СМ:",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        if point == 2:
+            context.user_data['height_middle'] = val
+            context.user_data['height_step'] = 3
+            # Сохраняем сразу в БД
+            from core.rooms import update_room
+            update_room(room_id, height_middle=val)
+            caption = (
+                f"✅ *Точка 2 (левый угол):* {val} см\n\n"
+                f"📏 *Высота — шаг 3 из 3*\n\n"
+                f"📍 *Точка 3 — у ПРАВОГО угла*\n\n"
+                f"Перейди к правому углу (у правой стены).\n\n"
+                f"*Как замерить:*\n"
+                f"1. Приложи дальномер к полу\n"
+                f"2. Наведи на потолок\n"
+                f"3. Нажми кнопку — получишь цифру\n"
+                f"4. Введи цифру в СМ"
+            )
+            await _send_height_scheme(update, context, room_id, 3, caption)
+            return
+        if point == 3:
+            context.user_data['height_top'] = val
+            # По новой логике: bottom = ЛЕВЫЙ угол, middle = ПРАВЫЙ угол, top = ЦЕНТР
+            # Но у нас пользователь ввёл: 1=центр, 2=левый угол, 3=правый угол
+            # Переименуем: center = height_bottom (точка 1), left = height_middle (точка 2), right = val (точка 3)
+            center = context.user_data.get('height_bottom') or 0
+            left = context.user_data.get('height_middle') or 0
+            right = val
+            b, m, t = left, right, center  # для БД: bottom=левый, middle=правый, top=центр (условно)
+            avg = round((center + left + right) / 3, 1)
+            dev = round(max(center, left, right) - min(center, left, right), 1)
+            from core.rooms import update_room
+            room_id = context.user_data.get('height_room_id')
+            update_room(room_id, height=avg, height_bottom=center, height_middle=left, height_top=right)
+            for k in ['waiting_for', 'height_room_id', 'height_step', 'height_bottom', 'height_middle', 'height_top']:
+                context.user_data[k] = None
+            await update.message.reply_text(
+                f"✅ *3 — центр:* {val} см\n\n"
+                f"📊 *Итог:*\n"
+                f"• 1 (левая): {b} см\n"
+                f"• 2 (правая): {m} см\n"
+                f"• 3 (центр): {t} см\n\n"
+                f"Средняя: *{avg} см*\n"
+                f"Отклонение: *{dev} см*\n\n"
+                f"📐 Теперь можно начать обход стен по часовой.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📐 Начать обход стен", callback_data=f"wall_round_start_{room_id}")],
+                    [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+            return
+
+    # Замер стены: низ
+    if step == 'wall_measured_bottom':
+        context.user_data['wall_bottom'] = val
+        context.user_data['waiting_for'] = 'wall_measured_middle'
+        await update.message.reply_text(
+            f"✅ Низ: *{val} м*\n\n📏 *Замер по центру*:\nВведи в м:",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # Замер стены: центр
+    if step == 'wall_measured_middle':
+        context.user_data['wall_middle'] = val
+        context.user_data['waiting_for'] = 'wall_measured_top'
+        await update.message.reply_text(
+            f"✅ Центр: *{val} м*\n\n📏 *Замер вверху*:\nВведи в м:",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # Замер стены: верх → размеры длины
+    if step == 'wall_measured_top':
+        context.user_data['wall_top'] = val
+        b = context.user_data.get('wall_bottom') or 0
+        m = context.user_data.get('wall_middle') or 0
+        t = val
+        dev = round(max(b, m, t) - min(b, m, t), 3)
+        await update.message.reply_text(
+            f"✅ Верх: *{val} м*\n\n"
+            f"⚠️ Отклонение: *{dev} м* ({int(dev*100)} см)\n\n"
+            f"📏 *Теперь длина стены:*",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        context.user_data['waiting_for'] = 'measure_first_dim'
+        return
+
+    # Ниша: ширина → глубина → высота (ввод в СМ!)
+    if step == 'wall_niche_width':
+        current = context.user_data.get('wall_niche_current') or 1
+        context.user_data['wall_niche_temp'] = {'width': round(val, 2)}
+        context.user_data['waiting_for'] = 'wall_niche_depth'
+        await update.message.reply_text(
+            f"🕳 *Ниша {current}*\n\n"
+            f"📏 Глубина (в стене) в СМ: __",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    if step == 'wall_niche_depth':
+        temp = context.user_data.get('wall_niche_temp') or {}
+        temp['depth'] = round(val, 2)
+        context.user_data['wall_niche_temp'] = temp
+        context.user_data['waiting_for'] = 'wall_niche_height'
+        await update.message.reply_text(
+            f"📏 Высота ниши в СМ: __",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    if step == 'wall_niche_height':
+        temp = context.user_data.get('wall_niche_temp') or {}
+        temp['height'] = round(val, 2)
+        niches = context.user_data.get('wall_niches') or []
+        niches.append(temp)
+        context.user_data['wall_niches'] = niches
+        total = context.user_data.get('wall_niche_count') or 1
+        current = context.user_data.get('wall_niche_current') or 1
+
+        if current < total:
+            context.user_data['wall_niche_current'] = current + 1
+            context.user_data['wall_niche_temp'] = {}
+            context.user_data['waiting_for'] = 'wall_niche_width'
+            await update.message.reply_text(
+                f"✅ Ниша {current} записана\n\n"
+                f"🕳 *Ниша {current + 1} из {total}*\n\n"
+                f"📏 Ширина: __ м",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        else:
+            # Все ниши записаны → следующий шаг или длина
+            remaining = context.user_data.get('wall_remaining_steps') or []
+            if remaining:
+                next_step = remaining[0]
+                context.user_data['wall_remaining_steps'] = remaining[1:]
+                await _do_wall_step_next(update, context, room_id, next_step)
+                return
+            # Все шаги пройдены → длина
+            context.user_data['waiting_for'] = 'measure_first_dim'
+            await update.message.reply_text(
+                f"✅ Все ниши записаны\n\n"
+                f"📏 *Длина стены* (общая, включая ниши) в СМ: __",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
+    # Угол стены: ввод значения
+    if step == 'wall_angle_value':
+        method = context.user_data.get('angle_method', '60')
+        angle_deg = None
+        if method == '60':
+            # 60-80-100: диагональ
+            import math
+            cos_val = (60*60 + 80*80 - val*val) / (2 * 60 * 80)
+            cos_val = max(-1, min(1, cos_val))
+            angle_deg = round(math.degrees(math.acos(cos_val)), 1)
+        elif method == '100':
+            # 100-100
+            import math
+            cos_val = (100*100 + 100*100 - val*val) / (2 * 100 * 100)
+            cos_val = max(-1, min(1, cos_val))
+            angle_deg = round(math.degrees(math.acos(cos_val)), 1)
+        else:
+            # напрямую градусы
+            angle_deg = val
+
+        context.user_data['angle_value'] = angle_deg
+        context.user_data['wall_angle_diagonal'] = val
+        context.user_data['waiting_for'] = 'measure_first_dim'
+
+        deviation = round(abs(angle_deg - 90), 1)
+        sign = '+' if angle_deg > 90 else '-'
+        await update.message.reply_text(
+            f"✅ Угол: *{angle_deg}°*\n"
+            f"_Отклонение от прямого: {sign}{deviation}°_\n\n"
+            f"Теперь размеры стены:\n"
+            f"📏 Длина: __ м",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # Шаг 1: первая величина (длина)
+    if step == 'measure_first_dim':
+        context.user_data['measure_first_value'] = val
+        context.user_data['waiting_for'] = 'measure_second_dim'
+
+        cat_info2 = {
+            'wall':    ('📐 Высота стены', 'вертикаль, от пола до потолка'),
+            'floor':   ('📏 Ширина пола',  'перпендикулярно длине'),
+            'ceiling': ('📏 Ширина потолка','перпендикулярно длине'),
+            'window':  ('📐 Высота окна',  'вертикаль'),
+            'door':    ('📐 Высота двери', 'вертикаль'),
+            'opening': ('📐 Высота проёма','вертикаль'),
+        }
+        label, hint = cat_info2.get(category, ('📏 Вторая величина', 'вертикаль'))
+
+        await update.message.reply_text(
+            f"✅ Первая: *{val} м*\n\n"
+            f"*Шаг 2 из 2*\n\n"
+            f"{label}: __ м\n"
+            f"_({hint})_",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # Шаг 2: вторая величина → создаём
+    if step == 'measure_second_dim':
+        first = context.user_data.get('measure_first_value')
+
+        from core.measures import add_measure, get_measures
+        existing = get_measures(room_id, category=category)
+
+        if category == 'wall':
+            pos = context.user_data.get('wall_pos') or 'напротив'
+            label = f"Стена {pos}"
+            av = context.user_data.get('angle_value')
+            if av:
+                label += f" ({av}°)"
+        elif category == 'floor':
+            label = 'Пол'
+        elif category == 'ceiling':
+            label = 'Потолок'
+        elif category == 'window':
+            label = f"Окно{len(existing)+1}"
+        elif category == 'door':
+            label = f"Дверь{len(existing)+1}"
+        else:
+            label = f"Элемент{len(existing)+1}"
+
+        kwargs = {'label': label}
+        if category in ('wall',):
+            kwargs['length'] = first
+            kwargs['height'] = val
+            pos = context.user_data.get('wall_pos')
+            if pos:
+                kwargs['wall_pos'] = pos
+            if context.user_data.get('wall_has_niche'):
+                kwargs['has_rounded'] = 0  # перезапишем на 0
+                kwargs['radius'] = 0
+                kwargs['rounded_corner'] = 'niche'  # метка ниши
+            wb = context.user_data.get('wall_bottom')
+            wm = context.user_data.get('wall_middle')
+            wt = context.user_data.get('wall_top')
+            if wb:
+                kwargs['measured_bottom'] = wb
+            if wm:
+                kwargs['measured_middle'] = wm
+            if wt:
+                kwargs['measured_top'] = wt
+            if wb and wt:
+                kwargs['is_wavy'] = 1 if abs(wt - wb) > 0.01 else 0
+                kwargs['deviation_plus'] = round(wt - wb, 3) if wt > wb else 0
+                kwargs['deviation_minus'] = round(wb - wt, 3) if wb > wt else 0
+            av = context.user_data.get('angle_value')
+            if av:
+                kwargs['angle_value'] = av
+            am = context.user_data.get('angle_method')
+            if am:
+                kwargs['angle_method'] = am
+            ad = context.user_data.get('wall_angle_diagonal')
+            if ad:
+                kwargs['angle_diagonal_cm'] = ad
+        elif category in ('floor', 'ceiling'):
+            kwargs['length'] = first
+            kwargs['width'] = val
+        elif category in ('window', 'door', 'opening'):
+            kwargs['length'] = first
+            kwargs['height'] = val
+        else:
+            kwargs['length'] = first
+            kwargs['width'] = val
+
+        area = first * val
+
+        # Для стены — СОЗДАЁМ сразу (вопрос про особенности — уже был в начале)
+        if category == 'wall':
+            add_measure(room_id, category, **kwargs)
+            for k in ['waiting_for', 'measure_room_id', 'measure_category',
+                      'measure_first_value', 'wall_pending', 'wall_pos',
+                      'wall_flags', 'wall_niches', 'wall_niche_count',
+                      'wall_niche_current', 'wall_niche_temp']:
+                context.user_data[k] = None
+            await update.message.reply_text(
+                f"✅ *{label}*\n"
+                f"Размер: {first} × {val} м\n"
+                f"Площадь: {round(area, 2)} м²",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📐 К размерам", callback_data=f"room_measures_{room_id}")],
+                    [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")]
+                ])
+            )
+            return
+
+        # Для остальных категорий — как было
+        add_measure(room_id, category, **kwargs)
+
+        for k in ['waiting_for', 'measure_room_id', 'measure_category',
+                  'measure_first_value']:
+            context.user_data[k] = None
+
+        await update.message.reply_text(
+            f"✅ *{label}* ({category})\n"
+            f"Размер: {first} × {val} м\n"
+            f"Площадь: {round(area, 2)} м²",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📐 К размерам", callback_data=f"room_measures_{room_id}")],
+                [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")]
+            ])
+        )
+        return
+
+
+
+
+def _room_height_scheme(step):
+    """ASCII-схема комнаты с точками замеров."""
+    scheme = (
+        "```\n"
+        "  ┌─────────────────┐\n"
+        "  │                 │\n"
+        "  │  1●         ●2  │  ← стены\n"
+        "  │                 │\n"
+        "  │       ●3        │\n"
+        "  │                 │\n"
+        "  │      🚪         │  ← дверь\n"
+        "  └─────────────────┘\n"
+        "```"
+    )
+    return scheme
+
+
+async def _send_height_scheme(update, context, room_id, step, caption, kb_extra=None):
+    """Отправляет PNG-схему + текст-подпись.
+    Принимает либо Update, либо CallbackQuery.
+    """
+    import os
+    from telegram import CallbackQuery
+    # Определяем — что пришло: Update или CallbackQuery
+    is_callback = isinstance(update, CallbackQuery)
+    if is_callback:
+        query = update
+        chat = query.message.chat
+    else:
+        query = getattr(update, "callback_query", None)
+        chat = update.effective_chat
+
+    # Путь к схеме
+    base = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    png_path = os.path.join(base, "docs", "images", f"height_scheme_step{step}.png")
+    if kb_extra:
+        kb = InlineKeyboardMarkup(kb_extra)
+    else:
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+        ])
+    if os.path.exists(png_path):
+        try:
+            with open(png_path, "rb") as f:
+                # Удаляем старое сообщение (если из callback)
+                if query:
+                    try:
+                        await query.message.delete()
+                    except Exception:
+                        pass
+                # Отправляем фото
+                await chat.send_photo(
+                    photo=f,
+                    caption=caption,
+                    parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=kb,
+                )
+            return
+        except Exception as e:
+            print(f"⚠️ send_height_scheme: {e}")
+    # Fallback — если PNG нет
+    if query:
+        try:
+            await query.edit_message_text(
+                caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        except Exception:
+            pass
+    elif hasattr(update, "message"):
+        await update.message.reply_text(
+            caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+        )
+
+
+async def _show_height_step(query, context, room_id, method, step):
+    """Показывает экран ввода высоты (точка 1/2/3) — с PNG-схемой."""
+    # Устанавливаем состояние ожидания
+    context.user_data['waiting_for'] = 'room_height_point'
+    context.user_data['height_room_id'] = room_id
+    context.user_data['height_step'] = step
+    from telegram.constants import ParseMode as PM
+    if step == 1:
+        point = "📍 *Точка 1 — в ЦЕНТРЕ комнаты*"
+        hint = "Встань в центр комнаты."
+    elif step == 2:
+        point = "📍 *Точка 2 — у ЛЕВОГО угла*"
+        hint = "Перейди к левому углу (у левой стены)."
+    else:
+        point = "📍 *Точка 3 — у ПРАВОГО угла*"
+        hint = "Перейди к правому углу (у правой стены)."
+    caption = (
+        f"📏 *Высота — шаг {step} из 3*\n\n"
+        f"{point}\n\n"
+        f"{hint}\n\n"
+        f"*Как замерить:*\n"
+        f"1. ⚙️ Переключи дальномер на режим *«от задней стенки»* (не от лазера!)\n"
+        f"2. Приложи дальномер к полу\n"
+        f"3. Наведи на потолок\n"
+        f"4. Нажми кнопку — получишь цифру\n"
+        f"5. Введи цифру в СМ\n\n"
+        f"_Например: 270_"
+    )
+    # Отправляем PNG-схему с подписью
+    await _send_height_scheme(query, context, room_id, step, caption)
+
+
+async def reask_wall_question(update, context):
+    """Если юзер прислал текст вместо кнопки — показываем кнопки заново."""
+    room_id = context.user_data.get('measure_room_id')
+    pos = context.user_data.get('wall_pos') or 'слева'
+    if not room_id:
+        return False
+    await update.message.reply_text(
+        f"🧱 *Стена {pos}*\n\n"
+        f"Сначала выбери кнопкой:\n"
+        f"— стена ровная?\n"
+        f"— или есть закругление?",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Ровная", callback_data=f"wall_angle_none_{room_id}")],
+            [InlineKeyboardButton("🔄 Закругление / кривой угол", callback_data=f"wall_angle_rounded_{room_id}")],
+            [InlineKeyboardButton("🕳 С нишей", callback_data=f"wall_angle_niche_{room_id}")],
