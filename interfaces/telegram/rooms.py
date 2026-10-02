@@ -2410,6 +2410,7 @@ async def _handle_wall_round_input(update, context, step):
         temp['depth'] = round(val, 2)
         context.user_data['wall_niche_temp'] = temp
         context.user_data['waiting_for'] = 'wall_niche_height'
+        _save_wall_draft(context, room_id, 'niche_height')
         room_id = context.user_data.get('wall_room_id')
         import os as _os
         _base = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
@@ -2440,6 +2441,7 @@ async def _handle_wall_round_input(update, context, step):
         # Спрашиваем — ровная или неровная
         context.user_data['wall_niche_temp'] = temp
         context.user_data['waiting_for'] = 'wall_niche_plane'
+        _save_wall_draft(context, room_id, 'niche_plane')
         room_id = context.user_data.get('wall_room_id')
         await update.message.reply_text(
             "🕳 *Ниша ровная или неровная по высоте?*\n\n"
