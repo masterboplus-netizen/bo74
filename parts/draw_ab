@@ -1,0 +1,139 @@
+    return out_path
+
+
+def draw_all_wall_step_schemes():
+    """Генерирует все 16 PNG (4 стены × 4 фазы)."""
+    paths = []
+    for step in [1, 2, 3, 4]:
+        for phase in ['flags', 'plane', 'length', 'angle']:
+            p = _draw_wall_step_scheme(step, phase)
+            paths.append(p)
+            print(f"✅ {p}")
+    return paths
+
+
+def draw_room_final(room_id, room_name="Комната"):
+    """Рисует финальный контур комнаты по реальным размерам и углам.
+    
+    Возвращает (path, info):
+        path — путь к PNG
+        info — dict с суммой длин, расхождением, замкнутостью
+    """
+    import math
+    from core.measures import get_walls_ordered
+    
+    walls = get_walls_ordered(room_id)
+    if not walls:
+        return None, {'error': 'Нет замеров стен'}
+    
+    # Строим контур по часовой
+    # wall_pos: 'напротив' (1), 'слева' (2), 'у входа' (3), 'справа' (4)
+    pos_order = {'напротив': 1, 'слева': 2, 'у входа': 3, 'справа': 4}
+    walls_sorted = sorted(walls, key=lambda w: pos_order.get(w.get('wall_pos') or '', 9))
+    
+    # Начало координат (0, 0) — левый нижний угол у двери
+    x, y = 0.0, 0.0
+    direction = math.radians(90)  # первый вектор — вверх (напротив)
+    points = [(x, y)]
+    
+    for i, w in enumerate(walls_sorted):
+        length = w.get('length') or 0
+        angle_deg = w.get('angle_value') or 90
+        # Угол: 90 — прямо, >90 — влево, <90 — вправо
+        # Накапливаем поворот
+        if i > 0:
+            direction = direction + math.radians(180 - angle_deg)
+        else:
+            # Первый вектор — вверх (90°)
+            direction = math.radians(90)
+        x += length * math.cos(direction)
+        y += length * math.sin(direction)
+        points.append((x, y))
+    
+    # Проверка замыкания
+    start = points[0]
+    end = points[-1]
+    sum_lengths = sum((w.get('length') or 0) for w in walls_sorted)
+    gap = math.hypot(end[0] - start[0], end[1] - start[1])
+    gap_percent = (gap / sum_lengths * 100) if sum_lengths > 0 else 0
+    
+    # Масштабирование под PNG
+    W, H = 1000, 900
+    padding = 100
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    width = max_x - min_x
+    height = max_y - min_y
+    if width == 0 or height == 0:
+        scale = 1
+    else:
+        scale = min((W - 2*padding) / width, (H - 2*padding) / height)
+    
+    # Центрирование
+    offset_x = padding - min_x * scale + ((W - 2*padding) - width * scale) / 2
+    offset_y = padding - min_y * scale + ((H - 2*padding) - height * scale) / 2
+    
+    def to_px(p):
+        # Инвертируем Y (в PNG Y растёт вниз)
+        return (offset_x + p[0] * scale, H - (offset_y + p[1] * scale))
+    
+    # Рисуем
+    img = Image.new("RGB", (W, H), "white")
+    d = ImageDraw.Draw(img)
+    font_big = get_font(30)
+    font = get_font(22)
+    font_sm = get_font(18)
+    
+    d.text((W//2, 40), f"Контур комнаты", fill="black", font=font_big, anchor="mm")
+    d.text((W//2, 80), room_name, fill="gray", font=font_sm, anchor="mm")
+    
+    # Стены — сплошные линии
+    px_points = [to_px(p) for p in points]
+    for i in range(len(px_points) - 1):
+        d.line([px_points[i], px_points[i+1]], fill="black", width=5)
+    
+    # Подписи длин на серединах стен
+    wall_names = {1: 'напр', 2: 'слева', 3: 'вх', 4: 'справа'}
+    for i, w in enumerate(walls_sorted):
+        if i >= len(px_points) - 1:
+            break
+        mx = (px_points[i][0] + px_points[i+1][0]) / 2
+        my = (px_points[i][1] + px_points[i+1][1]) / 2
+        length = w.get('length') or 0
+        pos = w.get('wall_pos') or '?'
+        d.text((mx, my - 15), f"{int(length)} см", fill="#0066CC", font=font_sm, anchor="mm")
+        d.text((mx, my + 15), pos, fill="gray", font=font_sm, anchor="mm")
+    
+    # Точки в углах
+    for p in px_points:
+        d.ellipse([(p[0]-6, p[1]-6), (p[0]+6, p[1]+6)], fill="black")
+    
+    # Дверь (на месте замыкания — внизу слева)
+    if len(px_points) > 0:
+        d.text((px_points[0][0] - 60, px_points[0][1] + 30), "🚪", fill="black", font=font_big, anchor="mm")
+    
+    # Информация
+    info = {
+        'total_length': round(sum_lengths, 1),
+        'gap': round(gap, 1),
+        'gap_percent': round(gap_percent, 2),
+        'closed': gap_percent < 5,
+        'walls_count': len(walls_sorted),
+    }
+    
+    # Статус
+    if info['closed']:
+        d.text((W//2, H - 30), f"✅ Контур замкнут (расхождение {info['gap_percent']}%)", 
+               fill="green", font=font, anchor="mm")
+    else:
+        d.text((W//2, H - 30), f"⚠️ Не замкнут: расхождение {info['gap_percent']}%", 
+               fill="orange", font=font, anchor="mm")
+    
+    # Сохраняем
+    out_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "docs", "images")
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, f"room_{room_id}_final.png")
+    img.save(out_path)
+    return out_path, info

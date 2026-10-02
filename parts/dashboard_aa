@@ -1,0 +1,500 @@
+"""Веб-дашборд Бо 7.7 — на встроенном http.server, без зависимостей"""
+import http.server
+import socketserver
+import json
+import urllib.parse
+from datetime import date, timedelta
+from db import get_connection
+
+PORT = 8080
+
+
+def get_summary():
+    """Сводка по всем объектам"""
+    conn = get_connection()
+    c = conn.cursor()
+
+    c.execute("SELECT COUNT(*) FROM objects WHERE status IN ('active', 'paused', 'waiting')")
+    objects_count = c.fetchone()[0] or 0
+
+    c.execute("SELECT COUNT(*) FROM tasks WHERE status IN ('open', 'in_progress')")
+    tasks_open = c.fetchone()[0] or 0
+
+    c.execute("SELECT COUNT(*) FROM tasks WHERE status = 'done'")
+    tasks_done = c.fetchone()[0] or 0
+
+    c.execute("SELECT COALESCE(SUM(amount), 0) FROM finance WHERE type = 'income'")
+    total_income = c.fetchone()[0] or 0
+
+    c.execute("SELECT COALESCE(SUM(amount), 0) FROM finance WHERE type = 'expense' AND is_personal = 0")
+    total_expense = c.fetchone()[0] or 0
+
+    c.execute("SELECT COALESCE(SUM(amount), 0) FROM finance WHERE type = 'expense' AND is_personal = 1")
+    personal_expense = c.fetchone()[0] or 0
+
+    conn.close()
+    return {
+        'objects_count': objects_count,
+        'tasks_open': tasks_open,
+        'tasks_done': tasks_done,
+        'total_income': total_income,
+        'total_expense': total_expense,
+        'total_balance': total_income - total_expense,
+        'personal_expense': personal_expense
+    }
+
+
+def get_objects():
+    """Список всех объектов со статистикой"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT o.id, o.name, o.status, o.budget,
+               COALESCE(SUM(CASE WHEN f.type = 'income' THEN f.amount ELSE 0 END), 0) as income,
+               COALESCE(SUM(CASE WHEN f.type = 'expense' THEN f.amount ELSE 0 END), 0) as expense,
+               (SELECT COUNT(*) FROM tasks t WHERE t.object_id = o.id AND t.status IN ('open', 'in_progress')) as tasks_open,
+               (SELECT COUNT(*) FROM tasks t WHERE t.object_id = o.id AND t.status = 'done') as tasks_done
+        FROM objects o
+        LEFT JOIN finance f ON f.object_id = o.id
+        WHERE o.status != 'archived'
+        GROUP BY o.id
+        ORDER BY o.name
+    """)
+    rows = c.fetchall()
+    conn.close()
+    return [{
+        'id': r[0], 'name': r[1], 'status': r[2], 'budget': r[3],
+        'income': r[4], 'expense': r[5], 'balance': r[4] - r[5],
+        'tasks_open': r[6], 'tasks_done': r[7]
+    } for r in rows]
+
+
+import os as _os
+import json as _json
+import urllib.request as _ur
+
+TG_TOKEN = _os.getenv("BOT_TOKEN", "")
+
+_file_url_cache = {}  # file_id -> (file_path, timestamp)
+_FILE_CACHE_TTL = 3300  # 55 минут
+
+
+def get_telegram_file_url(file_id: str) -> str:
+    """Возвращает прямую ссылку на файл через Telegram Bot API (с кэшем)."""
+    if not TG_TOKEN or not file_id:
+        return ""
+    # Проверяем кэш
+    import time as _time
+    cached = _file_url_cache.get(file_id)
+    now = _time.time()
+    if cached and (now - cached[1]) < _FILE_CACHE_TTL:
+        file_path = cached[0]
+        return f"https://api.telegram.org/file/bot{TG_TOKEN}/{file_path}"
+    try:
+        url = f"https://api.telegram.org/bot{TG_TOKEN}/getFile?file_id={file_id}"
+        with _ur.urlopen(url, timeout=5) as resp:
+            data = _json.loads(resp.read())
+        if data.get("ok"):
+            file_path = data["result"].get("file_path", "")
+            if file_path:
+                _file_url_cache[file_id] = (file_path, now)
+                return f"https://api.telegram.org/file/bot{TG_TOKEN}/{file_path}"
+    except Exception:
+        pass
+    return ""
+
+
+def get_object_photos(obj_id):
+    """Фото объекта для дашборда (без картинок — только метаданные)."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT p.id, p.stage, p.caption, p.taken_at, p.created_at, p.task_id, p.file_id,
+               t.title as task_title,
+               u.name as uploader_name
+        FROM photos p
+        LEFT JOIN tasks t ON p.task_id = t.id
+        LEFT JOIN users u ON u.tg_id = p.uploaded_by
+        WHERE p.object_id = ?
+        ORDER BY p.stage, p.taken_at DESC
+    """, (obj_id,))
+    rows = c.fetchall()
+    conn.close()
+    return [{
+        'id': r['id'],
+        'stage': r['stage'] or 'progress',
+        'caption': r['caption'] or '',
+        'taken_at': r['taken_at'] or '',
+        'task_id': r['task_id'],
+        'task_title': r['task_title'] or '',
+        'uploader': r['uploader_name'] or '—',
+        'file_id': r['file_id'] or '',
+    } for r in rows]
+
+
+def get_overdue_tasks():
+    """Просроченные задачи"""
+    today = date.today().strftime('%Y-%m-%d')
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT t.id, t.title, t.deadline, o.name as obj
+        FROM tasks t LEFT JOIN objects o ON t.object_id = o.id
+        WHERE t.status IN ('open', 'in_progress') AND t.deadline < ?
+        ORDER BY t.deadline ASC
+    """, (today,))
+    rows = c.fetchall()
+    conn.close()
+    return [{'id': r[0], 'title': r[1], 'deadline': r[2], 'object': r[3] or '—'} for r in rows]
+
+
+def get_object_detail(obj_id):
+    """Детали объекта"""
+    conn = get_connection()
+    c = conn.cursor()
+
+    c.execute("SELECT id, name, address, status, budget FROM objects WHERE id = ?", (obj_id,))
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        return None
+
+    obj = {'id': row[0], 'name': row[1], 'address': row[2], 'status': row[3], 'budget': row[4]}
+
+    c.execute("SELECT id, title, status, deadline, priority FROM tasks WHERE object_id = ? ORDER BY id DESC", (obj_id,))
+    obj['tasks'] = [{'id': r[0], 'title': r[1], 'status': r[2], 'deadline': r[3], 'priority': r[4]} for r in c.fetchall()]
+
+    c.execute("SELECT id, category, amount, date, note, type FROM finance WHERE object_id = ? ORDER BY date DESC, id DESC LIMIT 50", (obj_id,))
+    obj['finance'] = [{'id': r[0], 'category': r[1], 'amount': r[2], 'date': r[3], 'note': r[4], 'type': r[5]} for r in c.fetchall()]
+
+    c.execute("SELECT COALESCE(SUM(amount), 0) FROM finance WHERE object_id = ? AND type = 'income'", (obj_id,))
+    obj['income'] = c.fetchone()[0] or 0
+    c.execute("SELECT COALESCE(SUM(amount), 0) FROM finance WHERE object_id = ? AND type = 'expense'", (obj_id,))
+    obj['expense'] = c.fetchone()[0] or 0
+    obj['balance'] = obj['income'] - obj['expense']
+
+    conn.close()
+    return obj
+
+
+# ===== HTML-ШАБЛОНЫ =====
+
+CSS = """
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+       background: #0f0f0f; color: #e0e0e0; line-height: 1.5; }
+.container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+h1 { color: #4ade80; margin-bottom: 20px; font-size: 28px; }
+h2 { color: #e0e0e0; margin: 24px 0 12px; font-size: 20px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.card { background: #1a1a1a; padding: 16px; border-radius: 8px; border: 1px solid #2a2a2a; }
+.card .label { color: #888; font-size: 12px; text-transform: uppercase; margin-bottom: 6px; }
+.card .value { font-size: 24px; font-weight: 600; color: #fff; }
+.card.income .value { color: #4ade80; }
+.card.expense .value { color: #f87171; }
+.card.balance .value { color: #60a5fa; }
+table { width: 100%; border-collapse: collapse; background: #1a1a1a; border-radius: 8px; overflow: hidden; }
+th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #2a2a2a; }
+th { background: #222; color: #888; font-size: 12px; text-transform: uppercase; }
+tr:last-child td { border-bottom: none; }
+tr:hover { background: #222; }
+a { color: #60a5fa; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.status-active { color: #4ade80; }
+.status-paused { color: #fbbf24; }
+.status-waiting { color: #a78bfa; }
+.positive { color: #4ade80; }
+.negative { color: #f87171; }
+.overdue { background: #2a1a1a; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #2a2a2a; }
+.back { color: #888; font-size: 14px; }
+.priority-high { color: #f87171; }
+.priority-medium { color: #fbbf24; }
+.priority-low { color: #4ade80; }
+.done { color: #4ade80; }
+.open { color: #60a5fa; }
+"""
+
+
+def render_dashboard():
+    s = get_summary()
+    objs = get_objects()
+    overdue = get_overdue_tasks()
+
+    rows = ""
+    for o in objs:
+        bal_class = "positive" if o['balance'] >= 0 else "negative"
+        rows += f"""
+        <tr>
+            <td><a href="/object/{o['id']}">{o['name']}</a></td>
+            <td class="status-{o['status']}">{o['status']}</td>
+            <td>{o['tasks_open']} / {o['tasks_done']}</td>
+            <td class="positive">{o['income']:,} ₽</td>
+            <td class="negative">{o['expense']:,} ₽</td>
+            <td class="{bal_class}">{o['balance']:,} ₽</td>
+            <td><a href="/object/{o['id']}/photos" style="color:#60a5fa;">📸</a></td>
+        </tr>"""
+
+    overdue_rows = ""
+    for t in overdue:
+        overdue_rows += f"""
+        <tr class="overdue">
+            <td>#{t['id']}</td>
+            <td>{t['title']}</td>
+            <td>{t['object']}</td>
+            <td>{t['deadline']}</td>
+        </tr>"""
+
+    return f"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Бо 7.7 — Дашборд</title>
+    <style>{CSS}</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🤖 Бо 7.7 — Дашборд</h1>
+        <div><a href="/" style="color:#60a5fa;margin-right:12px;">🔄 Обновить</a><span style="color:#666;font-size:14px;">{date.today().strftime('%d.%m.%Y')}</span></div>
+    </div>
+
+    <div class="cards">
+        <div class="card"><div class="label">Объектов</div><div class="value">{s['objects_count']}</div></div>
+        <div class="card"><div class="label">Открытых задач</div><div class="value">{s['tasks_open']}</div></div>
+        <div class="card"><div class="label">Выполнено</div><div class="value">{s['tasks_done']}</div></div>
+        <div class="card income"><div class="label">Доход</div><div class="value">{s['total_income']:,} ₽</div></div>
+        <div class="card expense"><div class="label">Расход</div><div class="value">{s['total_expense']:,} ₽</div></div>
+        <div class="card balance"><div class="label">Баланс</div><div class="value">{s['total_balance']:,} ₽</div></div>
+    </div>
+
+    <h2>🏗️ Объекты</h2>
+    <table>
+        <thead><tr><th>Объект</th><th>Статус</th><th>Задачи (откр/вып)</th><th>Доход</th><th>Расход</th><th>Баланс</th><th>📸</th></tr></thead>
+        <tbody>{rows}</tbody>
+    </table>
+
+    {f'<h2>⚠️ Просроченные задачи ({len(overdue)})</h2><table><thead><tr><th>ID</th><th>Задача</th><th>Объект</th><th>Срок</th></tr></thead><tbody>{overdue_rows}</tbody></table>' if overdue else ''}
+
+    <p style="margin-top:32px;color:#555;font-size:12px;">Бо 7.7 · Replit · {date.today().strftime('%Y-%m-%d')}</p>
+</div>
+</body>
+</html>"""
+
+
+def render_object(obj):
+    if not obj:
+        return "<h1>Объект не найден</h1>"
+
+    task_rows = ""
+    for t in obj['tasks'][:50]:
+        status_class = "done" if t['status'] == 'done' else "open"
+        prio_class = f"priority-{t['priority'] or 'medium'}"
+        task_rows += f"""
+        <tr>
+            <td>#{t['id']}</td>
+            <td>{t['title']}</td>
+            <td class="{status_class}">{t['status']}</td>
+            <td class="{prio_class}">{t['priority'] or '—'}</td>
+            <td>{t['deadline'] or '—'}</td>
+        </tr>"""
+
+    fin_rows = ""
+    for f in obj['finance']:
+        color = "positive" if f['type'] == 'income' else "negative"
+        sign = "+" if f['type'] == 'income' else "−"
+        fin_rows += f"""
+        <tr>
+            <td>{f['date']}</td>
+            <td>{f['category'] or '—'}</td>
+            <td class="{color}">{sign}{f['amount']:,} ₽</td>
+            <td>{f['note'] or ''}</td>
+        </tr>"""
+
+    bal_class = "positive" if obj['balance'] >= 0 else "negative"
+
+    return f"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{obj['name']} — Бо 7.7</title>
+    <style>{CSS}</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🏗️ {obj['name']}</h1>
+        <div>
+            <a class="back" href="/object/{obj['id']}/photos" style="color:#60a5fa;font-weight:600;margin-right:16px;">📸 Фото объекта</a>
+            <a href="/object/{obj['id']}" style="color:#60a5fa;margin-right:12px;">🔄 Обновить</a>
+            <a class="back" href="/">← К дашборду</a>
+        </div>
+    </div>
+
+    <div class="cards">
+        <div class="card"><div class="label">Статус</div><div class="value status-{obj['status']}">{obj['status']}</div></div>
+        <div class="card"><div class="label">Бюджет</div><div class="value">{obj['budget']:,} ₽</div></div>
+        <div class="card income"><div class="label">Доход</div><div class="value">{obj['income']:,} ₽</div></div>
+        <div class="card expense"><div class="label">Расход</div><div class="value">{obj['expense']:,} ₽</div></div>
+        <div class="card balance"><div class="label">Баланс</div><div class="value {bal_class}">{obj['balance']:,} ₽</div></div>
+    </div>
+
+    <h2>📋 Задачи ({len(obj['tasks'])})</h2>
+    <table>
+        <thead><tr><th>ID</th><th>Задача</th><th>Статус</th><th>Приоритет</th><th>Срок</th></tr></thead>
+        <tbody>{task_rows or '<tr><td colspan="5" style="text-align:center;color:#666;">Нет задач</td></tr>'}</tbody>
+    </table>
+
+    <h2>💰 Финансы ({len(obj['finance'])})</h2>
+    <table>
+        <thead><tr><th>Дата</th><th>Категория</th><th>Сумма</th><th>Заметка</th></tr></thead>
+        <tbody>{fin_rows or '<tr><td colspan="4" style="text-align:center;color:#666;">Нет операций</td></tr>'}</tbody>
+    </table>
+</div>
+</body>
+</html>"""
+
+
+def render_object_photos(obj_id):
+    """Страница со списком фото объекта."""
+    obj = get_object_detail(obj_id)
+    if not obj:
+        return "<h1>Объект не найден</h1>"
+
+    photos = get_object_photos(obj_id)
+    stage_names = {'before': '📸 До', 'progress': '🔵 Процесс', 'after': '✅ После', 'document': '📄 Документы'}
+    stage_stats = {}
+    for p in photos:
+        st = p['stage']
+        stage_stats[st] = stage_stats.get(st, 0) + 1
+
+    # Статистика
+    stats_html = ""
+    for st, cnt in stage_stats.items():
+        stats_html += f'<div class="card"><div class="label">{stage_names.get(st, st)}</div><div class="value">{cnt}</div></div>'
+
+    # Сетка превью
+    grid = ""
+    for p in photos:
+        task_str = f"#{p['task_id']} {p['task_title'][:40]}" if p['task_id'] else "Без задачи"
+        # file_id уже в p (из get_object_photos)
+        img_url = f"/photo/{p['id']}"
+        img_html = f'<a href="{img_url}" target="_blank" style="display:block;"><img src="{img_url}" style="width:100%;border-radius:8px;display:block;cursor:zoom-in;" loading="lazy"></a>' if img_url else '<div style="color:#666;padding:20px;text-align:center;">📷</div>'
+        tg_link = f'https://t.me/masterbo2026_bot?start=photo_{p["id"]}'
+        grid += f"""
+        <div style="background:#1a1a1a;border-radius:8px;overflow:hidden;border:1px solid #2a2a2a;">
+            <div style="padding:8px;font-size:12px;color:#888;">
+                #{p['id']} · {stage_names.get(p['stage'], p['stage'])}
+            </div>
+            <a href="{tg_link}" target="_blank" style="display:block;">
+                {img_html}
+            </a>
+            <div style="padding:10px;font-size:13px;">
+                <div style="color:#ccc;margin-bottom:4px;">{task_str}</div>
+                <div style="color:#666;font-size:11px;">{p['taken_at'][:16] if p['taken_at'] else '—'} · {p['uploader']}</div>
+                {f'<div style="color:#999;margin-top:6px;font-size:12px;">{p["caption"][:80]}</div>' if p['caption'] else ''}
+            </div>
+        </div>"""
+
+    return f"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Фото: {obj['name']} — Бо 7.7</title>
+    <style>{CSS}</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>📸 Фото: {obj['name']}</h1>
+        <a class="back" href="/object/{obj_id}">← К объекту</a>
+    </div>
+
+    <div class="cards">
+        <div class="card"><div class="label">Всего фото</div><div class="value">{len(photos)}</div></div>
+        {stats_html}
+    </div>
+
+    <p style="color:#888;font-size:14px;margin-bottom:16px;">
+        📱 Просмотр и загрузка — в боте:
+        <code style="background:#222;padding:2px 6px;border-radius:4px;">/photos {obj['name']}</code>
+    </p>
+
+    <h2>Фото</h2>
+    {f'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;">{grid}</div>' if photos else '<p style="color:#666;">Пока нет фото</p>'}
+</div>
+</body>
+</html>"""
+
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_HEAD(self):
+        """HEAD — как GET, но без тела. Для мониторингов."""
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.end_headers()
+
+    def do_GET(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+
+        if path == '/' or path == '':
+            html = render_dashboard()
+        elif path.startswith('/object/') and path.endswith('/photos'):
+            try:
+                obj_id = int(path.split('/')[-2])
+                html = render_object_photos(obj_id)
+            except Exception as e:
+                html = f"<h1>Ошибка: {e}</h1>"
+        elif path.startswith('/object/'):
+            try:
+                obj_id = int(path.split('/')[-1])
+                obj = get_object_detail(obj_id)
+                html = render_object(obj)
+            except Exception as e:
+                html = f"<h1>Ошибка: {e}</h1>"
+        elif path.startswith('/photo/'):
+            # Прокси для фото — токен НЕ светится в URL
+            try:
+                photo_id = int(path.split('/')[-1])
+                conn = get_connection()
+                c = conn.cursor()
+                c.execute("SELECT file_id FROM photos WHERE id = ?", (photo_id,))
+                row = c.fetchone()
+                conn.close()
+                if not row or not row[0]:
+                    self.send_response(404)
+                    self.end_headers()
+                    self.wfile.write(b"Photo not found")
+                    return
+                file_id = row[0]
+                tg_url = get_telegram_file_url(file_id)
+                if not tg_url:
+                    self.send_response(502)
+                    self.end_headers()
+                    self.wfile.write(b"Telegram file unavailable")
+                    return
+                req = urllib.request.Request(tg_url)
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    data = resp.read()
+                    ctype = resp.headers.get('Content-Type', 'image/jpeg')
+                self.send_response(200)
+                self.send_header('Content-Type', ctype)
+                self.send_header('Cache-Control', 'public, max-age=86400')
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            except Exception as e:
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(f"Error: {e}".encode())
+            return
+        elif path == '/api/summary':
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(json.dumps(get_summary(), ensure_ascii=False).encode('utf-8'))
+            return
