@@ -1,3 +1,38 @@
+        parts = text.strip().split(maxsplit=1)
+        amount_str = parts[0] if parts else ''
+        category = parts[1].strip() if len(parts) > 1 else 'прочее'
+        # Убираем лишние символы
+        amount_str = amount_str.replace('₽', '').replace('р', '').replace('руб', '').strip()
+        try:
+            amount = int(amount_str)
+        except ValueError:
+            amount = parse_amount(text)
+            if not amount:
+                await update.message.reply_text(
+                    "❌ Не понял сумму. Попробуй: «300 еда»"
+                )
+                print(f"⚠️ RETURN на строке 2736", flush=True)
+                return
+        add_personal_expense(amount, category)
+        context.user_data['waiting_for'] = None
+        await update.message.reply_text(
+            f"✅ Личный расход {amount} ₽ ({category}) записан",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("💸 К личным", callback_data="menu_personal")],
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            ])
+        )
+        print(f"⚠️ RETURN на строке 2746", flush=True)
+        return
+
+    # Обработка создания нового объекта
+    if context.user_data.get('waiting_for') == 'new_object':
+        object_id = create_object(text, user_id=update.effective_user.id)
+        context.user_data['waiting_for'] = None
+        await update.message.reply_text(
+            f"✅ Объект «{text}» создан",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🏗️ К объекту", callback_data=f"obj_{object_id}")],
                 [InlineKeyboardButton("🏗️ К объектам", callback_data="menu_objects")],
                 [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
             ])
@@ -363,38 +398,3 @@ from modules.finance import get_all_finance_summary
 def format_money(amount):
     """Форматирует число с разделителями"""
     return f"{amount:,}".replace(",", " ")
-
-
-def finance_keyboard():
-    """Клавиатура для сводки финансов"""
-    data = get_all_finance_summary()
-    buttons = []
-    # Кнопки по объектам, у которых есть финансы
-    for o in data['objects']:
-        if o['income'] > 0 or o['expense'] > 0:
-            icon = "🟢" if o['balance'] >= 0 else "🔴"
-            buttons.append([InlineKeyboardButton(
-                f"{icon} {o['name']}: {o['balance']:+} ₽",
-                callback_data=f"finobj_{o['id']}"
-            )])
-    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
-    return InlineKeyboardMarkup(buttons)
-
-
-def format_finance_summary():
-    """Формирует текст общей сводки"""
-    data = get_all_finance_summary()
-    text = "💰 ФИНАНСЫ\n\n"
-    text += "📊 ОБЩАЯ СВОДКА\n"
-    text += f"Доход: {format_money(data['total_income'])} ₽\n"
-    text += f"Расход: {format_money(data['total_expense'])} ₽\n"
-    text += f"Баланс: {format_money(data['total_balance'])} ₽\n\n"
-    text += "🏗️ ПО ОБЪЕКТАМ (нажми для деталей):"
-    return text
-
-
-async def show_finance_summary(update, context):
-    """Показывает сводку финансов с кнопками"""
-    await update.message.reply_text(
-        format_finance_summary(),
-        reply_markup=finance_keyboard()

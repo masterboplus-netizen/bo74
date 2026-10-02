@@ -1,3 +1,5 @@
+            f"💰 **Финансы**\n\nДоход: {f['income']} ₽\nРасход: {f['expense']} ₽\nБаланс: {f['balance']} ₽",
+            reply_markup=object_detail_keyboard(object_id),
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -396,5 +398,3 @@ async def handle_photo_filter(update: Update, context: ContextTypes.DEFAULT_TYPE
             ORDER BY p.taken_at DESC
         """, (obj_id, tg_id))
         photos = [dict(r) for r in c.fetchall()]
-        c.execute("SELECT name FROM users WHERE tg_id = ?", (tg_id,))
-        u = c.fetchone()

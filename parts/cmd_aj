@@ -1,3 +1,38 @@
+    if data.startswith("taskdate_"):
+        parts = data.split("_")
+        # taskdate_manual_<id> — ручной ввод
+        if len(parts) >= 2 and parts[1] == "manual":
+            task_id = int(parts[2])
+            context.user_data['setdate_task'] = task_id
+            # Показываем задачу
+            conn = get_connection()
+            c = conn.cursor()
+            c.execute("SELECT t.title, o.name as obj FROM tasks t LEFT JOIN objects o ON t.object_id = o.id WHERE t.id = ?", (task_id,))
+            row = c.fetchone()
+            conn.close()
+            title = row['title'] if row else '?'
+            obj = row['obj'] if row and row['obj'] else 'Без объекта'
+            await query.edit_message_text(
+                f"📋 {title}\n{obj}\n\nНапиши дату:"
+            )
+            return
+        # taskdate_<id> — обычный выбор
+        task_id = int(parts[1])
+        await query.edit_message_text(
+            "📅 Выбери срок:",
+            reply_markup=task_date_keyboard(task_id)
+        )
+        return
+
+
+    # Убрать срок
+    if data.startswith("tasknodate_"):
+        task_id = int(data.replace("tasknodate_", ""))
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("UPDATE tasks SET deadline = NULL WHERE id = ?", (task_id,))
+        conn.commit()
+        c.execute("SELECT t.title, o.name as obj FROM tasks t LEFT JOIN objects o ON t.object_id = o.id WHERE t.id = ?", (task_id,))
         row = c.fetchone()
         conn.close()
         title = row['title'] if row else '?'
@@ -363,38 +398,3 @@ async def handle_add_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "menu_add":
         await query.edit_message_text(
             "➕ Что добавить?",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🏗️ Новый объект", callback_data="add_object")],
-                [InlineKeyboardButton("📋 Новая задача", callback_data="add_task")],
-                [InlineKeyboardButton("💰 Расход", callback_data="add_expense")],
-                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")],
-            ])
-        )
-        return
-
-    if data == "add_object":
-        context.user_data['waiting_for'] = 'new_object'
-        await query.edit_message_text(
-            "🏗️ Напиши название объекта:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_add")]
-            ])
-        )
-        return
-
-    if data == "add_task":
-        context.user_data['waiting_for'] = 'new_task'
-        await query.edit_message_text(
-            "📋 Выбери объект:",
-            reply_markup=choose_object_for_task_keyboard()
-        )
-        return
-
-    if data == "add_expense":
-        context.user_data['waiting_for'] = 'new_expense'
-        await query.edit_message_text(
-            "💰 Выбери объект:",
-            reply_markup=choose_object_for_expense_keyboard()
-        )
-        return
-

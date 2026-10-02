@@ -1,3 +1,38 @@
+            country = get_country_label(normalized)
+            context.user_data['crm_new_client_phone'] = normalized
+            context.user_data['waiting_for'] = 'crm_client_address'
+            await update.message.reply_text(
+                f"✅ Телефон распознан: {normalized}\n"
+                f"{country}\n\n"
+                f"📍 Теперь адрес (или Пропустить):",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✏️ Изменить телефон", callback_data="crm_phone_edit")],
+                    [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_address")],
+                ])
+            )
+            print(f"⚠️ RETURN на строке 2364", flush=True)
+            return
+
+        if status == 'suggest':
+            variants = result.get('variants', [])
+            context.user_data['phone_variants'] = variants
+            buttons = []
+            for v in variants:
+                label = f"📞 {v}"
+                buttons.append([InlineKeyboardButton(label, callback_data=f"crm_phone_pick_{v}")])
+            buttons.append([InlineKeyboardButton("✏️ Ввести заново", callback_data="crm_phone_edit")])
+            buttons.append([InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_phone")])
+            await update.message.reply_text(
+                f"🤔 Номер «{raw}» нестандартный.\n\n"
+                f"Выбери подходящий вариант:",
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+            print(f"⚠️ RETURN на строке 2380", flush=True)
+            return
+
+        # invalid
+        await update.message.reply_text(
+            f"❌ Номер «{raw}» слишком короткий или не распознан.\n\n"
             f"Введи в формате:\n"
             f"• +79991234567 (Россия)\n"
             f"• 89991234567 (Россия)\n"
@@ -363,38 +398,3 @@
     # Обработка личного расхода
     if context.user_data.get('waiting_for') == 'personal_expense_text':
         # Разбираем: "300 еда" или "1500 инструмент"
-        parts = text.strip().split(maxsplit=1)
-        amount_str = parts[0] if parts else ''
-        category = parts[1].strip() if len(parts) > 1 else 'прочее'
-        # Убираем лишние символы
-        amount_str = amount_str.replace('₽', '').replace('р', '').replace('руб', '').strip()
-        try:
-            amount = int(amount_str)
-        except ValueError:
-            amount = parse_amount(text)
-            if not amount:
-                await update.message.reply_text(
-                    "❌ Не понял сумму. Попробуй: «300 еда»"
-                )
-                print(f"⚠️ RETURN на строке 2736", flush=True)
-                return
-        add_personal_expense(amount, category)
-        context.user_data['waiting_for'] = None
-        await update.message.reply_text(
-            f"✅ Личный расход {amount} ₽ ({category}) записан",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💸 К личным", callback_data="menu_personal")],
-                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-            ])
-        )
-        print(f"⚠️ RETURN на строке 2746", flush=True)
-        return
-
-    # Обработка создания нового объекта
-    if context.user_data.get('waiting_for') == 'new_object':
-        object_id = create_object(text, user_id=update.effective_user.id)
-        context.user_data['waiting_for'] = None
-        await update.message.reply_text(
-            f"✅ Объект «{text}» создан",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🏗️ К объекту", callback_data=f"obj_{object_id}")],

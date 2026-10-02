@@ -250,6 +250,8 @@ def object_detail_keyboard(object_id):
         [InlineKeyboardButton("📋 Задачи объекта", callback_data=f"objtasks_{object_id}")],
         [InlineKeyboardButton("💰 Финансы", callback_data=f"objfin_{object_id}")],
         [InlineKeyboardButton("📸 Фото объекта", callback_data=f"objphotos_{object_id}")],
+        [InlineKeyboardButton("✏️ Переименовать", callback_data=f"obj_rename_{object_id}")],
+        [InlineKeyboardButton("🗑 Удалить объект", callback_data=f"obj_del_{object_id}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="menu_objects")],
     ])
 
@@ -396,5 +398,3 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             buttons.append([InlineKeyboardButton(label, callback_data=f"byassignee_{u['tg_id']}")])
         buttons.append([InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")])
         try:
-            await query.edit_message_text(
-                "👥 Задачи по исполнителям:",

@@ -1,3 +1,38 @@
+
+
+def finance_keyboard():
+    """Клавиатура для сводки финансов"""
+    data = get_all_finance_summary()
+    buttons = []
+    # Кнопки по объектам, у которых есть финансы
+    for o in data['objects']:
+        if o['income'] > 0 or o['expense'] > 0:
+            icon = "🟢" if o['balance'] >= 0 else "🔴"
+            buttons.append([InlineKeyboardButton(
+                f"{icon} {o['name']}: {o['balance']:+} ₽",
+                callback_data=f"finobj_{o['id']}"
+            )])
+    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def format_finance_summary():
+    """Формирует текст общей сводки"""
+    data = get_all_finance_summary()
+    text = "💰 ФИНАНСЫ\n\n"
+    text += "📊 ОБЩАЯ СВОДКА\n"
+    text += f"Доход: {format_money(data['total_income'])} ₽\n"
+    text += f"Расход: {format_money(data['total_expense'])} ₽\n"
+    text += f"Баланс: {format_money(data['total_balance'])} ₽\n\n"
+    text += "🏗️ ПО ОБЪЕКТАМ (нажми для деталей):"
+    return text
+
+
+async def show_finance_summary(update, context):
+    """Показывает сводку финансов с кнопками"""
+    await update.message.reply_text(
+        format_finance_summary(),
+        reply_markup=finance_keyboard()
     )
 
 
@@ -363,38 +398,3 @@ async def handle_task_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     # Выбор срока
-    if data.startswith("taskdate_"):
-        parts = data.split("_")
-        # taskdate_manual_<id> — ручной ввод
-        if len(parts) >= 2 and parts[1] == "manual":
-            task_id = int(parts[2])
-            context.user_data['setdate_task'] = task_id
-            # Показываем задачу
-            conn = get_connection()
-            c = conn.cursor()
-            c.execute("SELECT t.title, o.name as obj FROM tasks t LEFT JOIN objects o ON t.object_id = o.id WHERE t.id = ?", (task_id,))
-            row = c.fetchone()
-            conn.close()
-            title = row['title'] if row else '?'
-            obj = row['obj'] if row and row['obj'] else 'Без объекта'
-            await query.edit_message_text(
-                f"📋 {title}\n{obj}\n\nНапиши дату:"
-            )
-            return
-        # taskdate_<id> — обычный выбор
-        task_id = int(parts[1])
-        await query.edit_message_text(
-            "📅 Выбери срок:",
-            reply_markup=task_date_keyboard(task_id)
-        )
-        return
-
-
-    # Убрать срок
-    if data.startswith("tasknodate_"):
-        task_id = int(data.replace("tasknodate_", ""))
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("UPDATE tasks SET deadline = NULL WHERE id = ?", (task_id,))
-        conn.commit()
-        c.execute("SELECT t.title, o.name as obj FROM tasks t LEFT JOIN objects o ON t.object_id = o.id WHERE t.id = ?", (task_id,))
