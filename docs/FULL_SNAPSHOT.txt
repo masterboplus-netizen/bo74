@@ -1,0 +1,310 @@
+=== 1. GIT LOG (последние 30) ===
+ae6329b docs: env список
+8ee5ca3 docs: список .bak файлов
+cba261c docs: все файлы включая мусор
+5d53b8e docs: полный список файлов проекта
+4d8c8aa docs: список файлов проекта
+7e91c29 feat(core): economics + обновлены rooms, measures под новые поля
+9a4041a feat(core): openings, niches, materials, estimates, works, stages
+427d9f2 feat(core): sessions + geometry + model_3d — сессии, координаты, модель комнаты
+7fc731c feat(db): миграции 028-033 — сессии, этажи, подсветка, конструкции, фасад, крыша
+0680936 feat(core): spec.py расширен — дома, бани, балконы, фасады, подсветка, конструкции, крыши
+1d68d61 docs: PROMPTS (continue, fix, feature, export, review) + GLOSSARY
+0f5a18a docs: DEVELOPMENT, MIGRATIONS, API, GUIDES, PROMPTS
+91b5dfd docs: SPECS — spec, sessions, economics, materials
+4613fe9 docs: SPECS — rooms, measures, geometry, export
+a43ef82 docs: ROADMAP + CHANGELOG + ARCHITECTURE
+845aac6 docs: BO_MANIFEST_V2.md — расширенный манифест (тексты, FAQ, кейсы)
+7085ccb docs: BO_MANIFEST.md — полная версия (26 разделов)
+9e93152 Fix: сохраняем niche_height/niche_plane в черновик
+5d74fcb Fix: восстановление прогресса нишей (niche_width/depth/height/plane)
+62daf07 Split dashboard & draw
+a78fd7b Split commands.py
+d081ec6 Re-split rooms.py
+4e32d5b Актуальное состояние: rooms.py с нишами, obj_*, черновиками
+2188229 Re-split актуальный rooms.py
+2374fa2 Re-split актуального кода
+8151a63 Refactor telegram rooms logic and update agent metadata
+5dc7751 Re-split: 400 строк для чтения
+0c94600 Split: rooms.py + commands.py на части для чтения
+c5a8712 Feat: проёмы при обходе стены (между длиной и углом)
+907d2cc Chore: убрал временные файлы split
+
+=== 2. GIT REMOTES ===
+gitsafe-backup	git://gitsafe:5418/backup.git (fetch)
+gitsafe-backup	git://gitsafe:5418/backup.git (push)
+origin	https://github.com/masterboplus-netizen/bo74.git (fetch)
+origin	https://github.com/masterboplus-netizen/bo74.git (push)
+render	https://github.com/masterboplus-netizen/bo75-render-bot.git (fetch)
+render	https://github.com/masterboplus-netizen/bo75-render-bot.git (push)
+
+=== 3. VENV PACKAGES ===
+Package             Version
+------------------- ------------
+anyio               4.15.1
+APScheduler         3.11.3
+certifi             2026.7.22
+h11                 0.16.0
+httpcore            1.0.9
+httpx               0.28.1
+idna                3.19
+pillow              12.3.0
+pip                 25.1.1
+python-telegram-bot 22.8
+RapidFuzz           3.14.6
+setuptools          80.9.0.post0
+typing_extensions   4.16.0
+tzlocal             5.4.4
+
+=== 4. ТАБЛИЦЫ БД ===
+action_log               notes
+acts                     notification_queue
+asset_usage_log          objects
+assets                   offline_queue
+audit_log                openings
+auth_identities          payment_transactions
+building_units           pending_decisions
+calendar_events          photos
+cases                    plans
+catalog_categories       production_orders
+catalog_items            property_leads
+checklists               property_listings
+clients                  property_rentals
+concierge_alerts         property_sales
+concierge_instructions   property_shows
+concierge_reports        receipt_items
+concierge_tasks          referrals
+concierge_visits         reminders
+contract_amendments      rental_orders
+contract_payments        report_schedule
+contracts                report_templates
+coupon_redemptions       room_comms
+coupons                  room_history
+crm_activities           room_measures
+crm_deals                room_objects
+digest_log               rooms
+documents                service_requests
+estimate_items           stage_inspections
+estimates                stage_templates
+files                    stages
+final_zones              subscriptions
+finance                  suppliers
+finance_history          supplies
+invoices                 system_settings
+invoices_billing         task_catalog_matches
+kpi                      task_history
+land_plots               tasks
+locations                tenants
+maintenance_schedules    usage_metrics
+market_applications      user_preferences
+market_deals             users
+market_listings          wall_corners
+market_reviews           wall_drafts
+marketplace_items        wall_junctions
+meter_readings           wall_lean
+meters                   wall_niches
+niches
+
+=== 5. РАЗМЕР БД ===
+-rw-r--r-- 1 runner runner 1110016 Oct  2 18:46 bo72.db
+
+=== 6. СХЕМА КЛЮЧЕВЫХ ТАБЛИЦ ===
+--- rooms ---
+CREATE TABLE rooms (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    object_id INTEGER NOT NULL,
+    tenant_id INTEGER DEFAULT 1,
+    name TEXT NOT NULL,
+--- room_measures ---
+CREATE TABLE room_measures (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id INTEGER NOT NULL,
+    tenant_id INTEGER DEFAULT 1,
+    category TEXT NOT NULL,
+--- openings ---
+CREATE TABLE openings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id INTEGER NOT NULL,
+    tenant_id INTEGER DEFAULT 1,
+    opening_type TEXT NOT NULL,       -- window / door / opening (арка)
+--- wall_niches ---
+CREATE TABLE wall_niches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    measure_id INTEGER NOT NULL,
+    room_id INTEGER NOT NULL,
+    name TEXT,
+--- wall_drafts ---
+CREATE TABLE wall_drafts (
+        room_id INTEGER PRIMARY KEY,
+        step_num INTEGER,
+        step_name TEXT,
+        flags TEXT,
+--- measurement_sessions ---
+--- room_comms ---
+CREATE TABLE room_comms (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id INTEGER NOT NULL,
+    tenant_id INTEGER DEFAULT 1,
+    comm_type TEXT NOT NULL,
+--- objects ---
+CREATE TABLE objects (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT UNIQUE, name TEXT NOT NULL, address TEXT,
+        status TEXT DEFAULT 'active', budget INTEGER DEFAULT 0,
+        execution_type TEXT DEFAULT 'self', created_by INTEGER,
+--- tasks ---
+CREATE TABLE tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        object_id INTEGER, title TEXT NOT NULL, description TEXT,
+        status TEXT DEFAULT 'open', priority TEXT DEFAULT 'medium',
+        type TEXT DEFAULT 'direct', assigned_to INTEGER, deadline DATE,
+--- finance ---
+CREATE TABLE finance (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        object_id INTEGER, task_id INTEGER, category TEXT,
+        amount INTEGER, type TEXT, date DATE, note TEXT,
+        is_personal INTEGER DEFAULT 0,
+--- photos ---
+CREATE TABLE photos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, object_id INTEGER,
+        task_id INTEGER, file_id TEXT, caption TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP, stage TEXT DEFAULT 'progress', uploaded_by INTEGER, taken_at DATETIME, tenant_id INTEGER DEFAULT 1, room_id INTEGER);
+
+=== 7. СОДЕРЖИМОЕ start_all.sh, watchdog_start.sh, .replit ===
+#!/bin/bash
+cd ~/workspace
+source venv/bin/activate
+pkill -9 -f "python bot.py" 2>/dev/null
+pkill -9 -f "python web_dashboard.py" 2>/dev/null
+pkill -9 -f "python watchdog.py" 2>/dev/null
+sleep 2
+nohup python bot.py > bot_start.log 2>&1 &
+nohup python web_dashboard.py > dashboard.log 2>&1 &
+nohup python watchdog.py > watchdog.log 2>&1 &
+echo "✅ Запущено (venv)"
+---
+#!/bin/bash
+# Запуск watchdog в фоне
+cd "$(dirname "$0")"
+if pgrep -f 'python watchdog.py' > /dev/null; then
+    echo '⚠️ Watchdog уже запущен'
+    exit 0
+fi
+nohup python watchdog.py > watchdog_start.log 2>&1 &
+echo "✅ Watchdog запущен (PID: $!)"
+---
+modules = ["nodejs-20", "python-base-3.13"]
+run = "python main.py"
+
+[nix]
+channel = "stable-25_05"
+packages = ["mailutils", "nano", "python313Packages.flask", "python313Packages.python-dotenv", "python313Packages.python-telegram-bot"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Telegram Bot"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Dashboard"
+
+[[workflows.workflow]]
+name = "Telegram Bot"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python bot.py"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Dashboard"
+mode = "parallel"
+author = 65448632
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python web_dashboard.py"
+
+[[ports]]
+localPort = 8080
+externalPort = 80
+
+=== 8. check if config imports MAIN_ADMIN correctly ===
+config.py:16:MAIN_ADMIN_TG_ID = int(os.getenv("MAIN_ADMIN_TG_ID", "1821030188"))
+bot.py:6:from config import TOKEN, validate_config, MAIN_ADMIN_TG_ID
+bot.py:68:            chat_id=MAIN_ADMIN_TG_ID,
+handlers/admin.py:6:from config import MAIN_ADMIN_TG_ID
+handlers/admin.py:10:    return update.effective_user.id == MAIN_ADMIN_TG_ID
+handlers/commands.py:51:    from config import MAIN_ADMIN_TG_ID
+handlers/commands.py:52:    if user.id == MAIN_ADMIN_TG_ID:
+handlers/digest_cmd.py:4:from config import MAIN_ADMIN_TG_ID
+handlers/digest_cmd.py:9:    return update.effective_user and update.effective_user.id == MAIN_ADMIN_TG_ID
+handlers/onboarding.py:9:from config import MAIN_ADMIN_TG_ID
+
+=== 9. ПРОВЕРКА РАЗМЕРОВ КЛЮЧЕВЫХ ФАЙЛОВ ===
+     0 core/__init__.py
+     0 handlers/add.py
+     0 handlers/category.py
+     0 handlers/choose.py
+     0 handlers/dates.py
+     0 handlers/finance_ui.py
+     0 handlers/__init__.py
+     0 handlers/menu.py
+     0 handlers/tasks_ui.py
+     0 handlers/text.py
+     0 modules/__init__.py
+     5 main.py
+    20 modules/dashboard_link.py
+    27 handlers/digest_cmd.py
+    33 config.py
+    40 modules/calendar.py
+    50 core/db.py
+    65 handlers/admin.py
+    66 core/rooms_ui.py
+    73 core/room_history.py
+    78 modules/personal.py
+    79 core/works.py
+    84 modules/phone_utils.py
+    85 core/estimates.py
+    85 core/niches.py
+    85 core/stages.py
+    88 modules/users.py
+    99 core/openings.py
+   100 core/sessions.py
+   102 core/materials.py
+   102 handlers/onboarding.py
+   117 modules/finance.py
+   131 core/rooms.py
+   132 core/economics.py
+   140 core/comms.py
+   146 modules/objects.py
+   148 core/geometry.py
+   155 core/conflicts.py
+   156 modules/backup_db.py
+   162 core/room_objects.py
+   163 core/model_3d.py
+   174 modules/tasks.py
+   184 modules/kpi.py
+   191 core/measures.py
+   199 bot.py
+   212 modules/ocr.py
+   214 modules/parser.py
+   221 modules/crm.py
+   224 modules/digest.py
+   231 db.py
+   341 modules/reports.py
+   588 core/spec.py
+  2662 interfaces/telegram/rooms.py
+  4395 handlers/commands.py
+ 12652 total
