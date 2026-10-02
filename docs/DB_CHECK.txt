@@ -1,0 +1,23 @@
+=== measurement_sessions schema ===
+
+=== СЧЁТЧИК ЗАПИСЕЙ В КЛЮЧЕВЫХ ТАБЛИЦАХ ===
+rooms: 12
+room_measures: 6
+openings: 2
+wall_niches: 2
+wall_drafts: 3
+measurement_sessions: 
+room_comms: 0
+objects: 22
+tasks: 35
+finance: 48
+photos: 5
+users: 3
+clients: 9
+
+=== ФАЙЛЫ В web/ (bo74) ===
+нет web/
+total 0
+drwxr-xr-x 1 runner runner 22 Sep 28 11:40 .
+drwxr-xr-x 1 runner runner 50 Oct  2 23:50 ..
+-rw-r--r-- 1 runner runner  0 Sep 28 11:40 __init__.py
