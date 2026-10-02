@@ -1,0 +1,118 @@
+=== bot_start.log (100) ===
+2026-10-02 18:44:33,909 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-10-02 18:44:33,910 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-10-02 18:44:33,910 - apscheduler.scheduler - INFO - Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-10-02 18:44:33,910 - __main__ - INFO - ⏰ Дайджесты: 9:00 и 18:00 МСК, автобэкап БД: 23:00 МСК
+2026-10-02 18:44:34,128 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/deleteWebhook "HTTP/1.1 200 OK"
+2026-10-02 18:44:34,130 - apscheduler.scheduler - INFO - Added job "morning_digest" to job store "default"
+2026-10-02 18:44:34,130 - apscheduler.scheduler - INFO - Added job "evening_survey" to job store "default"
+2026-10-02 18:44:34,130 - apscheduler.scheduler - INFO - Added job "daily_backup" to job store "default"
+2026-10-02 18:44:34,130 - apscheduler.scheduler - INFO - Scheduler started
+2026-10-02 18:44:34,130 - telegram.ext.Application - INFO - Application started
+2026-10-02 18:44:44,729 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+2026-10-02 18:44:54,937 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+✅ Утренний дайджест уже отправлен сегодня
+✅ Вечерний опрос уже отправлен сегодня
+✅ [18:45:03] ping https://9b7b76e6-2a55-4066-aec3-8b9aabd72cfa-00-3tkkz4oxoetcb.pike.replit.dev/api/summary
+✅ [18:45:03] ping https://9b7b76e6-2a55-4066-aec3-8b9aabd72cfa-00-3tkkz4oxoetcb.pike.replit.dev/api/summary
+2026-10-02 18:45:05,140 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+2026-10-02 18:45:15,342 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+2026-10-02 18:45:16,371 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+2026-10-02 18:45:17,009 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/sendMessage "HTTP/1.1 200 OK"
+2026-10-02 18:45:18,703 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+2026-10-02 18:45:18,904 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/answerCallbackQuery "HTTP/1.1 200 OK"
+2026-10-02 18:45:19,129 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/editMessageText "HTTP/1.1 200 OK"
+2026-10-02 18:45:21,272 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+2026-10-02 18:45:21,474 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/answerCallbackQuery "HTTP/1.1 200 OK"
+🔍 ROOMS: data='obj_21'
+2026-10-02 18:45:21,700 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/editMessageText "HTTP/1.1 200 OK"
+2026-10-02 18:45:22,840 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+2026-10-02 18:45:23,038 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/answerCallbackQuery "HTTP/1.1 200 OK"
+🔍 ROOMS: data='rooms_list_obj_21'
+2026-10-02 18:45:23,266 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/editMessageText "HTTP/1.1 200 OK"
+2026-10-02 18:45:31,084 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+2026-10-02 18:45:31,718 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/answerCallbackQuery "HTTP/1.1 200 OK"
+🔍 ROOMS: data='room_add_21'
+2026-10-02 18:45:31,975 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/editMessageText "HTTP/1.1 200 OK"
+2026-10-02 18:45:36,496 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+🔵 HANDLE_TEXT: text='21:45', waiting_for='room_name'
+2026-10-02 18:45:36,724 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/sendMessage "HTTP/1.1 200 OK"
+⚠️ RETURN на строке 2307
+2026-10-02 18:45:38,044 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+2026-10-02 18:45:38,263 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/answerCallbackQuery "HTTP/1.1 200 OK"
+🔍 ROOMS: data='room_type_21_rough'
+2026-10-02 18:45:38,539 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/editMessageText "HTTP/1.1 200 OK"
+2026-10-02 18:45:40,295 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+2026-10-02 18:45:40,507 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/answerCallbackQuery "HTTP/1.1 200 OK"
+🔍 ROOMS: data='room_start_48'
+2026-10-02 18:45:40,760 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/editMessageText "HTTP/1.1 200 OK"
+2026-10-02 18:45:41,862 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+2026-10-02 18:45:42,072 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/answerCallbackQuery "HTTP/1.1 200 OK"
+🔍 ROOMS: data='room_height_ask_48'
+2026-10-02 18:45:42,292 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/editMessageText "HTTP/1.1 200 OK"
+2026-10-02 18:45:43,606 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+2026-10-02 18:45:43,815 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/answerCallbackQuery "HTTP/1.1 200 OK"
+🔍 ROOMS: data='room_height_same_start_48'
+2026-10-02 18:45:44,035 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/deleteMessage "HTTP/1.1 200 OK"
+2026-10-02 18:45:44,510 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/sendPhoto "HTTP/1.1 200 OK"
+2026-10-02 18:45:46,903 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+🔵 HANDLE_TEXT: text='300', waiting_for='room_height_same'
+2026-10-02 18:45:47,152 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/sendMessage "HTTP/1.1 200 OK"
+⚠️ RETURN на строке 2289
+2026-10-02 18:45:48,423 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+2026-10-02 18:45:48,641 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/answerCallbackQuery "HTTP/1.1 200 OK"
+🔍 ROOMS: data='wall_round_start_48'
+🔍 wall_round_start_ вызван: room_id=48, step=1
+🔍 load_wall_draft: room_id=48 — нет черновика
+🔍 ВОССТАНОВЛЕНИЕ: step_name=None
+2026-10-02 18:45:48,877 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/deleteMessage "HTTP/1.1 200 OK"
+2026-10-02 18:45:49,309 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/sendPhoto "HTTP/1.1 200 OK"
+2026-10-02 18:45:50,800 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+2026-10-02 18:45:51,025 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/answerCallbackQuery "HTTP/1.1 200 OK"
+🔍 ROOMS: data='wall_round_flag_niche_48'
+💾 _save_wall_draft: room_id=48, step_name=flags
+2026-10-02 18:45:51,385 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/editMessageCaption "HTTP/1.1 200 OK"
+2026-10-02 18:45:51,682 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+2026-10-02 18:45:51,888 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/answerCallbackQuery "HTTP/1.1 200 OK"
+🔍 ROOMS: data='wall_round_flags_done_48'
+2026-10-02 18:45:52,105 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/deleteMessage "HTTP/1.1 200 OK"
+2026-10-02 18:45:52,553 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/sendPhoto "HTTP/1.1 200 OK"
+2026-10-02 18:45:55,558 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+2026-10-02 18:45:55,932 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/answerCallbackQuery "HTTP/1.1 200 OK"
+🔍 ROOMS: data='wall_round_plane_straight_48'
+💾 _save_wall_draft: room_id=48, step_name=plane
+💾 _save_wall_draft: room_id=48, step_name=length
+2026-10-02 18:45:56,279 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/deleteMessage "HTTP/1.1 200 OK"
+2026-10-02 18:45:56,709 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/sendPhoto "HTTP/1.1 200 OK"
+2026-10-02 18:46:01,634 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+🔵 HANDLE_TEXT: text='304', waiting_for='wall_round_length'
+💾 _save_wall_draft: room_id=48, step_name=openings
+2026-10-02 18:46:01,881 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/sendMessage "HTTP/1.1 200 OK"
+⚠️ RETURN на строке 2289
+2026-10-02 18:46:03,585 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+2026-10-02 18:46:03,881 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/answerCallbackQuery "HTTP/1.1 200 OK"
+🔍 ROOMS: data='wall_round_openings_done_48'
+💾 _save_wall_draft: room_id=48, step_name=angle
+2026-10-02 18:46:04,163 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/editMessageText "HTTP/1.1 200 OK"
+2026-10-02 18:46:05,313 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/getUpdates "HTTP/1.1 200 OK"
+2026-10-02 18:46:05,535 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/answerCallbackQuery "HTTP/1.1 200 OK"
+🔍 ROOMS: data='wall_round_angle_90_48'
+💾 _save_wall_draft: room_id=48, step_name=angle_done
+2026-10-02 18:46:05,785 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8825214937:AAFlZvnZvw46lFjQoctxad3bc96FQ-9Yzo8/deleteMessage "HTTP/1.1 200 OK"
+
+=== watchdog.log (30) ===
+[2026-10-02 18:44:32] 🐕 Watchdog запущен
+[2026-10-02 18:44:32] ✅ Бот работает
+[2026-10-02 18:44:32] ✅ Дашборд работает
+[2026-10-02 18:45:32] ✅ Бот работает
+[2026-10-02 18:45:32] ✅ Дашборд работает
+[2026-10-02 18:45:32] ✅ Дашборд работает
+
+=== dashboard.log (30) ===
+
+=== ПРОЦЕССЫ ===
+
+=== ПРОВЕРКА ПРИМЕНЕНИЯ МИГРАЦИЙ 028 ===
+
+=== ВСЕ ТАБЛИЦЫ С '%session%' или '%draft%' ===
+wall_drafts
