@@ -1,22 +1,9 @@
-"""core.measures — размеры комнат (гибкие)."""
+"""core.measures — размеры комнат (обновлённый)."""
 from core.db import fetchone, fetchall, commit
 
 
-# Категории размеров
-MEASURE_CATEGORIES = [
-    ("wall", "🧱 Стена"),
-    ("floor", "📏 Пол"),
-    ("ceiling", "⬆️ Потолок"),
-    ("window", "🪟 Окно"),
-    ("door", "🚪 Дверь"),
-    ("opening", "🕳 Проём"),
-    ("corner", "📐 Угол"),
-    ("other", "📦 Прочее"),
-]
-
-
 def add_measure(room_id, category, label=None, length=None, width=None,
-                height=None, depth=None, angle=None, unit="м", note=None,
+                height=None, depth=None, angle=None, unit="см", note=None,
                 tenant_id=1, created_by=None,
                 wall_pos=None, angle_value=None, angle_method=None,
                 angle_diagonal_cm=None, has_rounded=None, radius=None,
@@ -24,55 +11,57 @@ def add_measure(room_id, category, label=None, length=None, width=None,
                 measured_bottom=None, measured_middle=None, measured_top=None,
                 is_wavy=None, deviation_plus=None, deviation_minus=None,
                 order_num=None, has_hidden=None, hidden_note=None,
-                lean_angle=None, lean_direction=None):
+                lean_angle=None, lean_direction=None,
+                material=None, session_id=None,
+                start_x=None, start_y=None, end_x=None, end_y=None,
+                start_z=None, end_z=None):
     """Добавляет размер. Возвращает measure_id."""
     return commit(
-        "INSERT INTO room_measures "
-        "(room_id, category, label, length, width, height, depth, angle, "
-        "unit, note, tenant_id, created_by, "
-        "wall_pos, angle_value, angle_method, angle_diagonal_cm, "
-        "has_rounded, radius, rounded_corner, "
-        "measured_bottom, measured_middle, measured_top, "
-        "is_wavy, deviation_plus, deviation_minus, "
-        "order_num, has_hidden, hidden_note, lean_angle, lean_direction) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (room_id, category, label, length, width, height, depth, angle,
+        """INSERT INTO room_measures
+           (room_id, session_id, category, label, length, width, height, depth, angle,
+            unit, note, tenant_id, created_by,
+            wall_pos, angle_value, angle_method, angle_diagonal_cm,
+            has_rounded, radius, rounded_corner,
+            measured_bottom, measured_middle, measured_top,
+            is_wavy, deviation_plus, deviation_minus,
+            order_num, has_hidden, hidden_note, lean_angle, lean_direction,
+            material,
+            start_x, start_y, end_x, end_y, start_z, end_z)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (room_id, session_id, category, label, length, width, height, depth, angle,
          unit, note, tenant_id, created_by,
          wall_pos, angle_value, angle_method, angle_diagonal_cm,
          has_rounded, radius, rounded_corner,
          measured_bottom, measured_middle, measured_top,
          is_wavy, deviation_plus, deviation_minus,
-         order_num, has_hidden, hidden_note, lean_angle, lean_direction)
+         order_num, has_hidden, hidden_note, lean_angle, lean_direction,
+         material,
+         start_x, start_y, end_x, end_y, start_z, end_z)
     )
 
 
 def get_measure(measure_id):
-    row = fetchone(
-        "SELECT * FROM room_measures WHERE id = ?", (measure_id,)
-    )
+    row = fetchone("SELECT * FROM room_measures WHERE id = ?", (measure_id,))
     return dict(row) if row else None
 
 
-def get_measures(room_id, category=None):
-    """Все размеры комнаты (опц. фильтр по категории)."""
+def get_measures(room_id, category=None, session_id=None):
+    conditions = ["room_id = ?"]
+    params = [room_id]
     if category:
-        rows = fetchall(
-            "SELECT * FROM room_measures WHERE room_id = ? AND category = ? "
-            "ORDER BY id",
-            (room_id, category)
-        )
-    else:
-        rows = fetchall(
-            "SELECT * FROM room_measures WHERE room_id = ? ORDER BY category, id",
-            (room_id,)
-        )
+        conditions.append("category = ?")
+        params.append(category)
+    if session_id:
+        conditions.append("session_id = ?")
+        params.append(session_id)
+    query = f"SELECT * FROM room_measures WHERE {' AND '.join(conditions)} ORDER BY category, id"
+    rows = fetchall(query, tuple(params))
     return [dict(r) for r in rows]
 
 
 def update_measure(measure_id, **kwargs):
-    """Обновляет поля размера. kwargs: length, width, ..."""
     allowed = {"label", "length", "width", "height", "depth", "angle",
-               "unit", "note", "category"}
+               "unit", "note", "category", "material"}
     fields, params = [], []
     for k, v in kwargs.items():
         if k in allowed:
@@ -90,63 +79,55 @@ def delete_measure(measure_id):
     return True
 
 
-def calculate_room_areas(room_id):
-    """Считает площади: стены, пол, потолок.
-    Все размеры в СМ, результат в м² (делим на 10000)."""
-    measures = get_measures(room_id)
-    # Получаем высоту комнаты (по умолчанию)
-    from core.rooms import get_room
-    _room = get_room(room_id)
-    _room_height = (_room.get('height') if _room else None) or 0
+def calculate_room_areas(room_id, session_id=None):
+    """Считает площади (стены, пол, потолок) в м²."""
+    measures = get_measures(room_id, session_id=session_id)
+    room = None
+    try:
+        from core.rooms import get_room
+        room = get_room(room_id)
+    except Exception:
+        pass
+    room_height = (room.get('height') if room else None) or 0
+
     walls_total = 0.0
-    walls_without_openings = 0.0
     floor_area = 0.0
     ceiling_area = 0.0
     openings_total = 0.0
     openings = []
-
     has_height = False
 
     for m in measures:
         L = m.get('length') or 0
         W = m.get('width') or 0
-        H = m.get('height') or _room_height or 0
+        H = m.get('height') or room_height or 0
         cat = m.get('category')
+
         if cat == 'wall':
             if H:
                 has_height = True
             area = L * H if (L and H) else (W * H if (W and H) else 0)
             walls_total += area
         elif cat == 'floor':
-            area = L * W if (L and W) else 0
-            floor_area += area
+            floor_area += L * W if (L and W) else 0
         elif cat == 'ceiling':
-            area = L * W if (L and W) else 0
-            ceiling_area += area
+            ceiling_area += L * W if (L and W) else 0
         elif cat in ('window', 'door', 'opening'):
             area = L * H if (L and H) else (L * W if (L and W) else 0)
             openings_total += area
             openings.append({'label': m.get('label') or cat, 'area': round(area, 2)})
-    
-    # Если floor не замерен явно — считаем через 2 смежные стены (прямоугольник)
-    if floor_area == 0:
-        from core.rooms import get_room as _get_room
-        _room = _get_room(room_id)
-        if _room:
-            # Ищем 2 самые длинные стены
-            wall_measures = [m for m in measures if m.get('category') == 'wall']
-            if len(wall_measures) >= 2:
-                lengths = sorted([(m.get('length') or 0) for m in wall_measures], reverse=True)
-                floor_area = lengths[0] * lengths[1]
-            area = L * H if (L and H) else (L * W if (L and W) else 0)
-            openings_total += area
-            openings.append({'label': m.get('label') or cat, 'area': round(area, 2)})
 
-    walls_without_openings = max(walls_total - openings_total, 0)
+    if floor_area == 0:
+        wall_measures = [m for m in measures if m.get('category') == 'wall']
+        if len(wall_measures) >= 2:
+            lengths = sorted([(m.get('length') or 0) for m in wall_measures], reverse=True)
+            floor_area = lengths[0] * lengths[1]
+
+    walls_net = max(walls_total - openings_total, 0)
 
     return {
         'walls_total': round(walls_total / 10000, 2) if has_height else None,
-        'walls_net': round(walls_without_openings / 10000, 2) if has_height else None,
+        'walls_net': round(walls_net / 10000, 2) if has_height else None,
         'floor': round(floor_area / 10000, 2),
         'ceiling': round(ceiling_area / 10000, 2),
         'openings_total': round(openings_total / 10000, 2),
@@ -155,458 +136,56 @@ def calculate_room_areas(room_id):
     }
 
 
-def format_measure(m, show_area=False):
-    """Форматирует размер в строку. Если show_area — добавляет площадь."""
-    cat_icons = {
-        "wall": "🧱", "floor": "📏", "ceiling": "⬆️",
-        "window": "🪟", "door": "🚪", "opening": "🕳", "corner": "📐",
+def get_walls_ordered(room_id, session_id=None):
+    """Стены, отсортированные по wall_pos."""
+    walls = get_measures(room_id, category='wall', session_id=session_id)
+    pos_order = {'напротив': 1, 'слева': 2, 'у входа': 3, 'справа': 4}
+    return sorted(walls, key=lambda w: pos_order.get(w.get('wall_pos') or '', 9))
+
+
+def start_walls_round(room_id):
+    from datetime import datetime
+    commit("UPDATE rooms SET walls_started_at = ? WHERE id = ?",
+           (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), room_id))
+
+
+def complete_walls_round(room_id):
+    from datetime import datetime
+    commit("UPDATE rooms SET walls_completed_at = ? WHERE id = ?",
+           (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), room_id))
+
+
+def get_walls_progress(room_id):
+    row = fetchone(
+        "SELECT walls_started_at, walls_completed_at FROM rooms WHERE id = ?",
+        (room_id,)
+    )
+    walls = get_walls_ordered(room_id)
+    return {
+        'walls_count': len(walls),
+        'current_step': len(walls) + 1,
+        'started_at': row['walls_started_at'] if row else None,
+        'completed_at': row['walls_completed_at'] if row else None,
     }
+
+
+def format_measure(m, show_area=False):
+    cat_icons = {'wall': '🧱', 'floor': '📏', 'ceiling': '⬆️',
+                 'window': '🪟', 'door': '🚪', 'opening': '🕳', 'corner': '📐'}
     icon = cat_icons.get(m.get('category'), '📏')
     label = m.get('label') or m.get('category')
-    if label.startswith('Стена '):
+    if label and label.startswith('Стена '):
         label = label[6:]
-
-    L = m.get('length') or 0
-    W = m.get('width') or 0
-    H = m.get('height') or 0
-    D = m.get('depth') or 0
-    angle = m.get('angle')
 
     def fmt(v):
         if v is None or v == 0:
             return None
         return str(int(v)) if v == int(v) else str(round(v, 1))
 
+    L, W, H = m.get('length'), m.get('width'), m.get('height')
     parts = []
-    if L: parts.append(f"{fmt(L)}")
-    if W: parts.append(f"{fmt(W)}")
-    if H: parts.append(f"{fmt(H)}")
-    if D: parts.append(f"{fmt(D)}")
-    if angle: parts.append(f"{int(angle)}°")
-
+    if L: parts.append(fmt(L))
+    if W: parts.append(fmt(W))
+    if H: parts.append(fmt(H))
     dims = " × ".join(parts) if parts else "—"
-
-    # Площадь стены — через height из комнаты, если у стены нет
-    area_str = ""
-    if show_area and m.get('category') == 'wall' and L:
-        _H = H
-        if not _H:
-            # Берём из комнаты
-            try:
-                _rid = m.get('room_id')
-                if _rid:
-                    from core.rooms import get_room
-                    _r = get_room(_rid)
-                    if _r:
-                        _H = _r.get('height') or 0
-            except Exception:
-                pass
-        if _H:
-            area_m2 = (L * _H) / 10000
-            area_str = f" — {area_m2:.2f} м²"
-
-    angle_str = ""
-    av = m.get('angle_value')
-    if av and av != 90:
-        angle_str = f" ({av}°)"
-
-    return f"{icon} {label}: {fmt(L) or '—'} см{angle_str}{area_str}"
-
-
-def group_measures_by_category(room_id):
-    """Возвращает dict: category -> [measures]."""
-    measures = get_measures(room_id)
-    grouped = {}
-    for m in measures:
-        cat = m.get('category') or 'other'
-        grouped.setdefault(cat, []).append(m)
-    return grouped
-
-
-# ============================================================
-# НИШИ (несколько на стену, разные размеры низа/верха)
-# ============================================================
-
-def add_niche(measure_id, room_id, name=None,
-              offset_x=None, offset_y=None,
-              width_bottom=None, width_top=None,
-              height=None,
-              depth_bottom=None, depth_top=None,
-              niche_type='rect', note=None):
-    """Добавляет нишу на стену. Возвращает niche_id."""
-    return commit(
-        "INSERT INTO wall_niches "
-        "(measure_id, room_id, name, offset_x, offset_y, "
-        "width_bottom, width_top, height, depth_bottom, depth_top, "
-        "niche_type, note) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (measure_id, room_id, name, offset_x, offset_y,
-         width_bottom, width_top, height, depth_bottom, depth_top,
-         niche_type, note)
-    )
-
-def get_niches(measure_id):
-    """Все ниши стены."""
-    rows = fetchall(
-        "SELECT * FROM wall_niches WHERE measure_id = ? ORDER BY id",
-        (measure_id,)
-    )
-    return [dict(r) for r in rows]
-
-def get_niches_by_room(room_id):
-    """Все ниши комнаты."""
-    rows = fetchall(
-        "SELECT * FROM wall_niches WHERE room_id = ? ORDER BY measure_id, id",
-        (room_id,)
-    )
-    return [dict(r) for r in rows]
-
-def update_niche(niche_id, **kwargs):
-    """Обновляет поля ниши."""
-    allowed = {"name", "offset_x", "offset_y", "width_bottom", "width_top",
-               "height", "depth_bottom", "depth_top", "niche_type", "note"}
-    fields, params = [], []
-    for k, v in kwargs.items():
-        if k in allowed:
-            fields.append(f"{k} = ?")
-            params.append(v)
-    if not fields:
-        return False
-    params.append(niche_id)
-    commit(f"UPDATE wall_niches SET {', '.join(fields)} WHERE id = ?", params)
-    return True
-
-def delete_niche(niche_id):
-    commit("DELETE FROM wall_niches WHERE id = ?", (niche_id,))
-    return True
-
-def format_niche(n):
-    """Форматирует нишу для UI."""
-    name = n.get('name') or 'Ниша'
-    wb = n.get('width_bottom') or 0
-    wt = n.get('width_top') or 0
-    h = n.get('height') or 0
-    db_ = n.get('depth_bottom') or 0
-    dt = n.get('depth_top') or 0
-    if abs(wb - wt) < 0.1 and abs(db_ - dt) < 0.1:
-        # Обычная прямоугольная
-        return f"🕳 {name}: {wb}×{h}×{db_} см"
-    else:
-        # Разные низ/верх
-        return (f"🕳 {name}: низ {wb}×{db_} см, верх {wt}×{dt} см, "
-                f"высота {h} см")
-
-
-# ============================================================
-# НАКЛОНЫ СТЕНЫ
-# ============================================================
-
-def add_wall_lean(measure_id, room_id,
-                  lean_angle=None, lean_direction=None,
-                  offset_top_x=None, offset_top_y=None,
-                  twist_angle=None, note=None):
-    """Добавляет/обновляет наклон стены. Возвращает lean_id."""
-    existing = get_wall_lean(measure_id)
-    if existing:
-        update_wall_lean(measure_id,
-                         lean_angle=lean_angle,
-                         lean_direction=lean_direction,
-                         offset_top_x=offset_top_x,
-                         offset_top_y=offset_top_y,
-                         twist_angle=twist_angle,
-                         note=note)
-        return existing['id']
-    return commit(
-        "INSERT INTO wall_lean "
-        "(measure_id, room_id, lean_angle, lean_direction, "
-        "offset_top_x, offset_top_y, twist_angle, note) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (measure_id, room_id, lean_angle, lean_direction,
-         offset_top_x, offset_top_y, twist_angle, note)
-    )
-
-def get_wall_lean(measure_id):
-    """Возвращает наклон стены (или None)."""
-    row = fetchone(
-        "SELECT * FROM wall_lean WHERE measure_id = ?",
-        (measure_id,)
-    )
-    return dict(row) if row else None
-
-def update_wall_lean(measure_id, **kwargs):
-    """Обновляет наклон стены."""
-    allowed = {"lean_angle", "lean_direction", "offset_top_x", "offset_top_y",
-               "twist_angle", "note"}
-    fields, params = [], []
-    for k, v in kwargs.items():
-        if k in allowed and v is not None:
-            fields.append(f"{k} = ?")
-            params.append(v)
-    if not fields:
-        return False
-    params.append(measure_id)
-    commit(f"UPDATE wall_lean SET {', '.join(fields)} WHERE measure_id = ?", params)
-    return True
-
-def delete_wall_lean(measure_id):
-    commit("DELETE FROM wall_lean WHERE measure_id = ?", (measure_id,))
-    return True
-
-
-# ============================================================
-# УГЛЫ МЕЖДУ СТЕНАМИ (corners)
-# ============================================================
-
-def add_corner(room_id, corner_number,
-               corner_type='straight', angle_value=None,
-               radius=None, radius_note=None,
-               deviation_bottom=None, deviation_top=None,
-               note=None):
-    """Добавляет/обновляет угол комнаты. Возвращает corner_id."""
-    existing = get_corner(room_id, corner_number)
-    if existing:
-        update_corner(existing['id'],
-                      corner_type=corner_type,
-                      angle_value=angle_value,
-                      radius=radius,
-                      radius_note=radius_note,
-                      deviation_bottom=deviation_bottom,
-                      deviation_top=deviation_top,
-                      note=note)
-        return existing['id']
-    return commit(
-        "INSERT INTO wall_corners "
-        "(room_id, corner_number, corner_type, angle_value, "
-        "radius, radius_note, deviation_bottom, deviation_top, note) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (room_id, corner_number, corner_type, angle_value,
-         radius, radius_note, deviation_bottom, deviation_top, note)
-    )
-
-def get_corner(room_id, corner_number):
-    """Конкретный угол комнаты."""
-    row = fetchone(
-        "SELECT * FROM wall_corners WHERE room_id = ? AND corner_number = ?",
-        (room_id, corner_number)
-    )
-    return dict(row) if row else None
-
-def get_corners(room_id):
-    """Все углы комнаты."""
-    rows = fetchall(
-        "SELECT * FROM wall_corners WHERE room_id = ? ORDER BY corner_number",
-        (room_id,)
-    )
-    return [dict(r) for r in rows]
-
-def update_corner(corner_id, **kwargs):
-    """Обновляет поля угла."""
-    allowed = {"corner_type", "angle_value", "radius", "radius_note",
-               "deviation_bottom", "deviation_top", "note"}
-    fields, params = [], []
-    for k, v in kwargs.items():
-        if k in allowed:
-            fields.append(f"{k} = ?")
-            params.append(v)
-    if not fields:
-        return False
-    params.append(corner_id)
-    commit(f"UPDATE wall_corners SET {', '.join(fields)} WHERE id = ?", params)
-    return True
-
-def delete_corner(corner_id):
-    commit("DELETE FROM wall_corners WHERE id = ?", (corner_id,))
-    return True
-
-def format_corner(c):
-    """Форматирует угол для UI."""
-    num = c.get('corner_number')
-    ctype = c.get('corner_type', 'straight')
-    angle = c.get('angle_value')
-    radius = c.get('radius')
-
-    type_names = {
-        'straight': '📐 Прямой',
-        'rounded': '🔄 Закруглённый',
-        'angled': '📐 Наклонный',
-        'irregular': '❓ Неправильный',
-    }
-    name = type_names.get(ctype, ctype)
-
-    parts = [f"Угол {num}: {name}"]
-    if angle:
-        parts.append(f"{angle}°")
-    if radius:
-        parts.append(f"R={radius} см")
-    return " · ".join(parts)
-
-
-# ============================================================
-# ПРОГРЕСС ОБХОДА СТЕН
-# ============================================================
-
-def start_walls_round(room_id):
-    """Помечает начало обхода стен."""
-    from datetime import datetime
-    commit(
-        "UPDATE rooms SET walls_started_at = ? WHERE id = ?",
-        (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), room_id)
-    )
-
-def complete_walls_round(room_id):
-    """Помечает завершение обхода стен."""
-    from datetime import datetime
-    commit(
-        "UPDATE rooms SET walls_completed_at = ? WHERE id = ?",
-        (datetime.now().strftime('%Y-%m-%d %H:%M:%S'), room_id)
-    )
-
-def get_walls_progress(room_id):
-    """Возвращает прогресс обхода стен.
-    Возвращает: {'started': bool, 'completed': bool,
-                 'walls_count': int, 'current_step': int}
-    """
-    room = fetchone(
-        "SELECT walls_started_at, walls_completed_at, contour_check_passed "
-        "FROM rooms WHERE id = ?",
-        (room_id,)
-    )
-    if not room:
-        return {'started': False, 'completed': False,
-                'walls_count': 0, 'current_step': 1}
-
-    # Считаем, сколько стен замерено
-    walls = fetchall(
-        "SELECT id, wall_pos, order_num FROM room_measures "
-        "WHERE room_id = ? AND category = 'wall' "
-        "ORDER BY COALESCE(order_num, id)",
-        (room_id,)
-    )
-    walls_count = len(walls)
-
-    return {
-        'started': bool(room['walls_started_at']),
-        'completed': bool(room['walls_completed_at']),
-        'contour_passed': bool(room['contour_check_passed']),
-        'walls_count': walls_count,
-        'current_step': walls_count + 1 if walls_count < 4 else 4,
-        'walls': [dict(w) for w in walls],
-    }
-
-def get_wall_by_pos(room_id, wall_pos):
-    """Находит стену по позиции (напротив / слева / у входа / справа)."""
-    row = fetchone(
-        "SELECT * FROM room_measures "
-        "WHERE room_id = ? AND category = 'wall' AND wall_pos = ? "
-        "ORDER BY id DESC LIMIT 1",
-        (room_id, wall_pos)
-    )
-    return dict(row) if row else None
-
-def get_walls_ordered(room_id):
-    """Все стены комнаты в порядке обхода (order_num)."""
-    rows = fetchall(
-        "SELECT * FROM room_measures "
-        "WHERE room_id = ? AND category = 'wall' "
-        "ORDER BY COALESCE(order_num, id)",
-        (room_id,)
-    )
-    return [dict(r) for r in rows]
-
-
-
-# ============================================================
-# ПРОЁМЫ (окна, двери, вентиляция)
-# ============================================================
-
-OPENING_TYPES = {
-    'window':        '🪟 Окно',
-    'door_entrance': '🚪 Входная дверь',
-    'door_interior': '🚪 Межкомнатная дверь',
-    'door_balcony':  '🌅 Дверь на балкон',
-    'door_exit':     '🚶 Выход наружу',
-    'vent':          '💨 Вентиляция',
-}
-
-def add_opening(room_id, opening_type, wall_pos=None,
-                offset_x=None, width=None, height=None, depth=None,
-                sill_height=None, from_room_id=None, to_room_id=None,
-                to_outside=0, is_main=0, vent_type=None, door_kind=None,
-                note=None, created_by=None):
-    """Добавляет проём. Возвращает opening_id."""
-    return commit(
-        "INSERT INTO openings "
-        "(room_id, opening_type, wall_pos, offset_x, width, height, depth, "
-        "sill_height, from_room_id, to_room_id, to_outside, is_main, "
-        "vent_type, door_kind, note, created_by) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (room_id, opening_type, wall_pos, offset_x, width, height, depth,
-         sill_height, from_room_id, to_room_id, to_outside, is_main,
-         vent_type, door_kind, note, created_by)
-    )
-
-def get_openings(room_id):
-    """Все проёмы комнаты."""
-    rows = fetchall(
-        "SELECT * FROM openings WHERE room_id = ? ORDER BY id",
-        (room_id,)
-    )
-    return [dict(r) for r in rows]
-
-def get_openings_by_wall(room_id, wall_pos):
-    """Проёмы конкретной стены."""
-    rows = fetchall(
-        "SELECT * FROM openings WHERE room_id = ? AND wall_pos = ? ORDER BY offset_x",
-        (room_id, wall_pos)
-    )
-    return [dict(r) for r in rows]
-
-def get_opening(opening_id):
-    """Конкретный проём."""
-    row = fetchone("SELECT * FROM openings WHERE id = ?", (opening_id,))
-    return dict(row) if row else None
-
-def update_opening(opening_id, **kwargs):
-    """Обновляет поля проёма."""
-    allowed = {"opening_type", "wall_pos", "offset_x", "width", "height",
-               "depth", "sill_height", "from_room_id", "to_room_id",
-               "to_outside", "is_main", "vent_type", "door_kind", "note"}
-    fields, params = [], []
-    for k, v in kwargs.items():
-        if k in allowed:
-            fields.append(f"{k} = ?")
-            params.append(v)
-    if not fields:
-        return False
-    params.append(opening_id)
-    commit(f"UPDATE openings SET {', '.join(fields)} WHERE id = ?", params)
-    return True
-
-def delete_opening(opening_id):
-    commit("DELETE FROM openings WHERE id = ?", (opening_id,))
-    return True
-
-def format_opening(o):
-    """Форматирует проём для UI."""
-    otype = o.get('opening_type') or '?'
-    label = OPENING_TYPES.get(otype, otype)
-    wall_pos = o.get('wall_pos') or '?'
-    width = o.get('width')
-    height = o.get('height')
-    sill = o.get('sill_height')
-
-    parts = [label]
-    if wall_pos and wall_pos != '?':
-        parts.append(f"на стене «{wall_pos}»")
-
-    dims = ""
-    if width and height:
-        w_str = str(int(width)) if width == int(width) else str(width)
-        h_str = str(int(height)) if height == int(height) else str(height)
-        dims = f" — {w_str}×{h_str} см"
-        if sill:
-            s_str = str(int(sill)) if sill == int(sill) else str(sill)
-            dims += f", подоконник {s_str} см"
-
-    return " ".join(parts) + dims
-
+    return f"{icon} {label}: {dims} см"
