@@ -1,3 +1,9 @@
+                await target.message.delete()
+            except Exception:
+                pass
+            await target.message.chat.send_message(text, parse_mode=ParseMode.MARKDOWN)
+        else:
+            await target.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
         return
 
     text = (
@@ -392,9 +398,3 @@ async def _handle_wall_round_input(update, context, step):
         except ValueError:
             await update.message.reply_text("❌ Нужно число")
             return
-        temp = context.user_data.get('wall_niche_temp') or {}
-        temp['depth'] = round(val, 2)
-        context.user_data['wall_niche_temp'] = temp
-        context.user_data['waiting_for'] = 'wall_niche_height'
-        room_id = context.user_data.get('wall_room_id')
-        import os as _os

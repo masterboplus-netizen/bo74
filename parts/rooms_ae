@@ -1,3 +1,9 @@
+        update_comm(comm_id, **{field: val})
+        c = get_comm(comm_id)
+        context.user_data['waiting_for'] = None
+        context.user_data['comm_edit_id'] = None
+        context.user_data['comm_edit_field'] = None
+        if c:
             label = get_comm_type_label(c.get('comm_type'))
             await update.message.reply_text(
                 f"✅ Обновлено!\n\n🔧 *{label}* #{comm_id}\n🧱 Стена: {c.get('wall')}",
@@ -392,9 +398,3 @@ async def _show_wall_plane(target, context, room_id):
         )
         if hasattr(target, 'message'):
             try:
-                await target.message.delete()
-            except Exception:
-                pass
-            await target.message.chat.send_message(text, parse_mode=ParseMode.MARKDOWN)
-        else:
-            await target.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)

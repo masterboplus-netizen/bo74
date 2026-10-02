@@ -1,3 +1,9 @@
+        temp = context.user_data.get('wall_niche_temp') or {}
+        temp['depth'] = round(val, 2)
+        context.user_data['wall_niche_temp'] = temp
+        context.user_data['waiting_for'] = 'wall_niche_height'
+        room_id = context.user_data.get('wall_room_id')
+        import os as _os
         _base = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
         _png = _os.path.join(_base, "docs", "images", "niche_height.png")
         _cap = "🕳 *Ниша — ВЫСОТА* (СМ):\n\n_Например: 200_"

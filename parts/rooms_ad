@@ -238,6 +238,12 @@ async def handle_measure_input(update, context):
             )
         return
 
+    # --- УНИВЕРСАЛЬНЫЙ РОУТЕР: ниши / rounded / wavy / hidden ---
+    if step and (step.startswith('wall_niche_')
+                 or step in ('wall_rounded_radius', 'wall_wavy_note', 'wall_hidden_note')):
+        await _handle_wall_round_input(update, context, step)
+        return
+
     # --- Коммуникации ---
     if step == 'comm_offset_x':
         room_id = context.user_data.get('comm_room_id')
@@ -392,9 +398,3 @@ async def handle_measure_input(update, context):
         except ValueError:
             await update.message.reply_text("❌ Введи число")
             return
-        update_comm(comm_id, **{field: val})
-        c = get_comm(comm_id)
-        context.user_data['waiting_for'] = None
-        context.user_data['comm_edit_id'] = None
-        context.user_data['comm_edit_field'] = None
-        if c:
