@@ -1,0 +1,588 @@
+"""core.spec — справочник. Единый источник текстов, картинок, типов, валидаций.
+
+Никаких магических строк в коде. Всё берётся отсюда.
+
+Расширенная версия: квартиры, дома, бани, балконы, фасады, подсветка, конструкции.
+
+Версия: 8.1
+"""
+import os
+
+# ============================================================
+# ПУТИ
+# ============================================================
+
+_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+IMAGES_DIR = os.path.join(_BASE, "docs", "images")
+
+
+def get_image_path(filename):
+    return os.path.join(IMAGES_DIR, filename)
+
+
+# ============================================================
+# ТИПЫ ОБЪЕКТОВ (расширенные)
+# ============================================================
+
+OBJECT_TYPES = {
+    # Жилые
+    "apartment": "🏢 Квартира",
+    "private_house": "🏠 Частный дом",
+    "townhouse": "🏘 Таунхаус",
+    "dacha": "🌳 Дача",
+    "cottage": "🏡 Коттедж",
+
+    # Коммерческие
+    "office": "🏢 Офис",
+    "cafe": "☕ Кафе / ресторан",
+    "shop": "🛍 Магазин",
+    "warehouse": "📦 Склад",
+    "industrial": "🏭 Промышленный",
+
+    # Специальные
+    "balcony": "🪟 Балкон / лоджия",
+    "terrace": "🌤 Терраса / веранда",
+    "bathhouse": "🧖 Баня / сауна",
+    "garage": "🚗 Гараж",
+    "landscape": "🌿 Ландшафт",
+    "facade": "🏛 Фасад",
+}
+
+
+# ============================================================
+# ТИПЫ КОМНАТ (расширенные)
+# ============================================================
+
+ROOM_TYPES = {
+    # Жилые
+    "living": "🛋 Гостиная",
+    "bedroom": "🛏 Спальня",
+    "kitchen": "🍳 Кухня",
+    "kids": "🧸 Детская",
+    "office_room": "💼 Кабинет",
+    "dining": "🍽 Столовая",
+
+    # Мокрые
+    "bathroom": "🚿 Ванная",
+    "toilet": "🚽 Санузел",
+    "shower": "🚿 Душевая",
+    "utility": "🧺 Постирочная",
+    "boiler": "🔥 Котельная",
+    "pool": "🏊 Бассейн",
+
+    # Баня
+    "steam_room": "♨️ Парная",
+    "sauna": "🧖 Сауна",
+    "washroom": "💧 Помывочная",
+    "rest_room": "🛋 Комната отдыха",
+
+    # Проходные
+    "hallway": "🚪 Коридор",
+    "hall": "🏛 Зал",
+    "corridor": "🚪 Коридор",
+    "staircase": "🪜 Лестница",
+
+    # Балконы / террасы
+    "balcony": "🪟 Балкон",
+    "loggia": "🪟 Лоджия",
+    "terrace": "🌤 Терраса",
+    "veranda": "🌤 Веранда",
+
+    # Хранение
+    "dressing": "👗 Гардеробная",
+    "storage": "📦 Кладовая",
+    "basement": "🏚 Подвал",
+    "attic": "🏠 Мансарда / чердак",
+    "garage_room": "🚗 Гараж",
+
+    # Технические
+    "technical": "⚙️ Техническое",
+    "elevator": "🛗 Лифт",
+
+    # Фасад
+    "facade": "🏛 Фасад",
+    "roof": "🏠 Крыша",
+}
+
+
+# ============================================================
+# ТИПЫ СЕССИЙ ЗАМЕРОВ
+# ============================================================
+
+SESSION_TYPES = {
+    "initial": "Первичный (черновой)",
+    "after_rough": "После черновой",
+    "furniture": "Под мебель",
+    "tiling": "Под плитку",
+    "mirror": "Под зеркала",
+    "electric": "Под электрику",
+    "plumbing": "Под сантехнику",
+    "lighting": "Под подсветку",
+    "facade": "Под фасад",
+    "roof": "Под кровлю",
+    "final": "Финальный",
+    "custom": "Свой",
+}
+
+
+# ============================================================
+# ЭТАПЫ РЕМОНТА
+# ============================================================
+
+WORK_STAGES = {
+    # Общие
+    "demolition": ("Демонтаж", 2),
+    "rough": ("Черновая", 7),
+    "comms": ("Коммуникации", 5),
+    "plaster": ("Штукатурка", 5),
+    "screed": ("Стяжка", 3),
+    "finish": ("Чистовая", 15),
+    "finish_work": ("Финишная", 7),
+    "handover": ("Сдача", 2),
+
+    # Фасад
+    "facade_prep": ("Подготовка фасада", 3),
+    "facade_insulate": ("Утепление фасада", 5),
+    "facade_finish": ("Отделка фасада", 7),
+    "facade_lighting": ("Подсветка фасада", 3),
+
+    # Крыша
+    "roof_demo": ("Демонтаж кровли", 2),
+    "roof_rafters": ("Стропильная система", 5),
+    "roof_cover": ("Кровельное покрытие", 5),
+    "roof_drain": ("Водоотведение", 2),
+
+    # Баня
+    "bath_insulate": ("Утепление бани", 3),
+    "bath_waterproof": ("Гидроизоляция", 2),
+    "bath_wood": ("Деревянная отделка", 5),
+    "bath_stove": ("Монтаж печи", 2),
+    "bath_vent": ("Вентиляция", 2),
+
+    # Ландшафт
+    "land_prep": ("Подготовка участка", 3),
+    "land_drain": ("Дренаж", 3),
+    "land_finish": ("Отделка", 5),
+    "land_lighting": ("Ландшафтная подсветка", 3),
+}
+
+
+# ============================================================
+# МАТЕРИАЛЫ СТЕН
+# ============================================================
+
+MATERIALS = {
+    "brick": "Кирпич",
+    "concrete": "Бетон",
+    "aerated": "Газобетон",
+    "drywall": "Гипсокартон",
+    "wood": "Дерево",
+    "plaster": "Штукатурка",
+    "ceramic": "Керамика",
+    "stone": "Камень",
+    "metal": "Металл",
+    "glass": "Стекло",
+    "other": "Прочее",
+}
+
+
+# ============================================================
+# ТИПЫ ПРОЁМОВ
+# ============================================================
+
+OPENING_TYPES = {
+    "window": "🪟 Окно",
+    "door_interior": "🚪 Дверь межкомнатная",
+    "door_entrance": "🚪 Дверь входная",
+    "door_glass": "🚪 Стеклянная дверь",
+    "vent": "💨 Вентиляция",
+    "arch": "🏛 Арка",
+    "portal": "🚪 Портал",
+    "skylight": "☀️ Световое окно",
+    "garage_door": "🚗 Ворота гаражные",
+    "gate": "🚧 Ворота",
+}
+
+
+# ============================================================
+# НАЗВАНИЯ СТЕН
+# ============================================================
+
+WALL_NAMES = {
+    1: "напротив",
+    2: "слева",
+    3: "у входа",
+    4: "справа",
+}
+
+
+# ============================================================
+# ШАГИ ВЫСОТЫ
+# ============================================================
+
+HEIGHT_STEPS = {
+    1: {
+        "title": "📏 *Высота — шаг 1*",
+        "subtitle": "📍 *Точка 1 — ЦЕНТР комнаты*",
+        "hint": "Встань в центре комнаты, приложи дальномер к полу, наведи на потолок.",
+        "prompt": "Введи результат в СМ:",
+        "example": "305",
+        "image": "height_scheme_step1.png",
+    },
+    2: {
+        "title": "📏 *Высота — шаг 2*",
+        "subtitle": "📍 *Точка 2 — у ЛЕВОГО угла*",
+        "hint": "",
+        "prompt": "Введи результат в СМ:",
+        "example": "304",
+        "image": "height_scheme_step2.png",
+    },
+    3: {
+        "title": "📏 *Высота — шаг 3*",
+        "subtitle": "📍 *Точка 3 — у ПРАВОГО угла*",
+        "hint": "",
+        "prompt": "Введи результат в СМ:",
+        "example": "306",
+        "image": "height_scheme_step3.png",
+    },
+}
+
+
+# ============================================================
+# ШАГИ ОБХОДА СТЕНЫ
+# ============================================================
+
+WALL_FLAGS = [
+    ("niche", "С нишей"),
+    ("rounded", "С закруглением"),
+    ("wavy", "Разная по высоте"),
+    ("hidden", "Скрытые коммуникации"),
+]
+
+WALL_STEPS = {
+    "flags": {
+        "title": "🧱 *Стена {n} — {pos}*",
+        "subtitle": "👁 Осмотри стену.\nОтметь особенности:",
+        "image_tpl": "wall_scheme_s{n}_flags.png",
+    },
+    "plane": {
+        "title": "🧱 *Стена {n}*",
+        "subtitle": "📐 *Плоскость стены:*\n\nСтена ровная или кривая по высоте?",
+        "hint": "_Если стена «горбатая» — нужно замерить в 3 точках._",
+        "image_tpl": "wall_scheme_s{n}_plane.png",
+    },
+    "length": {
+        "title": "🧱 *Стена {n} — {pos}*",
+        "subtitle": "📏 *Длина стены* (СМ):",
+        "hint": "⚠️ *ВАЖНО:* дальномер в режиме «от ЗАДНЕЙ СТЕНКИ».",
+        "prompt": "Напиши число и отправь.",
+        "image_tpl": "wall_scheme_s{n}_length.png",
+    },
+    "openings": {
+        "title": "🧱 *Стена {n} — {pos}*",
+        "subtitle": "🚪 *Есть ли на этой стене проёмы?*",
+        "image_tpl": None,
+    },
+    "angle": {
+        "title": "✅ Длина: *{length} см*",
+        "subtitle": "📐 *Угол между этой стеной и следующей:*",
+        "hint": "Обычно 90° — прямой угол.",
+        "image_tpl": "wall_scheme_s{n}_angle.png",
+    },
+}
+
+
+# ============================================================
+# ШАГИ НИШИ
+# ============================================================
+
+NICHE_STEPS = {
+    "count": {"title": "🕳 *Сколько нишей на этой стене?*"},
+    "width": {
+        "title": "🕳 *Ниша {i} из {count}*",
+        "subtitle": "📏 *Ширина ниши* (СМ):",
+        "example": "80",
+        "image": "niche_width.png",
+    },
+    "depth": {
+        "title": "🕳 *Ниша — ГЛУБИНА* (СМ):",
+        "hint": "_Сколько вглубь стены. Например: 40_",
+        "image": "niche_depth.png",
+    },
+    "height": {
+        "title": "🕳 *Ниша — ВЫСОТА* (СМ):",
+        "example": "200",
+        "image": "niche_height.png",
+    },
+    "plane": {
+        "title": "🕳 *Ниша ровная или неровная по высоте?*",
+        "hint": "Если верх шире низа — неровная.",
+    },
+    "top_width": {"title": "🕳 *Ширина СВЕРХУ* (СМ):"},
+    "top_depth": {"title": "🕳 *Глубина сверху* (СМ):"},
+}
+
+
+# ============================================================
+# ТИПЫ ОСВЕЩЕНИЯ (архитектурная подсветка)
+# ============================================================
+
+LIGHTING_TYPES = {
+    "facade_spot": "🔦 Прожектор фасадный",
+    "facade_linear": "📏 Линейная подсветка фасада",
+    "facade_contour": "🔲 Контурная подсветка",
+    "facade_wall": "🏛 Wall washer",
+    "land_path": "🌟 Подсветка дорожек",
+    "land_lawn": "🌿 Подсветка газонов",
+    "land_tree": "🌳 Подсветка деревьев",
+    "land_water": "💧 Подсветка воды",
+    "interior_cove": "💡 Карнизная подсветка",
+    "interior_niche": "💡 Подсветка ниши",
+    "interior_picture": "🖼 Подсветка картин",
+    "interior_stair": "🪜 Подсветка лестницы",
+    "interior_floor": "🌟 Напольная подсветка",
+}
+
+LIGHTING_TEMPERATURES = {
+    "warm": "🔥 Тёплый (2700-3000K)",
+    "neutral": "⚪ Нейтральный (4000K)",
+    "cold": "❄️ Холодный (6000-6500K)",
+    "rgb": "🌈 RGB",
+    "tunable": "🎨 Tunable White",
+}
+
+LIGHTING_PROTECTION = {
+    "ip20": "IP20 (внутри)",
+    "ip44": "IP44 (влагостойкий)",
+    "ip65": "IP65 (для улицы)",
+    "ip67": "IP67 (погружной)",
+    "ip68": "IP68 (под водой)",
+}
+
+LIGHTING_CONTROL = {
+    "switch": "Обычный выключатель",
+    "dimmer": "Диммер",
+    "smart": "Smart Home",
+    "dmx": "DMX",
+    "sensor": "Датчик движения",
+    "timer": "Таймер",
+    "astronomic": "Астрономический таймер",
+}
+
+
+# ============================================================
+# ТИПЫ КОНСТРУКЦИЙ
+# ============================================================
+
+CONSTRUCTION_TYPES = {
+    "load_bearing_wall": "🧱 Несущая стена",
+    "partition": "🚪 Перегородка",
+    "column": "🏛 Колонна",
+    "beam": "📏 Балка",
+    "slab": "🛏 Перекрытие",
+    "arch": "🏛 Арка",
+    "niche_decor": "🕳 Декоративная ниша",
+    "cornice": "🏛 Карниз",
+    "pilaster": "🏛 Пилястра",
+    "riser": "⬆️ Стояк",
+}
+
+CONSTRUCTION_MATERIALS = {
+    "concrete": "Бетон",
+    "brick": "Кирпич",
+    "metal": "Металл",
+    "wood": "Дерево",
+    "gypsum": "Гипс",
+    "stone": "Камень",
+    "glass": "Стекло",
+    "composite": "Композит",
+}
+
+
+# ============================================================
+# ТИПЫ КРЫШ
+# ============================================================
+
+ROOF_TYPES = {
+    "flat": "Плоская",
+    "gable": "Двускатная",
+    "hip": "Вальмовая",
+    "half_hip": "Полувальмовая",
+    "mansard": "Мансардная",
+    "multi": "Многоскатная",
+    "shed": "Односкатная",
+    "dome": "Купол",
+    "conical": "Коническая",
+}
+
+ROOF_COVERINGS = {
+    "metal_tile": "Металлочерепица",
+    "flexible_tile": "Гибкая черепица",
+    "ceramic_tile": "Керамическая черепица",
+    "cement_tile": "Цементная черепица",
+    "seam": "Фальцевая кровля",
+    "corrugated": "Профнастил",
+    "slate": "Сланец",
+    "copper": "Медь",
+    "zinc": "Цинк",
+    "thatch": "Солома",
+    "membrane": "Мембрана",
+}
+
+
+# ============================================================
+# ВАЛИДАЦИИ
+# ============================================================
+
+VALIDATIONS = {
+    "height": (50, 3000),
+    "length": (10, 50000),
+    "niche_width": (1, 2000),
+    "niche_depth": (1, 2000),
+    "niche_height": (1, 2000),
+    "angle": (1, 179),
+    "diagonal": (1, 50000),
+    "opening_width": (10, 5000),
+    "opening_height": (10, 5000),
+    "opening_sill": (0, 5000),
+    "comm_offset_x": (0, 50000),
+    "comm_offset_y": (0, 5000),
+    "comm_diameter": (5, 500),
+    "comm_size": (1, 1000),
+    "balcony_railing_height": (50, 200),
+    "balcony_depth": (50, 500),
+    "facade_area": (1, 10000),
+    "roof_area": (1, 10000),
+    "lighting_power": (1, 1000),
+    "lighting_count": (1, 500),
+}
+
+
+def validate(step_name, value):
+    """Проверяет значение по шагу. Возвращает (ok, error_msg)."""
+    if step_name not in VALIDATIONS:
+        return True, None
+    lo, hi = VALIDATIONS[step_name]
+    if not isinstance(value, (int, float)):
+        return False, "Нужно число"
+    if value < lo or value > hi:
+        return False, f"Значение должно быть от {lo} до {hi}"
+    return True, None
+
+
+# ============================================================
+# ФУНКЦИИ
+# ============================================================
+
+def get_height_step(step):
+    return HEIGHT_STEPS.get(step)
+
+
+def get_wall_step(step_name, n=None, pos=None, length=None):
+    spec = WALL_STEPS.get(step_name)
+    if not spec:
+        return None
+    result = dict(spec)
+    if n is not None and "title" in result:
+        result["title"] = result["title"].format(n=n, pos=pos or "")
+    if length is not None and "title" in result and "{length}" in result["title"]:
+        result["title"] = result["title"].format(length=length)
+    if "image_tpl" in result and result["image_tpl"] and n is not None:
+        result["image"] = result["image_tpl"].format(n=n)
+    return result
+
+
+def get_niche_step(step_name, i=None, count=None):
+    spec = NICHE_STEPS.get(step_name)
+    if not spec:
+        return None
+    result = dict(spec)
+    if i is not None and count is not None and "title" in result:
+        result["title"] = result["title"].format(i=i, count=count)
+    return result
+
+
+def get_wall_name(n):
+    return WALL_NAMES.get(n, "?")
+
+
+def get_session_label(code):
+    return SESSION_TYPES.get(code, code)
+
+
+def get_material_label(code):
+    return MATERIALS.get(code, code)
+
+
+def get_object_type_label(code):
+    return OBJECT_TYPES.get(code, code)
+
+
+def get_room_type_label(code):
+    return ROOM_TYPES.get(code, code)
+
+
+def get_opening_label(code):
+    return OPENING_TYPES.get(code, code)
+
+
+def get_lighting_label(code):
+    return LIGHTING_TYPES.get(code, code)
+
+
+def get_construction_label(code):
+    return CONSTRUCTION_TYPES.get(code, code)
+
+
+def get_roof_label(code):
+    return ROOF_TYPES.get(code, code)
+
+
+def get_stage_label(code):
+    s = WORK_STAGES.get(code)
+    return s[0] if s else code
+
+
+def get_stage_days(code):
+    s = WORK_STAGES.get(code)
+    return s[1] if s else 0
+
+
+# ============================================================
+# СПИСКИ ДЛЯ UI
+# ============================================================
+
+def list_object_types():
+    return [(k, v) for k, v in OBJECT_TYPES.items()]
+
+
+def list_room_types():
+    return [(k, v) for k, v in ROOM_TYPES.items()]
+
+
+def list_session_types():
+    return [(k, v) for k, v in SESSION_TYPES.items()]
+
+
+def list_materials():
+    return [(k, v) for k, v in MATERIALS.items()]
+
+
+def list_opening_types():
+    return [(k, v) for k, v in OPENING_TYPES.items()]
+
+
+def list_lighting_types():
+    return [(k, v) for k, v in LIGHTING_TYPES.items()]
+
+
+def list_construction_types():
+    return [(k, v) for k, v in CONSTRUCTION_TYPES.items()]
+
+
+def list_roof_types():
+    return [(k, v) for k, v in ROOF_TYPES.items()]
+
+
+def list_roof_coverings():
+    return [(k, v) for k, v in ROOF_COVERINGS.items()]
