@@ -1047,19 +1047,37 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
                 return
             await _wall_save_and_next(query, context, room_id, next_step)
             return
-        if step_name == 'niche':
-            # Продолжаем с ниши
+        if step_name in ('niche', 'niche_width'):
             context.user_data['waiting_for'] = 'wall_niche_width'
             await query.message.chat.send_message(
                 "🕳 *Продолжаем нишу*\n\n📏 Ширина (СМ):",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
-        if step_name == 'niche':
-            context.user_data['waiting_for'] = 'wall_niche_width'
+        if step_name == 'niche_depth':
+            context.user_data['waiting_for'] = 'wall_niche_depth'
             await query.message.chat.send_message(
-                "🕳 *Продолжаем нишу*\n\n📏 Ширина (СМ):",
+                "🕳 *Продолжаем нишу*\n\n📏 Глубина (СМ):",
                 parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        if step_name == 'niche_height':
+            context.user_data['waiting_for'] = 'wall_niche_height'
+            await query.message.chat.send_message(
+                "🕳 *Продолжаем нишу*\n\n📏 Высота (СМ):",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        if step_name == 'niche_plane':
+            _rid = context.user_data.get('wall_room_id')
+            await query.message.chat.send_message(
+                "🕳 *Ниша ровная или неровная по высоте?*",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Ровная", callback_data=f"wall_niche_plane_rect_{_rid}")],
+                    [InlineKeyboardButton("📏 Неровная", callback_data=f"wall_niche_plane_irr_{_rid}")],
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{_rid}")],
+                ])
             )
             return
         # По умолчанию — галочки
@@ -1228,7 +1246,7 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         context.user_data['wall_niche_current'] = 1
         context.user_data['wall_niches'] = []
         context.user_data['waiting_for'] = 'wall_niche_width'
-        _save_wall_draft(context, room_id, 'niche')
+        _save_wall_draft(context, room_id, 'niche_width')
         import os as _os
         _base = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
         _png = _os.path.join(_base, "docs", "images", "niche_width.png")
@@ -2362,17 +2380,7 @@ async def _handle_wall_round_input(update, context, step):
             return
         context.user_data['wall_niche_temp'] = {'width': round(val, 2)}
         context.user_data['waiting_for'] = 'wall_niche_depth'
-        # Сохраняем черновик
-        step_num = context.user_data.get('wall_step') or 1
-        flags = context.user_data.get('wall_flags') or {}
-        context.user_data[f'wall_draft_{room_id}'] = {
-            'step': step_num, 'flags': flags,
-            'length': context.user_data.get('wall_length'),
-            'niches': context.user_data.get('wall_niches') or [],
-            'niche_count': context.user_data.get('wall_niche_count') or 1,
-            'niche_current': context.user_data.get('wall_niche_current') or 1,
-            'niche_temp': {'width': round(val, 2)},
-        }
+        _save_wall_draft(context, room_id, 'niche_depth')
         room_id = context.user_data.get('wall_room_id')
         import os as _os
         _base = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
