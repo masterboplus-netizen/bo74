@@ -1,0 +1,26 @@
+=== .BAK ФАЙЛЫ В GIT ===
+db.py.bak2
+handlers/commands.py.bak10
+handlers/commands.py.bak11
+handlers/commands.py.bak12
+handlers/commands.py.bak13
+handlers/commands.py.bak14
+handlers/commands.py.bak2
+handlers/commands.py.bak3
+handlers/commands.py.bak4
+handlers/commands.py.bak5
+handlers/commands.py.bak6
+handlers/commands.py.bak7
+handlers/commands.py.bak8
+handlers/commands.py.bak9
+handlers/onboarding.py.bak5
+handlers/onboarding.py.bak6
+handlers/onboarding.py.bak7
+modules/finance.py.bak2
+modules/users.py.bak2
+
+=== ОБЩЕЕ КОЛИЧЕСТВО .BAK В GIT ===
+19
+
+=== ФАЙЛЫ, ОТСЛЕЖИВАЕМЫЕ GIT (без .bak) ===
+236
