@@ -1,0 +1,120 @@
+=== FILES ===
+./attached_assets/Pasted--7-2-27-import-sqlite3-from-config-import-DB-PATH-def-g_1789296751944.txt
+./backups/bo72_20260920.db
+./bo72.db
+./bo72.db.bak.20260917
+./bot.py
+./config.py
+./core/constants.py
+./core/__init__.py
+./core/permissions.py
+./core/settings.py
+./db.py
+./dump_full2.txt
+./dump_full.txt
+./.gitignore
+./handlers/add.py
+./handlers/admin.py
+./handlers/category.py
+./handlers/choose.py
+./handlers/commands.py
+./handlers/commands.py.bak10
+./handlers/commands.py.bak11
+./handlers/commands.py.bak12
+./handlers/commands.py.bak13
+./handlers/commands.py.bak14
+./handlers/commands.py.bak4
+./handlers/commands.py.bak5
+./handlers/commands.py.bak6
+./handlers/commands.py.bak7
+./handlers/commands.py.bak8
+./handlers/commands.py.bak9
+./handlers/dates.py
+./handlers/digest_cmd.py
+./handlers/finance_ui.py
+./handlers/__init__.py
+./handlers/menu.py
+./handlers/onboarding.py
+./handlers/onboarding.py.bak_1789909455
+./handlers/onboarding.py.bak5
+./handlers/onboarding.py.bak6
+./handlers/onboarding.py.bak7
+./handlers/tasks_ui.py
+./handlers/text.py
+./import_data.py
+./main.py
+./modules/backup_db.py
+./modules/calendar.py
+./modules/dashboard_link.py
+./modules/digest.py
+./modules/finance.py
+./modules/__init__.py
+./modules/objects.py
+./modules/parser.py
+./modules/personal.py
+./modules/reports.py
+./modules/tasks.py
+./modules/users.py
+./parser_dump.txt
+./README.md
+./.replit
+./requirements.txt
+./test_modules.py
+./web/app.py
+./web_dashboard.py
+./web/templates/dashboard.html
+./web/templates/object.html
+
+=== main_render.py ===
+
+=== requirements.txt ===
+# Project dependencies
+python-dotenv
+python-telegram-bot[job-queue]
+=== .replit или render.yaml ===
+modules = ["python-base-3.13"]
+run = "python main.py"
+
+[nix]
+channel = "stable-25_05"
+packages = ["mailutils", "nano", "python313Packages.flask", "python313Packages.python-dotenv", "python313Packages.python-telegram-bot"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Telegram Bot"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Dashboard"
+
+[[workflows.workflow]]
+name = "Telegram Bot"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python bot.py"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Dashboard"
+mode = "parallel"
+author = 65448632
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python web_dashboard.py"
+
+[[ports]]
+localPort = 8080
+externalPort = 80
