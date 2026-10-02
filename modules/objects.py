@@ -92,3 +92,55 @@ def update_object(object_id, name=None, address=None, budget=None, status=None):
     conn.commit()
     conn.close()
     return True
+
+
+def delete_object(object_id):
+    """Удаляет объект и всё связанное."""
+    from db import get_connection
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute("DELETE FROM room_measures WHERE room_id IN (SELECT id FROM rooms WHERE object_id = ?)", (object_id,))
+        c.execute("DELETE FROM wall_niches WHERE room_id IN (SELECT id FROM rooms WHERE object_id = ?)", (object_id,))
+        c.execute("DELETE FROM openings WHERE room_id IN (SELECT id FROM rooms WHERE object_id = ?)", (object_id,))
+        c.execute("DELETE FROM room_comms WHERE room_id IN (SELECT id FROM rooms WHERE object_id = ?)", (object_id,))
+        c.execute("DELETE FROM room_objects WHERE room_id IN (SELECT id FROM rooms WHERE object_id = ?)", (object_id,))
+        c.execute("DELETE FROM rooms WHERE object_id = ?", (object_id,))
+        c.execute("UPDATE tasks SET object_id = NULL WHERE object_id = ?", (object_id,))
+        c.execute("UPDATE finance SET object_id = NULL WHERE object_id = ?", (object_id,))
+        c.execute("DELETE FROM objects WHERE id = ?", (object_id,))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"⚠️ delete_object: {e}", flush=True)
+        return False
+    finally:
+        conn.close()
+
+
+def update_object(object_id, name=None, status=None, address=None, note=None):
+    """Обновляет объект."""
+    from db import get_connection
+    fields, params = [], []
+    if name is not None:
+        fields.append("name = ?"); params.append(name)
+    if status is not None:
+        fields.append("status = ?"); params.append(status)
+    if address is not None:
+        fields.append("address = ?"); params.append(address)
+    if note is not None:
+        fields.append("note = ?"); params.append(note)
+    if not fields:
+        return False
+    params.append(object_id)
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute(f"UPDATE objects SET {', '.join(fields)} WHERE id = ?", params)
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"⚠️ update_object: {e}", flush=True)
+        return False
+    finally:
+        conn.close()

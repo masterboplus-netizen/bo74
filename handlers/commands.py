@@ -1050,6 +1050,8 @@ def object_detail_keyboard(object_id):
         [InlineKeyboardButton("📋 Задачи объекта", callback_data=f"objtasks_{object_id}")],
         [InlineKeyboardButton("💰 Финансы", callback_data=f"objfin_{object_id}")],
         [InlineKeyboardButton("📸 Фото объекта", callback_data=f"objphotos_{object_id}")],
+        [InlineKeyboardButton("✏️ Переименовать", callback_data=f"obj_rename_{object_id}")],
+        [InlineKeyboardButton("🗑 Удалить объект", callback_data=f"obj_del_{object_id}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="menu_objects")],
     ])
 
@@ -2291,6 +2293,39 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Размеры комнаты
+    # room_rename — переименование комнаты
+    if context.user_data.get('waiting_for') == 'room_rename':
+        room_id = context.user_data.get('room_rename_id')
+        new_name = text.strip()
+        if room_id and new_name:
+            from core.db import commit
+            commit("UPDATE rooms SET name = ? WHERE id = ?", (new_name, room_id))
+            context.user_data['waiting_for'] = None
+            context.user_data['room_rename_id'] = None
+            await update.message.reply_text(
+                f"✅ Имя комнаты изменено на «{new_name}»",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+            return
+
+    if context.user_data.get('waiting_for') == 'obj_rename':
+        object_id = context.user_data.get('obj_rename_id')
+        new_name = text.strip()
+        if object_id and new_name:
+            from modules.objects import update_object
+            update_object(object_id, name=new_name)
+            context.user_data['waiting_for'] = None
+            context.user_data['obj_rename_id'] = None
+            await update.message.reply_text(
+                f"✅ Имя объекта изменено на «{new_name}»",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🏗️ К объекту", callback_data=f"obj_{object_id}")],
+                ])
+            )
+            return
+
     if context.user_data.get('waiting_for') in ('measure_first_dim', 'measure_second_dim', 'wall_angle_value', 'wall_niche_width', 'wall_niche_depth', 'wall_niche_height', 'room_height_point', 'room_height_same', 'wall_round_length', 'wall_round_angle_val', 'wall_round_plane_bottom', 'wall_round_plane_middle', 'wall_round_plane_top', 'opening_width', 'opening_height', 'opening_sill', 'opening_offset', 'opening_edit_value', 'comm_offset_x', 'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_edit_value', 'comm_size', 'comm_size_w', 'comm_size_h', 'comm_size_d', 'comm_edit_size_part', 'wall_round_opening_width', 'wall_round_opening_height', 'comm_offset_x', 'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_edit_value',
                                                   'wall_round_length', 'wall_round_angle_val', 'wall_round_plane_bottom', 'wall_round_plane_middle', 'wall_round_plane_top'):
         from interfaces.telegram.rooms import handle_measure_input
