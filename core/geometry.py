@@ -60,6 +60,19 @@ def calc_wall_coords(walls_ordered):
 
         x, y = end_x, end_y
 
+    # НОРМАЛИЗАЦИЯ: сдвигаем всё в положительную зону (min_x, min_y) = (0, 0)
+    if result:
+        all_x = [c['start_x'] for c in result] + [c['end_x'] for c in result]
+        all_y = [c['start_y'] for c in result] + [c['end_y'] for c in result]
+        min_x = min(all_x)
+        min_y = min(all_y)
+        if min_x != 0 or min_y != 0:
+            for c in result:
+                c['start_x'] = round(c['start_x'] - min_x, 2)
+                c['start_y'] = round(c['start_y'] - min_y, 2)
+                c['end_x'] = round(c['end_x'] - min_x, 2)
+                c['end_y'] = round(c['end_y'] - min_y, 2)
+
     return result
 
 

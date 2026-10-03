@@ -2616,17 +2616,55 @@ async def handle_export_callback(query, context, data):
 
 async def _do_export_dxf(query, context, room_id):
     """Генерирует DXF и отправляет."""
+    kb_err = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔁 Попробовать снова", callback_data=f"room_export_dxf_{room_id}")],
+        [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
+    ])
+
     if save_dxf is None:
         try:
-            await query.edit_message_text("❌ Модуль DXF не загружен")
+            await query.edit_message_text(
+                "❌ Модуль DXF не загружен",
+                reply_markup=kb_err
+            )
+        except Exception:
+            pass
+        return
+
+    # --- Проверка: есть ли замеры? ---
+    from core.measures import get_walls_ordered
+    try:
+        walls = get_walls_ordered(room_id)
+    except Exception:
+        walls = []
+    if not walls:
+        try:
+            await query.edit_message_text(
+                "⚠️ *В комнате нет замеров*\n\n"
+                "Сначала пройди мастер замеров: высота + обход стен.\n"
+                "После этого DXF будет содержать контур комнаты.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📐 Начать замер", callback_data=f"room_start_{room_id}")],
+                    [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
         except Exception:
             pass
         return
 
     try:
-        path = save_dxf(room_id)
+        # Правильный путь — используем os.path
+        import tempfile
+        tmp_dir = tempfile.gettempdir()
+        target_path = os.path.join(tmp_dir, f"export_room_{room_id}.dxf")
+        path = save_dxf(room_id, path=target_path)
         if not path or not os.path.exists(path):
-            raise Exception("Файл не создан")
+            # Fallback — дефолтный путь от save_dxf
+            path = save_dxf(room_id)
+        if not path or not os.path.exists(path):
+            raise Exception(f"Файл не создан (save_dxf вернул {path})")
+
         room = get_room(room_id)
         name = room.get('name', f'room_{room_id}') if room else f'room_{room_id}'
         with open(path, "rb") as f:
@@ -2641,7 +2679,10 @@ async def _do_export_dxf(query, context, room_id):
     except Exception as e:
         print(f"⚠️ _do_export_dxf: {e}", flush=True)
         try:
-            await query.edit_message_text(f"❌ Ошибка DXF: {e}")
+            await query.edit_message_text(
+                f"❌ Ошибка DXF: {e}",
+                reply_markup=kb_err
+            )
         except Exception:
             pass
 
@@ -2655,7 +2696,12 @@ async def _do_export_csv(query, context, room_id):
             pass
         return
     try:
-        path = save_csv(room_id)
+        import tempfile
+        tmp_dir = tempfile.gettempdir()
+        target_path = os.path.join(tmp_dir, f"export_room_{room_id}.csv")
+        path = save_csv(room_id, path=target_path)
+        if not path or not os.path.exists(path):
+            path = save_csv(room_id)
         if not path or not os.path.exists(path):
             raise Exception("Файл не создан")
         room = get_room(room_id)
@@ -2672,13 +2718,40 @@ async def _do_export_csv(query, context, room_id):
     except Exception as e:
         print(f"⚠️ _do_export_csv: {e}", flush=True)
         try:
-            await query.edit_message_text(f"❌ Ошибка CSV: {e}")
+            await query.edit_message_text(
+                f"❌ Ошибка CSV: {e}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔁 Попробовать снова", callback_data=f"room_export_csv_{room_id}")],
+                    [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
         except Exception:
             pass
 
 
 async def _do_export_json(query, context, room_id):
     """Генерирует JSON и отправляет."""
+    # --- Проверка: есть ли замеры? ---
+    from core.measures import get_walls_ordered
+    try:
+        walls = get_walls_ordered(room_id)
+    except Exception:
+        walls = []
+    if not walls:
+        try:
+            await query.edit_message_text(
+                "⚠️ *В комнате нет замеров*\n\n"
+                "Сначала пройди мастер замеров.\nJSON будет содержать пустую модель.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📐 Начать замер", callback_data=f"room_start_{room_id}")],
+                    [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return
+
     if save_json is None:
         try:
             await query.edit_message_text("❌ Модуль JSON не загружен")
@@ -2687,7 +2760,12 @@ async def _do_export_json(query, context, room_id):
         return
 
     try:
-        path = save_json(room_id)
+        import tempfile
+        tmp_dir = tempfile.gettempdir()
+        target_path = os.path.join(tmp_dir, f"export_room_{room_id}.json")
+        path = save_json(room_id, path=target_path)
+        if not path or not os.path.exists(path):
+            path = save_json(room_id)
         if not path or not os.path.exists(path):
             raise Exception("Файл не создан")
         room = get_room(room_id)
@@ -2704,7 +2782,13 @@ async def _do_export_json(query, context, room_id):
     except Exception as e:
         print(f"⚠️ _do_export_json: {e}", flush=True)
         try:
-            await query.edit_message_text(f"❌ Ошибка JSON: {e}")
+            await query.edit_message_text(
+                f"❌ Ошибка JSON: {e}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔁 Попробовать снова", callback_data=f"room_export_json_{room_id}")],
+                    [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
         except Exception:
             pass
 
