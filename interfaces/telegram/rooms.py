@@ -1089,6 +1089,7 @@ async def handle_wall_round_callback(query, context, data):
     # --- ПЛОСКОСТЬ ---
     if data.startswith("wall_round_plane_straight_"):
         room_id = int(data.replace("wall_round_plane_straight_", ""))
+        context.user_data['wall_room_id'] = room_id
         state = _get_wall_state(context)
         state['plane'] = 'straight'
         state['step_name'] = 'length'
@@ -1098,6 +1099,7 @@ async def handle_wall_round_callback(query, context, data):
 
     if data.startswith("wall_round_plane_wavy_"):
         room_id = int(data.replace("wall_round_plane_wavy_", ""))
+        context.user_data['wall_room_id'] = room_id
         state = _get_wall_state(context)
         state['plane'] = 'wavy'
         state['step_name'] = 'plane_wavy'
@@ -1522,8 +1524,18 @@ async def _handle_wall_round_input(update, context, step):
     """Ввод при обходе стен."""
     room_id = context.user_data.get('wall_room_id')
     if not room_id:
-        await update.message.reply_text("❌ Потерялась комната.")
-        context.user_data['waiting_for'] = None
+        # Страховка: восстановить из wall_drafts
+        try:
+            draft = fetchone("SELECT room_id FROM wall_drafts ORDER BY updated_at DESC LIMIT 1")
+            if draft:
+                room_id = draft["room_id"]
+                context.user_data["wall_room_id"] = room_id
+                print(f"⚠️ wall_room_id восстановлен: {room_id}", flush=True)
+        except Exception as e:
+            print(f"⚠️ restore wall_room_id: {e}", flush=True)
+    if not room_id:
+        await update.message.reply_text("❌ Потерялась комната. Начни замер заново.")
+        context.user_data["waiting_for"] = None
         return
     state = _get_wall_state(context)
     text_val = (update.message.text or '').strip().replace(',', '.')
@@ -1786,6 +1798,7 @@ async def _after_angle_from_update(update, context, room_id):
             _save_wall_draft(context, room_id)
             await _after_angle_from_update(update, context, room_id)
             return
+        context.user_data['wall_room_id'] = room_id
         state['plane'] = 'wavy'
         state['step_name'] = 'plane_wavy'
         _save_wall_draft(context, room_id)
