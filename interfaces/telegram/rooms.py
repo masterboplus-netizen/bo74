@@ -54,6 +54,20 @@ from core import spec
 # --- Объекты комнат ---
 from core.room_objects import get_room_objects, format_room_object
 
+# --- Экспорт ---
+try:
+    from core.export.dxf import save_dxf, export_dxf
+except Exception:
+    save_dxf = export_dxf = None
+try:
+    from core.export.json_export import save_json, export_json
+except Exception:
+    save_json = export_json = None
+try:
+    from core.export.csv_export import save_csv, export_csv
+except Exception:
+    save_csv = export_csv = None
+
 
 # ============================================================
 # КОНСТАНТЫ
@@ -357,6 +371,7 @@ def room_card_keyboard(room_id):
         [InlineKeyboardButton("🪑 Мебель", callback_data=f"room_objects_{room_id}")],
         [InlineKeyboardButton("📋 Задачи", callback_data=f"room_tasks_{room_id}"),
          InlineKeyboardButton("📸 Фото", callback_data=f"room_photos_{room_id}")],
+        [InlineKeyboardButton("📤 Экспорт", callback_data=f"room_export_{room_id}")],
         [InlineKeyboardButton("✏️ Переименовать", callback_data=f"room_rename_{room_id}")],
         [InlineKeyboardButton("🗑 Удалить", callback_data=f"room_del_{room_id}")],
         [InlineKeyboardButton("⬅️ К комнатам", callback_data=f"rooms_list_obj_{object_id}")],
@@ -2536,6 +2551,165 @@ async def handle_openings_callback(query, context, data):
 
 
 # ============================================================
+# ЭКСПОРТ КОМНАТЫ
+# ============================================================
+
+async def handle_export_callback(query, context, data):
+    """Обработчик экспорта."""
+    # --- Специфичные форматы (СНАЧАЛА!) ---
+    if data.startswith("room_export_dxf_"):
+        room_id = int(data.replace("room_export_dxf_", ""))
+        await _do_export_dxf(query, context, room_id)
+        return True
+
+    if data.startswith("room_export_json_"):
+        room_id = int(data.replace("room_export_json_", ""))
+        await _do_export_json(query, context, room_id)
+        return True
+
+    if data.startswith("room_export_csv_"):
+        room_id = int(data.replace("room_export_csv_", ""))
+        await _do_export_csv(query, context, room_id)
+        return True
+
+    if data.startswith("room_export_pdf_"):
+        suffix = data.split("_")[-1]
+        try:
+            rid = int(suffix)
+        except ValueError:
+            rid = 0
+        try:
+            await query.edit_message_text(
+                "🚧 PDF в разработке. Пока доступны DXF, JSON, CSV.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Назад", callback_data=f"room_export_{rid}")],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    # --- Общий вызов меню: room_export_<id> (только если id — цифры) ---
+    if data.startswith("room_export_"):
+        suffix = data.replace("room_export_", "")
+        if suffix.isdigit():
+            room_id = int(suffix)
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📐 DXF (CAD)", callback_data=f"room_export_dxf_{room_id}")],
+                [InlineKeyboardButton("📦 JSON (данные)", callback_data=f"room_export_json_{room_id}")],
+                [InlineKeyboardButton("📄 PDF (отчёт)", callback_data=f"room_export_pdf_{room_id}")],
+                [InlineKeyboardButton("📊 CSV (смета)", callback_data=f"room_export_csv_{room_id}")],
+                [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
+            ])
+            try:
+                await query.edit_message_text(
+                    "📤 *Экспорт комнаты*\n\nВыбери формат:",
+                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                )
+            except Exception:
+                pass
+            return True
+
+    return False
+
+
+
+async def _do_export_dxf(query, context, room_id):
+    """Генерирует DXF и отправляет."""
+    if save_dxf is None:
+        try:
+            await query.edit_message_text("❌ Модуль DXF не загружен")
+        except Exception:
+            pass
+        return
+
+    try:
+        path = save_dxf(room_id)
+        if not path or not os.path.exists(path):
+            raise Exception("Файл не создан")
+        room = get_room(room_id)
+        name = room.get('name', f'room_{room_id}') if room else f'room_{room_id}'
+        with open(path, "rb") as f:
+            await query.message.chat.send_document(
+                document=f,
+                filename=f"{name}.dxf",
+                caption=f"📐 DXF-экспорт комнаты «{name}»\n\nОткрой в: SketchUp, ArchiCAD, AutoCAD",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+    except Exception as e:
+        print(f"⚠️ _do_export_dxf: {e}", flush=True)
+        try:
+            await query.edit_message_text(f"❌ Ошибка DXF: {e}")
+        except Exception:
+            pass
+
+
+async def _do_export_csv(query, context, room_id):
+    """Генерирует CSV и отправляет."""
+    if save_csv is None:
+        try:
+            await query.edit_message_text("❌ Модуль CSV не загружен")
+        except Exception:
+            pass
+        return
+    try:
+        path = save_csv(room_id)
+        if not path or not os.path.exists(path):
+            raise Exception("Файл не создан")
+        room = get_room(room_id)
+        name = room.get('name', f'room_{room_id}') if room else f'room_{room_id}'
+        with open(path, "rb") as f:
+            await query.message.chat.send_document(
+                document=f,
+                filename=f"{name}.csv",
+                caption=f"📊 CSV-экспорт комнаты «{name}»\n\nОткрой в Excel или Google Sheets",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+    except Exception as e:
+        print(f"⚠️ _do_export_csv: {e}", flush=True)
+        try:
+            await query.edit_message_text(f"❌ Ошибка CSV: {e}")
+        except Exception:
+            pass
+
+
+async def _do_export_json(query, context, room_id):
+    """Генерирует JSON и отправляет."""
+    if save_json is None:
+        try:
+            await query.edit_message_text("❌ Модуль JSON не загружен")
+        except Exception:
+            pass
+        return
+
+    try:
+        path = save_json(room_id)
+        if not path or not os.path.exists(path):
+            raise Exception("Файл не создан")
+        room = get_room(room_id)
+        name = room.get('name', f'room_{room_id}') if room else f'room_{room_id}'
+        with open(path, "rb") as f:
+            await query.message.chat.send_document(
+                document=f,
+                filename=f"{name}.json",
+                caption=f"📦 JSON-экспорт комнаты «{name}»\n\nЦифровой двойник: геометрия + замеры + проёмы + ниши",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+    except Exception as e:
+        print(f"⚠️ _do_export_json: {e}", flush=True)
+        try:
+            await query.edit_message_text(f"❌ Ошибка JSON: {e}")
+        except Exception:
+            pass
+
+
+# ============================================================
 # ГЛАВНЫЙ РОУТЕР CALLBACK'ОВ
 # ============================================================
 
@@ -2714,6 +2888,12 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         except Exception:
             pass
         return
+
+    # --- Экспорт ---
+    if data.startswith("room_export_"):
+        handled = await handle_export_callback(query, context, data)
+        if handled:
+            return
 
     # --- Коммуникации ---
     if data.startswith("comm_") or data.startswith("room_comms_"):
