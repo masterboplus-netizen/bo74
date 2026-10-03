@@ -199,8 +199,9 @@ def _current_wall_pos(context):
 def _wall_flags_list(context):
     """Возвращает список флагов, которые надо обработать после угла.
 
-    Если 'wavy' уже обработан на этапе плоскости (state['plane'] == 'wavy'),
-    не добавляем его повторно.
+    ПРАВИЛО:
+    - wavy не добавляем, если плоскость УЖЕ пройдена через 3 точки (plane='wavy').
+    - Функция НЕ очищает флаги — этим занимается _after_angle.
     """
     state = _get_wall_state(context)
     flags = state.get('flags') or {}
@@ -209,7 +210,6 @@ def _wall_flags_list(context):
         steps.append('niche')
     if flags.get('rounded'):
         steps.append('rounded')
-    # wavy — если уже прошли плоскость через 3 точки, не повторяем
     if flags.get('wavy') and state.get('plane') != 'wavy':
         steps.append('wavy')
     if flags.get('hidden'):
@@ -262,11 +262,25 @@ async def _send_png_or_edit(query, caption, kb, png_filename=None):
             print(f"⚠️ send_message fallback: {e}", flush=True)
         return
 
-    # PNG нет — пытаемся edit или отправить новое текстовое
+    # PNG нет — редактируем существующее сообщение.
+    # Если это ФОТО — используем edit_message_caption, если текст — edit_message_text.
+    msg = query.message
+    is_photo = bool(getattr(msg, "photo", None))
+    print(f"🟡 _send_png_or_edit (no png): is_photo={is_photo}, caption={caption[:60]!r}", flush=True)
+
     try:
-        await query.edit_message_text(caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        if is_photo:
+            await query.edit_message_caption(
+                caption=caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        else:
+            await query.edit_message_text(
+                caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        print(f"🟢 _send_png_or_edit (no png): OK", flush=True)
     except Exception as e:
         err = str(e).lower()
+        print(f"⚠️ _send_png_or_edit (no png) edit failed: {e}", flush=True)
         if "message is not modified" in err:
             return
         if "message to edit not found" in err or "not found" in err or "query is too old" in err:
@@ -275,6 +289,7 @@ async def _send_png_or_edit(query, caption, kb, png_filename=None):
                     chat_id=chat_id, text=caption,
                     parse_mode=ParseMode.MARKDOWN, reply_markup=kb
                 )
+                print(f"🟢 _send_png_or_edit (no png): fallback OK", flush=True)
             except Exception as e2:
                 print(f"⚠️ send_message: {e2}", flush=True)
 
@@ -728,7 +743,39 @@ async def _show_niche_count(query, context, room_id):
         [InlineKeyboardButton("3", callback_data=f"wall_niche_count_3_{room_id}")],
         [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
     ])
-    await _send_png_or_edit(query, "🕳 *Сколько нишей на этой стене?*", kb, None)
+    caption = "🕳 *Сколько нишей на этой стене?*"
+    print(f"🟠 _show_niche_count вызван, room_id={room_id}", flush=True)
+
+    # Правильный выбор: если текущее сообщение — фото, edit_caption; иначе edit_text
+    msg = query.message
+    is_photo = bool(getattr(msg, "photo", None))
+
+    try:
+        if is_photo:
+            await query.edit_message_caption(
+                caption=caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        else:
+            await query.edit_message_text(
+                caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        print(f"🟢 _show_niche_count OK (photo={is_photo})", flush=True)
+    except Exception as e:
+        err = str(e).lower()
+        print(f"⚠️ _show_niche_count edit failed: {e}", flush=True)
+        # Удаляем старое и шлём новое
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        try:
+            await query.get_bot().send_message(
+                chat_id=query.message.chat_id, text=caption,
+                parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+            print(f"🟢 _show_niche_count fallback send OK", flush=True)
+        except Exception as e2:
+            print(f"⚠️ _show_niche_count fallback failed: {e2}", flush=True)
 
 
 async def _show_niche_width(query, context, room_id):
@@ -1256,8 +1303,9 @@ async def handle_wall_round_callback(query, context, data):
             _save_wall_draft(context, room_id)
             await _show_niche_width(query, context, room_id)
             return True
-        # Все ниши — к длине (пропуская плоскость, т.к. уже на "length" или др.)
-        await _after_niches(query, context, room_id)
+        # Все ниши обработаны — идём к следующему шагу в очереди
+        print(f"🔷 wall_niche_plane_rect: все ниши собраны ({len(niches)}), → _after_angle", flush=True)
+        await _after_angle(query, context, room_id)
         return True
 
     if data.startswith("wall_niche_plane_irr_"):
@@ -1388,33 +1436,38 @@ async def _wall_round_start(query, context, room_id):
 # ============================================================
 
 async def _after_angle(query, context, room_id):
-    """После угла — обрабатываем remaining_steps (ниши/rounded/wavy/hidden)."""
+    """После угла — обрабатываем remaining_steps (ниши/rounded/wavy/hidden).
+
+    ЧИСТАЯ ЛОГИКА:
+    - remaining_steps is None  → первый заход. Читаем флаги, чистим их, ставим очередь.
+    - remaining_steps == []    → все обработано, сохраняем стену.
+    - remaining_steps == [...] → берём [0], идём по очереди.
+    """
     state = _get_wall_state(context)
     remaining = state.get('remaining_steps')
 
-    # remaining_steps может быть None (первый заход) или [] (после обработки всех)
-    # Заполняем ТОЛЬКО если None — это первый заход после угла
+    # --- ФАЗА 1: первый заход после угла ---
     if remaining is None:
-        remaining = _wall_flags_list(context)
-        # Сразу снимаем все флаги — они уже в очереди, повторно не нужны
+        flags_queue = _wall_flags_list(context)
+        # ВАЖНО: чистим флаги — иначе они снова попадут в очередь
         state['flags'] = dict(DEFAULT_FLAGS)
-        state['remaining_steps'] = remaining
+        state['remaining_steps'] = flags_queue
         _save_wall_draft(context, room_id)
-    elif remaining == []:
-        # Все шаги обработаны — сохраняем стену
-        step_num = state.get('step_num') or 1
-        await _wall_save_and_next(query, context, room_id, step_num)
-        return
+        remaining = flags_queue
+        print(f"🔷 _after_angle: первый заход, очередь={remaining}", flush=True)
 
+    # --- ФАЗА 2: очередь пуста → сохраняем стену ---
     if not remaining:
+        print(f"🔷 _after_angle: очередь пуста → _wall_save_and_next", flush=True)
         step_num = state.get('step_num') or 1
         await _wall_save_and_next(query, context, room_id, step_num)
         return
 
-    # Берём первый шаг из очереди
+    # --- ФАЗА 3: берём первый элемент очереди ---
     first = remaining[0]
     state['remaining_steps'] = remaining[1:]
     _save_wall_draft(context, room_id)
+    print(f"🔷 _after_angle: берём {first!r}, осталось {state['remaining_steps']}", flush=True)
 
     if first == 'niche':
         await _show_niche_count(query, context, room_id)
@@ -1751,28 +1804,33 @@ async def _handle_wall_round_input(update, context, step):
 
 
 async def _after_angle_from_update(update, context, room_id):
-    """После угла (через update) — остаток шагов или сохранение."""
+    """После угла (через update) — остаток шагов или сохранение.
+
+    ЧИСТАЯ ЛОГИКА: см. _after_angle.
+    """
     state = _get_wall_state(context)
     remaining = state.get('remaining_steps')
 
-    # remaining_steps = None → первый заход, заполняем из флагов
+    # --- ФАЗА 1: первый заход ---
     if remaining is None:
-        remaining = _wall_flags_list(context)
+        flags_queue = _wall_flags_list(context)
         state['flags'] = dict(DEFAULT_FLAGS)
-        state['remaining_steps'] = remaining
+        state['remaining_steps'] = flags_queue
         _save_wall_draft(context, room_id)
-    elif remaining == []:
-        # Все шаги обработаны — сохраняем
-        await _wall_save_and_next_from_update(update, context, room_id, state.get('step_num') or 1)
-        return
+        remaining = flags_queue
+        print(f"🔷 _after_angle_from_update: первый заход, очередь={remaining}", flush=True)
 
+    # --- ФАЗА 2: пусто → сохраняем ---
     if not remaining:
+        print(f"🔷 _after_angle_from_update: очередь пуста → сохранение", flush=True)
         await _wall_save_and_next_from_update(update, context, room_id, state.get('step_num') or 1)
         return
 
+    # --- ФАЗА 3: берём [0] ---
     first = remaining[0]
     state['remaining_steps'] = remaining[1:]
     _save_wall_draft(context, room_id)
+    print(f"🔷 _after_angle_from_update: берём {first!r}, осталось {state['remaining_steps']}", flush=True)
 
     if first == 'niche':
         state['step_name'] = 'niche_count'
