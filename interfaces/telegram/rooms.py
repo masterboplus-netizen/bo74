@@ -59,6 +59,12 @@ try:
     from core.export.dxf import save_dxf, export_dxf
 except Exception:
     save_dxf = export_dxf = None
+
+# --- Визуализация ---
+try:
+    from core.visualize import render_room_plan
+except Exception:
+    render_room_plan = None
 try:
     from core.export.json_export import save_json, export_json
 except Exception:
@@ -371,7 +377,8 @@ def room_card_keyboard(room_id):
         [InlineKeyboardButton("🪑 Мебель", callback_data=f"room_objects_{room_id}")],
         [InlineKeyboardButton("📋 Задачи", callback_data=f"room_tasks_{room_id}"),
          InlineKeyboardButton("📸 Фото", callback_data=f"room_photos_{room_id}")],
-        [InlineKeyboardButton("📤 Экспорт", callback_data=f"room_export_{room_id}")],
+        [InlineKeyboardButton("📊 Отчёты", callback_data=f"room_reports_{room_id}"),
+         InlineKeyboardButton("📤 Экспорт", callback_data=f"room_export_{room_id}")],
         [InlineKeyboardButton("✏️ Переименовать", callback_data=f"room_rename_{room_id}")],
         [InlineKeyboardButton("🗑 Удалить", callback_data=f"room_del_{room_id}")],
         [InlineKeyboardButton("⬅️ К комнатам", callback_data=f"rooms_list_obj_{object_id}")],
@@ -2551,6 +2558,216 @@ async def handle_openings_callback(query, context, data):
 
 
 # ============================================================
+# ПЛАН КОМНАТЫ (PNG)
+# ============================================================
+
+async def handle_reports_callback(query, context, data):
+    """Меню планов и отчётов."""
+    if data.startswith("room_reports_"):
+        room_id = int(data.replace("room_reports_", ""))
+        room = get_room(room_id)
+        name = room.get('name', '?') if room else '?'
+
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📐 Обмерный план", callback_data=f"room_plan_{room_id}")],
+            [InlineKeyboardButton("⚡ Электрика", callback_data=f"room_report_electric_{room_id}")],
+            [InlineKeyboardButton("🚿 Сантехника", callback_data=f"room_report_plumbing_{room_id}")],
+            [InlineKeyboardButton("🧱 Плитка", callback_data=f"room_report_tiler_{room_id}")],
+            [InlineKeyboardButton("🎨 Покраска", callback_data=f"room_report_painter_{room_id}")],
+            [InlineKeyboardButton("📋 Ведомость", callback_data=f"room_report_spec_{room_id}")],
+            [InlineKeyboardButton("📄 PDF-проект", callback_data=f"room_report_pdf_{room_id}")],
+            [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
+        ])
+
+        try:
+            await query.edit_message_text(
+                f"📊 *Планы и отчёты* — «{name}»\n\nВыбери:",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=kb
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("room_report_electric_"):
+        room_id = int(data.replace("room_report_electric_", ""))
+        await _do_report_electric(query, context, room_id)
+        return True
+
+    if data.startswith("room_report_plumbing_") or data.startswith("room_report_tiler_") or data.startswith("room_report_painter_") or data.startswith("room_report_spec_") or data.startswith("room_report_pdf_"):
+        try:
+            room_id = int(data.split("_")[-1])
+        except ValueError:
+            room_id = 0
+        try:
+            await query.edit_message_text(
+                f"🚧 В разработке.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К отчётам", callback_data=f"room_reports_{room_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    return False
+
+
+async def _do_report_electric(query, context, room_id):
+    """ЭОМ — часть 1: план + таблица точек."""
+    from core.comms import get_comms
+    from core.rooms import get_room
+
+    room = get_room(room_id)
+    name = room.get('name', '?') if room else '?'
+
+    elec_types = {
+        'elec_socket': ('🔌', 'Розетки'),
+        'elec_switch': ('💡', 'Выключатели'),
+        'elec_panel': ('⚡', 'Щит'),
+        'elec_cable': ('🔌', 'Выводы света'),
+    }
+
+    try:
+        comms = get_comms(room_id)
+    except Exception:
+        comms = []
+
+    groups = {t: [] for t in elec_types}
+    for c in comms:
+        t = c.get('comm_type')
+        if t in elec_types:
+            groups[t].append(c)
+
+    lines = [f"⚡ *ЭОМ — Электрика «{name}»*\n"]
+
+    total = 0
+    for t, (icon, label) in elec_types.items():
+        items = groups[t]
+        if not items:
+            lines.append(f"{icon} *{label}*: нет")
+            continue
+        lines.append(f"{icon} *{label}* ({len(items)}):")
+        for c in items:
+            wall = c.get('wall') or '?'
+            ox = c.get('offset_x')
+            oy = c.get('offset_y')
+            parts = [f"стена «{wall}»"]
+            if ox is not None:
+                parts.append(f"{int(ox)} см от угла")
+            if oy is not None:
+                parts.append(f"{int(oy)} см от пола")
+            lines.append("  • " + ", ".join(parts))
+            total += 1
+
+    lines.append(f"\n📊 *Всего точек: {total}*")
+    text = "\n".join(lines)
+
+    if render_room_plan is not None:
+        try:
+            path = render_room_plan(room_id)
+            if path and os.path.exists(path):
+                with open(path, "rb") as f:
+                    await query.message.chat.send_photo(
+                        photo=f,
+                        caption=text,
+                        parse_mode=ParseMode.MARKDOWN,
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("⬅️ К отчётам", callback_data=f"room_reports_{room_id}")],
+                        ])
+                    )
+                return
+        except Exception as e:
+            print(f"⚠️ _do_report_electric render: {e}", flush=True)
+
+    try:
+        await query.edit_message_text(
+            text, parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ К отчётам", callback_data=f"room_reports_{room_id}")],
+            ])
+        )
+    except Exception:
+        pass
+
+
+async def handle_plan_callback(query, context, data):
+    """Обработчик плана комнаты."""
+    if data.startswith("room_plan_"):
+        room_id = int(data.replace("room_plan_", ""))
+        await _do_render_plan(query, context, room_id)
+        return True
+    return False
+
+
+async def _do_render_plan(query, context, room_id):
+    """Рендерит план комнаты и отправляет PNG."""
+    if render_room_plan is None:
+        try:
+            await query.edit_message_text(
+                "❌ Модуль визуализации не загружен",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return
+
+    # Проверка: есть ли замеры
+    from core.measures import get_walls_ordered
+    try:
+        walls = get_walls_ordered(room_id)
+    except Exception:
+        walls = []
+    if not walls:
+        try:
+            await query.edit_message_text(
+                "⚠️ *В комнате нет замеров*\n\n"
+                "Сначала пройди мастер замеров.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📐 Начать замер", callback_data=f"room_start_{room_id}")],
+                    [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return
+
+    try:
+        path = render_room_plan(room_id)
+        if not path or not os.path.exists(path):
+            raise Exception("PNG не создан")
+
+        room = get_room(room_id)
+        name = room.get('name', f'Комната {room_id}') if room else f'Комната {room_id}'
+        with open(path, "rb") as f:
+            await query.message.chat.send_photo(
+                photo=f,
+                caption=f"🧊 *План комнаты* «{name}»",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔄 Обновить", callback_data=f"room_plan_{room_id}")],
+                    [InlineKeyboardButton("📤 Экспорт", callback_data=f"room_export_{room_id}")],
+                    [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+    except Exception as e:
+        print(f"⚠️ _do_render_plan: {e}", flush=True)
+        try:
+            await query.edit_message_text(
+                f"❌ Ошибка рендера: {e}",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔁 Попробовать", callback_data=f"room_plan_{room_id}")],
+                    [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+        except Exception:
+            pass
+
+
+# ============================================================
 # ЭКСПОРТ КОМНАТЫ
 # ============================================================
 
@@ -2972,6 +3189,17 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         except Exception:
             pass
         return
+
+    # --- План комнаты (PNG) ---
+    if data.startswith("room_reports_") or data.startswith("room_report_"):
+        handled = await handle_reports_callback(query, context, data)
+        if handled:
+            return
+
+    if data.startswith("room_plan_"):
+        handled = await handle_plan_callback(query, context, data)
+        if handled:
+            return
 
     # --- Экспорт ---
     if data.startswith("room_export_"):
