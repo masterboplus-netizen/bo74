@@ -191,61 +191,28 @@ def format_measure(m, show_area=False):
     return f"{icon} {label}: {dims} см"
 
 
-# === ОБЁРТКИ ДЛЯ СОВМЕСТИМОСТИ (перенесено в core.niches / core.openings) ===
-
-# --- Ниши (core.niches) ---
+# === ОБЁРТКИ ДЛЯ СОВМЕСТИМОСТИ (перенесено в core.niches) ===
 def add_niche(*args, **kwargs):
-    from core.niches import add_niche as _f
-    return _f(*args, **kwargs)
+    """Совместимость: add_niche вынесен в core.niches."""
+    from core.niches import add_niche as _an
+    return _an(*args, **kwargs)
 
 def get_niches(*args, **kwargs):
-    from core.niches import get_niches as _f
-    return _f(*args, **kwargs)
+    from core.niches import get_niches as _gn
+    return _gn(*args, **kwargs)
 
 def get_niches_by_room(*args, **kwargs):
-    from core.niches import get_niches_by_room as _f
-    return _f(*args, **kwargs)
+    from core.niches import get_niches_by_room as _gnbr
+    return _gnbr(*args, **kwargs)
 
 def update_niche(*args, **kwargs):
-    from core.niches import update_niche as _f
-    return _f(*args, **kwargs)
+    from core.niches import update_niche as _un
+    return _un(*args, **kwargs)
 
 def delete_niche(*args, **kwargs):
-    from core.niches import delete_niche as _f
-    return _f(*args, **kwargs)
+    from core.niches import delete_niche as _dn
+    return _dn(*args, **kwargs)
 
 def format_niche(*args, **kwargs):
-    from core.niches import format_niche as _f
-    return _f(*args, **kwargs)
-
-# --- Проёмы (core.openings) ---
-def add_opening(*args, **kwargs):
-    from core.openings import add_opening as _f
-    return _f(*args, **kwargs)
-
-def get_opening(*args, **kwargs):
-    from core.openings import get_opening as _f
-    return _f(*args, **kwargs)
-
-def get_openings(*args, **kwargs):
-    from core.openings import get_openings as _f
-    return _f(*args, **kwargs)
-
-def get_openings_by_wall(*args, **kwargs):
-    from core.openings import get_openings_by_wall as _f
-    return _f(*args, **kwargs)
-
-def update_opening(*args, **kwargs):
-    from core.openings import update_opening as _f
-    return _f(*args, **kwargs)
-
-def delete_opening(*args, **kwargs):
-    from core.openings import delete_opening as _f
-    return _f(*args, **kwargs)
-
-def format_opening(*args, **kwargs):
-    from core.openings import format_opening as _f
-    return _f(*args, **kwargs)
-
-# --- OPENING_TYPES как константа ---
-from core.openings import OPENING_TYPES  # noqa: E402
+    from core.niches import format_niche as _fn
+    return _fn(*args, **kwargs)
