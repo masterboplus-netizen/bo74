@@ -699,8 +699,12 @@ async def _show_wall_openings(query, context, room_id, step):
     await _send_png_or_edit(query, text, kb, None)
 
 
-async def _show_wall_angle(query, context, room_id, step):
-    """Экран угла между стенами."""
+async def _show_wall_angle(query, context, room_id, step, use_photo=False):
+    """Экран угла между стенами.
+
+    use_photo=True — при первом входе (пересоздать сообщение с фото).
+    use_photo=False — при восстановлении/возврате (edit_caption, без пересоздания).
+    """
     state = _get_wall_state(context)
     state['step_num'] = step
     state['step_name'] = 'angle'
@@ -730,7 +734,49 @@ async def _show_wall_angle(query, context, room_id, step):
         [InlineKeyboardButton("✏️ Угол в °", callback_data=f"wall_round_angle_deg_{room_id}")],
         [InlineKeyboardButton("⬅️ В комнату", callback_data=f"room_{room_id}")],
     ])
-    await _send_png_or_edit(query, caption, kb, image)
+    if use_photo:
+        await _send_png_or_edit(query, caption, kb, image)
+        return
+
+    # use_photo=False — редактируем существующее, при неудаче — пересоздаём.
+    msg = query.message
+    is_photo = bool(getattr(msg, "photo", None))
+    print(f"🟠 _show_wall_angle (use_photo=False): is_photo={is_photo}, step={step}", flush=True)
+    try:
+        if is_photo:
+            await query.edit_message_caption(caption=caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        else:
+            await query.edit_message_text(caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        print(f"🟢 _show_wall_angle (use_photo=False): edit OK", flush=True)
+    except Exception as e:
+        err = str(e).lower()
+        print(f"⚠️ _show_wall_angle edit failed: {e}", flush=True)
+        if "message is not modified" in err:
+            # Ничего не поменялось — но кнопки могут быть привязаны к другому сообщению.
+            # Проверим, есть ли reply_markup
+            return
+        # Все остальные ошибки — пересоздаём сообщение
+        chat_id = query.message.chat_id
+        # Если есть фото — переслать с фото, иначе текст
+        if image and _image_path(image) and os.path.exists(_image_path(image)):
+            try:
+                with open(_image_path(image), "rb") as f:
+                    await query.get_bot().send_photo(
+                        chat_id=chat_id, photo=f, caption=caption,
+                        parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                    )
+                print(f"🟢 _show_wall_angle: fallback send_photo OK", flush=True)
+                return
+            except Exception as e2:
+                print(f"⚠️ _show_wall_angle send_photo fallback: {e2}", flush=True)
+        try:
+            await query.get_bot().send_message(
+                chat_id=chat_id, text=caption,
+                parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+            print(f"🟢 _show_wall_angle: fallback send_message OK", flush=True)
+        except Exception as e3:
+            print(f"⚠️ _show_wall_angle send_message fallback: {e3}", flush=True)
 
 
 # ============================================================
@@ -1187,13 +1233,15 @@ async def handle_wall_round_callback(query, context, data):
         state = _get_wall_state(context)
         state['step_name'] = 'angle'
         _save_wall_draft(context, room_id)
-        await _show_wall_angle(query, context, room_id, state.get('step_num') or 1)
+        # Первый вход на шаг угла — с фото
+        await _show_wall_angle(query, context, room_id, state.get('step_num') or 1, use_photo=True)
         return True
 
     # --- УГОЛ ---
     if data.startswith("wall_round_angle_90_"):
         room_id = int(data.replace("wall_round_angle_90_", ""))
         state = _get_wall_state(context)
+        print(f"🔵 wall_round_angle_90_: room_id={room_id}, state['step_num']={state.get('step_num')!r}", flush=True)
         state['angle_value'] = 90
         state['angle_method'] = '90'
         state['step_name'] = 'angle_done'
@@ -1376,7 +1424,8 @@ async def _wall_round_start(query, context, room_id):
         return
 
     if step_name == 'angle':
-        await _show_wall_angle(query, context, room_id, step_num)
+        # Восстановление — edit_caption (без пересоздания)
+        await _show_wall_angle(query, context, room_id, step_num, use_photo=False)
         return
 
     if step_name == 'angle_done':
@@ -1446,8 +1495,8 @@ async def _after_angle(query, context, room_id):
 
     # --- ФАЗА 2: очередь пуста → сохраняем стену ---
     if not remaining:
-        print(f"🔷 _after_angle: очередь пуста → _wall_save_and_next", flush=True)
         step_num = state.get('step_num') or 1
+        print(f"🔷 _after_angle: очередь пуста. state['step_num']={state.get('step_num')!r}, ИТОГ step_num={step_num} → _wall_save_and_next", flush=True)
         await _wall_save_and_next(query, context, room_id, step_num)
         return
 
@@ -2826,6 +2875,7 @@ async def _show_room_objects(query, context, room_id):
 
 async def _handle_room_start(query, context, room_id):
     """Начало/продолжение замера комнаты."""
+    print(f"🟣 _handle_room_start: room_id={room_id}", flush=True)
     room = get_room(room_id)
     if not room:
         try:
@@ -2833,6 +2883,7 @@ async def _handle_room_start(query, context, room_id):
         except Exception:
             pass
         return
+
     h_bottom = room.get('height_bottom')
     h_middle = room.get('height_middle')
     h_top = room.get('height_top')
@@ -2840,6 +2891,7 @@ async def _handle_room_start(query, context, room_id):
     walls = get_walls_ordered(room_id)
     walls_ok = len(walls) >= 4
 
+    # === ЭТАП ВЫСОТЫ ===
     if not height_ok:
         if h_bottom and not (h_middle and h_top):
             context.user_data['height_room_id'] = room_id
@@ -2879,16 +2931,42 @@ async def _handle_room_start(query, context, room_id):
             pass
         return
 
+    # === ЭТАП ОБХОДА СТЕН ===
     if not walls_ok:
-        _reset_wall_state(context)
+        # ⬇⬇⬇ ГЛАВНЫЙ ФИКС ⬇⬇⬇
+        # Проверяем черновик — если есть незавершённая стена, восстанавливаем её
+        try:
+            draft = fetchone("SELECT step_name, step_num FROM wall_drafts WHERE room_id = ?", (room_id,))
+        except Exception as e:
+            print(f"⚠️ чтение wall_drafts: {e}", flush=True)
+            draft = None
+
+        # sqlite3.Row не поддерживает .get() — конвертируем в dict
+        if draft:
+            try:
+                draft = dict(draft)
+            except Exception:
+                pass
+
+        if draft and draft.get('step_name'):
+            print(f"🟢 _handle_room_start: НАЙДЕН ЧЕРНОВИК step_name={draft['step_name']!r}, step_num={draft['step_num']!r} — восстанавливаем", flush=True)
+            context.user_data['wall_room_id'] = room_id
+            start_walls_round(room_id)
+            await _wall_round_start(query, context, room_id)
+            return
+
+        # Черновика нет — начинаем с начала
+        print(f"🟠 _handle_room_start: черновика нет, начинаем с галочек стены 1", flush=True)
+        _reset_wall_state(context, keep_step_num=1)
         state = _get_wall_state(context)
         state['step_num'] = 1
         state['step_name'] = 'flags'
         context.user_data['wall_room_id'] = room_id
         start_walls_round(room_id)
-        await _show_wall_step(query, context, room_id, 1, phase='flags')
+        await _show_wall_step(query, context, room_id, 1, phase='flags', use_photo=True)
         return
 
+    # === ФИНИШ (все стены) ===
     areas = calculate_room_areas(room_id)
     total_length = sum((w['length'] if w['length'] else 0) for w in walls)
     text = (
@@ -2911,6 +2989,7 @@ async def _handle_room_start(query, context, room_id):
         )
     except Exception:
         pass
+
 
 
 async def _handle_height_callback(query, context, data):
