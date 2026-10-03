@@ -1,0 +1,1161 @@
+    if not obj:
+        await query.edit_message_text("❌ Объект не найден")
+        return
+
+    if intent == 'expense' and amount:
+        # Сохраняем в user_data и спрашиваем категорию
+        context.user_data['pending_expense'] = {
+            'object_id': obj['id'],
+            'object_name': obj['name'],
+            'amount': amount
+        }
+        await query.edit_message_text(
+            f"💰 Расход {amount} ₽ в «{obj['name']}»\n\nЗа что?",
+            reply_markup=expense_category_keyboard()
+        )
+        return
+
+    if intent == 'add_task':
+        title = context.user_data.get('pending_task_title', '')
+        tid = create_task(obj['id'], title)
+        await query.edit_message_text(
+            f"✅ Задача «{title}» добавлена в «{obj['name']}». ID: {tid}"
+        )
+        return
+
+    if intent == 'done_task':
+        tasks = get_tasks_by_object(obj['id'])
+        for t in tasks:
+            if t['status'] != 'done':
+                close_task(t['id'], user_id=update.effective_user.id)
+                await query.edit_message_text(
+                    f"✅ Задача «{t['title']}» в «{obj['name']}» выполнена!"
+                )
+                return
+        await query.edit_message_text(f"❌ В «{obj['name']}» нет открытых задач")
+        return
+
+
+def make_choose_keyboard(objects, intent, amount=None, category=None):
+    """Создаёт клавиатуру выбора объекта"""
+    buttons = []
+    for o in objects:
+        if amount:
+            cb = f"choose_obj_{intent}_{o['id']}_{amount}_{category}"
+        else:
+            cb = f"choose_obj_{intent}_{o['id']}_none_none"
+        buttons.append([InlineKeyboardButton(f"🏗️ {o['name']}", callback_data=cb)])
+    return InlineKeyboardMarkup(buttons)
+
+
+# === ВЫБОР КАТЕГОРИИ РАСХОДА ===
+
+def expense_category_keyboard():
+    """Клавиатура категорий расходов"""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🧱 Материалы", callback_data="cat_материалы")],
+        [InlineKeyboardButton("🍔 Еда", callback_data="cat_еда")],
+        [InlineKeyboardButton("🚕 Транспорт", callback_data="cat_транспорт")],
+        [InlineKeyboardButton("🔧 Инструмент", callback_data="cat_инструмент")],
+        [InlineKeyboardButton("📦 Прочее", callback_data="cat_прочее")],
+    ])
+
+
+async def handle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка выбора категории"""
+    query = update.callback_query
+    await query.answer()
+
+    pending = context.user_data.get('pending_expense')
+    if not pending:
+        await query.edit_message_text("❌ Данные о расходе потеряны")
+        return
+
+    category = query.data.replace("cat_", "")
+    add_expense(pending['object_id'], pending['amount'], category)
+    await query.edit_message_text(
+        f"✅ Расход {pending['amount']} ₽ ({category}) добавлен в «{pending['object_name']}»"
+    )
+    context.user_data['pending_expense'] = None
+
+
+# === ФИНАНСЫ: СВОДКА + КНОПКИ ===
+
+from modules.finance import get_all_finance_summary
+
+
+def format_money(amount):
+    """Форматирует число с разделителями"""
+    return f"{amount:,}".replace(",", " ")
+
+
+def finance_keyboard():
+    """Клавиатура для сводки финансов"""
+    data = get_all_finance_summary()
+    buttons = []
+    # Кнопки по объектам, у которых есть финансы
+    for o in data['objects']:
+        if o['income'] > 0 or o['expense'] > 0:
+            icon = "🟢" if o['balance'] >= 0 else "🔴"
+            buttons.append([InlineKeyboardButton(
+                f"{icon} {o['name']}: {o['balance']:+} ₽",
+                callback_data=f"finobj_{o['id']}"
+            )])
+    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def format_finance_summary():
+    """Формирует текст общей сводки"""
+    data = get_all_finance_summary()
+    text = "💰 ФИНАНСЫ\n\n"
+    text += "📊 ОБЩАЯ СВОДКА\n"
+    text += f"Доход: {format_money(data['total_income'])} ₽\n"
+    text += f"Расход: {format_money(data['total_expense'])} ₽\n"
+    text += f"Баланс: {format_money(data['total_balance'])} ₽\n\n"
+    text += "🏗️ ПО ОБЪЕКТАМ (нажми для деталей):"
+    return text
+
+
+async def show_finance_summary(update, context):
+    """Показывает сводку финансов с кнопками"""
+    await update.message.reply_text(
+        format_finance_summary(),
+        reply_markup=finance_keyboard()
+    )
+
+
+def tasks_keyboard():
+    """Клавиатура активных задач"""
+    from modules.tasks import get_active_tasks
+    tasks = get_active_tasks()
+    buttons = []
+    for t in tasks[:20]:
+        buttons.append([InlineKeyboardButton(
+            f"#{t['id']} {t['title'][:40]}",
+            callback_data=f"task_{t['id']}"
+        )])
+    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def tasks_keyboard_by_object():
+    """Клавиатура задач по объектам"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT DISTINCT o.id, o.name, COUNT(t.id) as cnt
+        FROM objects o
+        JOIN tasks t ON t.object_id = o.id
+        WHERE t.status IN ('open', 'in_progress') AND o.status IN ('active', 'paused', 'waiting')
+        GROUP BY o.id, o.name
+        ORDER BY o.name
+    """)
+    rows = c.fetchall()
+    conn.close()
+
+    buttons = []
+    for r in rows:
+        buttons.append([InlineKeyboardButton(
+            f"🏗️ {r['name']} ({r['cnt']})",
+            callback_data=f"objtasks_{r['id']}"
+        )])
+    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
+    return InlineKeyboardMarkup(buttons)
+
+
+# === КАРТОЧКА ЗАДАЧИ ===
+
+def task_card_keyboard(task_id, deadline=None):
+    """Клавиатура карточки задачи"""
+    buttons = [
+        [InlineKeyboardButton("📅 Срок", callback_data=f"taskdate_{task_id}")],
+    ]
+    if deadline:
+        buttons.append([InlineKeyboardButton("🚫 Убрать срок", callback_data=f"tasknodate_{task_id}")])
+    buttons += [
+        [InlineKeyboardButton("🔴 Приоритет", callback_data=f"taskprio_{task_id}")],
+        [InlineKeyboardButton("✏️ Название", callback_data=f"taskrename_{task_id}")],
+        [InlineKeyboardButton("✅ Выполнить", callback_data=f"taskdone_{task_id}")],
+        [InlineKeyboardButton("❌ Удалить", callback_data=f"taskdel_{task_id}")],
+        [InlineKeyboardButton("⬅ К задачам", callback_data="menu_tasks")],
+    ]
+    return InlineKeyboardMarkup(buttons)
+def task_date_keyboard(task_id):
+    """Клавиатура выбора срока"""
+    from datetime import date, timedelta
+    today = date.today()
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"Сегодня ({today.strftime('%d.%m')})", callback_data=f"setdate_{task_id}_today")],
+        [InlineKeyboardButton(f"Завтра ({(today+timedelta(days=1)).strftime('%d.%m')})", callback_data=f"setdate_{task_id}_tomorrow")],
+        [InlineKeyboardButton(f"Послезавтра ({(today+timedelta(days=2)).strftime('%d.%m')})", callback_data=f"setdate_{task_id}_dayafter")],
+        [InlineKeyboardButton(f"Через 3 дня ({(today+timedelta(days=3)).strftime('%d.%m')})", callback_data=f"setdate_{task_id}_3days")],
+        [InlineKeyboardButton(f"Через неделю ({(today+timedelta(days=7)).strftime('%d.%m')})", callback_data=f"setdate_{task_id}_week")],
+        [InlineKeyboardButton("✏️ Ввести дату вручную", callback_data=f"taskdate_manual_{task_id}")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"task_{task_id}")],
+    ])
+
+
+def task_priority_keyboard(task_id):
+    """Клавиатура приоритета"""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔴 Высокий", callback_data=f"setprio_{task_id}_high")],
+        [InlineKeyboardButton("🟡 Средний", callback_data=f"setprio_{task_id}_medium")],
+        [InlineKeyboardButton("🟢 Низкий", callback_data=f"setprio_{task_id}_low")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=f"task_{task_id}")],
+    ])
+
+
+async def show_task_card(query, task_id, message=None):
+    """Показывает карточку задачи"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT t.id, t.title, t.status, t.priority, t.deadline, o.name as object_name
+        FROM tasks t
+        LEFT JOIN objects o ON t.object_id = o.id
+        WHERE t.id = ?
+    """, (task_id,))
+    row = c.fetchone()
+    conn.close()
+
+    if not row:
+        await query.edit_message_text("Задача не найдена")
+        return
+
+    priority_map = {'high': 'Высокий', 'medium': 'Средний', 'low': 'Низкий'}
+    deadline_str = 'не указан'
+    if row['deadline']:
+        try:
+            from datetime import datetime
+            d = datetime.strptime(row['deadline'], '%Y-%m-%d').date()
+            deadline_str = d.strftime('%d.%m.%Y')
+        except:
+            deadline_str = row['deadline']
+
+    text = f"📋 {row['title']}\n\n"
+    text += f"Объект: {row['object_name'] or 'Без объекта'}\n"
+    text += f"Срок: {deadline_str}\n"
+    text += f"Приоритет: {priority_map.get(row['priority'], row['priority'])}\n"
+
+    await query.edit_message_text(text, reply_markup=task_card_keyboard(task_id, row['deadline']))
+
+
+
+async def handle_task_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка действий с задачей"""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    from datetime import date, timedelta
+
+    # Выполнить
+    if data.startswith("taskdone_"):
+        task_id = int(data.split("_")[1])
+        close_task(task_id, user_id=update.effective_user.id)
+        await query.edit_message_text(
+            "✅ Задача выполнена!",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")]
+            ])
+        )
+        return
+
+    # Удалить
+    if data.startswith("taskdel_"):
+        task_id = int(data.split("_")[1])
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        conn.commit()
+        conn.close()
+        await query.edit_message_text(
+            "❌ Задача удалена",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")]
+            ])
+        )
+        return
+
+    # Показать карточку
+    if data.startswith("task_") and not any(data.startswith(p) for p in ["taskdate_", "taskdone_", "taskdel_", "taskprio_", "taskrename_"]):
+        try:
+            task_id = int(data.split("_")[1])
+            await show_task_card(query, task_id)
+        except:
+            pass
+        return
+
+    # Выбор срока
+    if data.startswith("taskdate_"):
+        parts = data.split("_")
+        # taskdate_manual_<id> — ручной ввод
+        if len(parts) >= 2 and parts[1] == "manual":
+            task_id = int(parts[2])
+            context.user_data['setdate_task'] = task_id
+            # Показываем задачу
+            conn = get_connection()
+            c = conn.cursor()
+            c.execute("SELECT t.title, o.name as obj FROM tasks t LEFT JOIN objects o ON t.object_id = o.id WHERE t.id = ?", (task_id,))
+            row = c.fetchone()
+            conn.close()
+            title = row['title'] if row else '?'
+            obj = row['obj'] if row and row['obj'] else 'Без объекта'
+            await query.edit_message_text(
+                f"📋 {title}\n{obj}\n\nНапиши дату:"
+            )
+            return
+        # taskdate_<id> — обычный выбор
+        task_id = int(parts[1])
+        await query.edit_message_text(
+            "📅 Выбери срок:",
+            reply_markup=task_date_keyboard(task_id)
+        )
+        return
+
+
+    # Убрать срок
+    if data.startswith("tasknodate_"):
+        task_id = int(data.replace("tasknodate_", ""))
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("UPDATE tasks SET deadline = NULL WHERE id = ?", (task_id,))
+        conn.commit()
+        c.execute("SELECT t.title, o.name as obj FROM tasks t LEFT JOIN objects o ON t.object_id = o.id WHERE t.id = ?", (task_id,))
+        row = c.fetchone()
+        conn.close()
+        title = row['title'] if row else '?'
+        obj = row['obj'] if row and row['obj'] else 'Без объекта'
+        await query.edit_message_text(
+            f"🚫 Срок убран у задачи «{title}» ({obj})"
+        )
+        return
+    # Установка срока
+    if data.startswith("setdate_"):
+        parts = data.split("_")
+        task_id = int(parts[1])
+        mode = parts[2]
+        today = date.today()
+        if mode == "today":
+            new_date = today
+        elif mode == "tomorrow":
+            new_date = today + timedelta(days=1)
+        elif mode == "dayafter":
+            new_date = today + timedelta(days=2)
+        elif mode == "3days":
+            new_date = today + timedelta(days=3)
+        elif mode == "week":
+            new_date = today + timedelta(days=7)
+        else:
+            new_date = today
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("UPDATE tasks SET deadline = ? WHERE id = ?", (new_date.strftime('%Y-%m-%d'), task_id))
+        conn.commit()
+        conn.close()
+        await show_task_card(query, task_id)
+        return
+
+    # Выбор приоритета
+    if data.startswith("taskprio_"):
+        task_id = int(data.split("_")[1])
+        await query.edit_message_text(
+            "🔴 Выбери приоритет:",
+            reply_markup=task_priority_keyboard(task_id)
+        )
+        return
+
+    # Установка приоритета
+    if data.startswith("setprio_"):
+        parts = data.split("_")
+        task_id = int(parts[1])
+        prio = parts[2]
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("UPDATE tasks SET priority = ? WHERE id = ?", (prio, task_id))
+        conn.commit()
+        conn.close()
+        await show_task_card(query, task_id)
+        return
+
+    # Переименовать
+    if data.startswith("taskrename_"):
+        task_id = int(data.split("_")[1])
+        context.user_data['rename_task'] = task_id
+        await query.edit_message_text("✏️ Напиши новое название задачи:")
+        return
+
+
+
+
+def parse_date(text):
+    """Парсит дату из текста. Возвращает date или None"""
+    from datetime import datetime, date, timedelta
+    import re
+
+    text = text.strip().lower()
+    today = date.today()
+
+    if text in ['сегодня', 'today']:
+        return today
+    if text in ['завтра', 'tomorrow']:
+        return today + timedelta(days=1)
+    if text in ['послезавтра']:
+        return today + timedelta(days=2)
+    if text in ['через неделю', 'неделя']:
+        return today + timedelta(days=7)
+
+    m = re.search(r'через\s+(\d+)\s*дн', text)
+    if m:
+        return today + timedelta(days=int(m.group(1)))
+
+    m = re.match(r'^\+(\d+)д?$', text)
+    if m:
+        return today + timedelta(days=int(m.group(1)))
+
+    weekdays = {
+        'понедельник': 0, 'пн': 0,
+        'вторник': 1, 'вт': 1,
+        'среда': 2, 'ср': 2,
+        'четверг': 3, 'чт': 3,
+        'пятница': 4, 'пт': 4,
+        'суббота': 5, 'сб': 5,
+        'воскресенье': 6, 'вс': 6,
+    }
+    for name, num in weekdays.items():
+        if text.startswith(name):
+            days_ahead = (num - today.weekday()) % 7
+            if days_ahead == 0:
+                days_ahead = 7
+            return today + timedelta(days=days_ahead)
+
+    months = {
+        'января': 1, 'январь': 1, 'янв': 1,
+        'февраля': 2, 'февраль': 2, 'фев': 2,
+        'марта': 3, 'март': 3, 'мар': 3,
+        'апреля': 4, 'апрель': 4, 'апр': 4,
+        'мая': 5, 'май': 5,
+        'июня': 6, 'июнь': 6, 'июн': 6,
+        'июля': 7, 'июль': 7, 'июл': 7,
+        'августа': 8, 'август': 8, 'авг': 8,
+        'сентября': 9, 'сентябрь': 9, 'сен': 9, 'сент': 9,
+        'октября': 10, 'октябрь': 10, 'окт': 10,
+        'ноября': 11, 'ноябрь': 11, 'ноя': 11,
+        'декабря': 12, 'декабрь': 12, 'дек': 12,
+    }
+    m = re.search(r'(\d{1,2})\s+([а-яё]+)(?:\s+(\d{4}))?', text)
+    if m:
+        day = int(m.group(1))
+        month_name = m.group(2)
+        year = int(m.group(3)) if m.group(3) else today.year
+        for name, num in months.items():
+            if month_name.startswith(name) or name.startswith(month_name):
+                try:
+                    result = date(year, num, day)
+                    if result < today and not m.group(3):
+                        result = date(year + 1, num, day)
+                    return result
+                except:
+                    pass
+
+    m = re.search(r'(\d{1,2})[.\-/](\d{1,2})(?:[.\-/](\d{2,4}))?', text)
+    if m:
+        day = int(m.group(1))
+        month = int(m.group(2))
+        year_str = m.group(3)
+        if year_str:
+            year = int(year_str)
+            if year < 100:
+                year += 2000
+        else:
+            year = today.year
+        try:
+            result = date(year, month, day)
+            if result < today and not year_str:
+                result = date(year + 1, month, day)
+            return result
+        except:
+            pass
+
+    m = re.match(r'^(\d{1,2})$', text)
+    if m:
+        day = int(m.group(1))
+        if 1 <= day <= 31:
+            try:
+                result = date(today.year, today.month, day)
+                if result < today:
+                    if today.month == 12:
+                        result = date(today.year + 1, 1, day)
+                    else:
+                        result = date(today.year, today.month + 1, day)
+                return result
+            except:
+                pass
+
+        # "6дек" — день + месяц слитно
+    m = re.match(r'^(\d{1,2})([а-яё]{3,})(?:\s*(\d{4}))?$', text)
+    if m:
+        day = int(m.group(1))
+        month_name = m.group(2)
+        year_str = m.group(3)
+        months = {
+            'января': 1, 'январь': 1, 'янв': 1,
+            'февраля': 2, 'февраль': 2, 'фев': 2,
+            'марта': 3, 'март': 3, 'мар': 3,
+            'апреля': 4, 'апрель': 4, 'апр': 4,
+            'мая': 5, 'май': 5,
+            'июня': 6, 'июнь': 6, 'июн': 6,
+            'июля': 7, 'июль': 7, 'июл': 7,
+            'августа': 8, 'август': 8, 'авг': 8,
+            'сентября': 9, 'сентябрь': 9, 'сен': 9, 'сент': 9,
+            'октября': 10, 'октябрь': 10, 'окт': 10,
+            'ноября': 11, 'ноябрь': 11, 'ноя': 11,
+            'декабря': 12, 'декабрь': 12, 'дек': 12,
+        }
+        for name, num in months.items():
+            if month_name.startswith(name) or name.startswith(month_name):
+                year = int(year_str) if year_str else today.year
+                try:
+                    result = date(year, num, day)
+                    if result < today and not year_str:
+                        result = date(year + 1, num, day)
+                    return result
+                except:
+                    pass
+
+    # "20 9" — день месяц через пробел
+    m = re.match(r'^(\d{1,2})\s+(\d{1,2})(?:\s+(\d{4}))?$', text)
+    if m:
+        day = int(m.group(1))
+        month = int(m.group(2))
+        year_str = m.group(3)
+        if year_str:
+            year = int(year_str)
+        else:
+            year = today.year
+        try:
+            result = date(year, month, day)
+            if result < today and not year_str:
+                result = date(year + 1, month, day)
+            return result
+        except:
+            pass
+
+    return None
+
+
+async def auto_confirm_date(context: ContextTypes.DEFAULT_TYPE):
+    """Автоподтверждение даты через 30 секунд"""
+    job = context.job
+    task_id = job.data['task_id']
+    date = job.data['date']
+    date_str = job.data['date_str']
+    chat_id = job.data['chat_id']
+
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("UPDATE tasks SET deadline = ? WHERE id = ?", (date, task_id))
+    conn.commit()
+    # Получаем задачу
+    c.execute("SELECT t.title, o.name as obj FROM tasks t LEFT JOIN objects o ON t.object_id = o.id WHERE t.id = ?", (task_id,))
+    row = c.fetchone()
+    conn.close()
+    title = row['title'] if row else '?'
+    obj = row['obj'] if row and row['obj'] else 'Без объекта'
+
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=f"✅ {title}\n{obj}\nСрок: {date_str}"
+    )
+
+
+async def handle_confirm_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка подтверждения даты"""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if data.startswith("confirmdate_yes_"):
+        parts = data.split("_")
+        task_id = int(parts[2])
+        date = parts[3]
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("UPDATE tasks SET deadline = ? WHERE id = ?", (date, task_id))
+        conn.commit()
+        conn.close()
+        # Убиваем job, если был
+        try:
+            jobs = context.job_queue.get_jobs_by_name(f"confirm_{task_id}")
+            for j in jobs:
+                j.schedule_removal()
+        except:
+            pass
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("SELECT t.title, o.name as obj FROM tasks t LEFT JOIN objects o ON t.object_id = o.id WHERE t.id = ?", (task_id,))
+        row = c.fetchone()
+        conn.close()
+        title = row['title'] if row else '?'
+        obj = row['obj'] if row and row['obj'] else 'Без объекта'
+        await query.edit_message_text(f"✅ {title}\n{obj}\nСрок: {date}")
+        return
+
+    if data.startswith("confirmdate_no_"):
+        parts = data.split("_")
+        task_id = int(parts[2])
+        # Убиваем job
+        try:
+            jobs = context.job_queue.get_jobs_by_name(f"confirm_{task_id}")
+            for j in jobs:
+                j.schedule_removal()
+        except:
+            pass
+        await query.edit_message_text("❌ Отменено")
+        return
+
+
+async def handle_add_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка меню «➕ Добавить»"""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if data == "menu_add":
+        await query.edit_message_text(
+            "➕ Что добавить?",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🏗️ Новый объект", callback_data="add_object")],
+                [InlineKeyboardButton("📋 Новая задача", callback_data="add_task")],
+                [InlineKeyboardButton("💰 Расход", callback_data="add_expense")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    if data == "add_object":
+        context.user_data['waiting_for'] = 'new_object'
+        await query.edit_message_text(
+            "🏗️ Напиши название объекта:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_add")]
+            ])
+        )
+        return
+
+    if data == "add_task":
+        context.user_data['waiting_for'] = 'new_task'
+        await query.edit_message_text(
+            "📋 Выбери объект:",
+            reply_markup=choose_object_for_task_keyboard()
+        )
+        return
+
+    if data == "add_expense":
+        context.user_data['waiting_for'] = 'new_expense'
+        await query.edit_message_text(
+            "💰 Выбери объект:",
+            reply_markup=choose_object_for_expense_keyboard()
+        )
+        return
+
+    if data.startswith("newtask_obj_"):
+        object_id = int(data.replace("newtask_obj_", ""))
+        obj = get_object(object_id)
+        context.user_data['pending_task_object'] = obj
+        context.user_data['waiting_for'] = 'new_task_text'
+        await query.edit_message_text(
+            f"📋 Новая задача в «{obj['name']}»\n\nНапиши задачу:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Назад", callback_data="add_task")]
+            ])
+        )
+        return
+
+    if data.startswith("newexp_obj_"):
+        object_id = int(data.replace("newexp_obj_", ""))
+        obj = get_object(object_id)
+        context.user_data['pending_expense_object'] = obj
+        context.user_data['waiting_for'] = 'new_expense_text'
+        await query.edit_message_text(
+            f"💰 Новый расход в «{obj['name']}»\n\nНапиши сумму и что купил:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Назад", callback_data="add_expense")]
+            ])
+        )
+        return
+
+
+def choose_object_for_task_keyboard():
+    """Клавиатура выбора объекта для задачи"""
+    objs = get_all_objects()
+    buttons = []
+    for o in objs:
+        buttons.append([InlineKeyboardButton(
+            f"🏗️ {o['name']}",
+            callback_data=f"newtask_obj_{o['id']}"
+        )])
+    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_add")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def choose_object_for_expense_keyboard():
+    """Клавиатура выбора объекта для расхода"""
+    objs = get_all_objects()
+    buttons = []
+    for o in objs:
+        buttons.append([InlineKeyboardButton(
+            f"🏗️ {o['name']}",
+            callback_data=f"newexp_obj_{o['id']}"
+        )])
+    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_add")])
+    return InlineKeyboardMarkup(buttons)
+
+
+
+
+# === ЛИЧНЫЕ РАСХОДЫ ===
+
+def format_personal_summary(period='month'):
+    """Формирует текст сводки личных расходов"""
+    from modules.personal import get_personal_summary
+    data = get_personal_summary(period)
+    period_names = {
+        'today': 'сегодня',
+        'week': 'за 7 дней',
+        'month': 'за месяц',
+        'all': 'за всё время'
+    }
+    text = f"💸 ЛИЧНЫЕ РАСХОДЫ ({period_names.get(period, period)})\n\n"
+    text += f"Потрачено: {data['total']} ₽\n"
+    text += f"Записей: {data['count']}\n\n"
+    if data['by_category']:
+        text += "📊 По категориям:\n"
+        for item in data['by_category'][:10]:
+            text += f"• {item['category']}: {item['amount']} ₽\n"
+    else:
+        text += "Пока нет записей за этот период."
+    return text
+
+
+def personal_keyboard():
+    """Клавиатура для экрана личных расходов"""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Добавить расход", callback_data="personal_add")],
+        [InlineKeyboardButton("📅 За сегодня", callback_data="personal_today"),
+         InlineKeyboardButton("📅 За неделю", callback_data="personal_week")],
+        [InlineKeyboardButton("📅 За месяц", callback_data="personal_month"),
+         InlineKeyboardButton("📅 За всё время", callback_data="personal_all")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")],
+    ])
+
+
+def choose_object_for_expense_keyboard_amount(amount):
+    """Клавиатура выбора объекта для расхода с суммой (только объект, без категории)"""
+    objs = get_all_objects()
+    buttons = []
+    for o in objs:
+        buttons.append([InlineKeyboardButton(
+            f"🏗️ {o['name']}",
+            callback_data=f"objexp_obj_{amount}_{o['id']}"
+        )])
+    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
+    return InlineKeyboardMarkup(buttons)
+
+### modules/parser.py ###
+"""Парсер свободного ввода БО 7.2 — с уточнением"""
+import re
+from modules.objects import get_object_by_name, get_all_objects
+from modules.tasks import create_task, close_task, get_tasks_by_object, get_active_tasks
+from modules.finance import add_expense, add_income, get_finance_summary
+
+
+def find_all_objects_in_text(text: str):
+    """Возвращает ВСЕ найденные объекты (список)"""
+    text_lower = text.lower()
+    objects = get_all_objects()
+    found = []
+
+    # 1. Точный поиск (полное или упрощённое имя)
+    for o in objects:
+        name_lower = o['name'].lower()
+        simple = name_lower.split('(')[0].strip()
+        if name_lower in text_lower or (simple and len(simple) > 3 and simple in text_lower):
+            found.append(o)
+
+    if found:
+        return found
+
+    # 2. Нечёткий поиск — по первым 4 буквам
+    for o in objects:
+        name_lower = o['name'].lower()
+        simple = name_lower.split('(')[0].strip()
+        for prefix in [name_lower[:4], simple[:4] if len(simple) >= 4 else simple]:
+            if prefix and len(prefix) >= 4 and prefix in text_lower:
+                if o not in found:
+                    found.append(o)
+
+    return found
+
+
+def find_object_in_text(text: str):
+    """Возвращает первый найденный объект (для обратной совместимости)"""
+    found = find_all_objects_in_text(text)
+    return found[0] if found else None
+
+
+def parse_message(text: str) -> dict:
+    """Разбирает текст и возвращает действие"""
+    text_lower = text.lower().strip()
+
+    # === СПИСКИ ===
+    if any(w in text_lower for w in ['задачи', 'что делать', 'список дел']):
+        return {'action': 'list_tasks'}
+    if any(w in text_lower for w in ['объекты', 'мои объекты', 'стройки']):
+        return {'action': 'list_objects'}
+
+    # === ФИНАНСЫ ===
+    if any(w in text_lower for w in ['сколько', 'финансы', 'бюджет', 'баланс']):
+        found = find_all_objects_in_text(text)
+        if found:
+            return {'action': 'finance', 'object': found[0]}
+
+    # === РАСХОД ===
+    expense_words = ['потратил', 'расход', 'заплатил', 'купил', 'оплатил', 'ушло', 'отдал', 'цена']
+    has_expense_word = any(w in text_lower for w in expense_words)
+
+    amount = parse_amount(text_lower)
+    found = find_all_objects_in_text(text)
+
+    # === РАСХОД ===
+    is_finance_query = any(w in text_lower for w in ['сколько', 'финансы', 'бюджет', 'баланс'])
+
+    if amount and not is_finance_query:
+        material_words = ['материал', 'метриал', 'плитк', 'клей', 'краск', 'паркет', 'панел', 'затирк', 'штукатур', 'грунт', 'кабел', 'труб']
+        has_material = any(w in text_lower for w in material_words)
+
+        category = 'прочее'
+        if has_material:
+            for w in material_words:
+                if w in text_lower:
+                    category = 'материалы'
+                    break
+
+        # Объект найден
+        if found:
+            if len(found) > 1:
+                return {
+                    'action': 'choose_object',
+                    'objects': found,
+                    'amount': amount,
+                    'category': category,
+                    'original_text': text
+                }
+            return {
+                'action': 'expense',
+                'object': found[0],
+                'amount': amount,
+                'category': category
+            }
+
+        # Объект НЕ найден, но есть триггер расхода — спрашиваем объект
+        if has_expense_word:
+            return {
+                'action': 'choose_object',
+                'objects': get_all_objects(),
+                'amount': amount,
+                'category': category,
+                'original_text': text
+            }
+
+    # === ЗАКРЫТЬ ЗАДАЧУ ===
+    done_words = ['сделал', 'закрыл', 'выполнил', 'готово', 'покрасил', 'положил', 'собрал', 'установил', 'смонтировал', 'отмыл']
+    if any(w in text_lower for w in done_words):
+        if found:
+            if len(found) > 1:
+                return {
+                    'action': 'choose_object',
+                    'objects': found,
+                    'original_text': text,
+                    'intent': 'done_task'
+                }
+            obj = found[0]
+            tasks = get_tasks_by_object(obj['id'])
+            for t in tasks:
+                if t['status'] == 'done':
+                    continue
+                title_lower = t['title'].lower()
+                words = [w for w in title_lower.split() if len(w) > 3]
+                for w in words:
+                    if w in text_lower:
+                        return {'action': 'done_task', 'object': obj, 'task': t}
+            return {'action': 'done_task_not_found', 'object': obj, 'query': text_lower}
+
+    # === ДОБАВИТЬ ЗАДАЧУ ===
+    add_words = ['добавь', 'добавить', 'задача', 'новая задача', 'надо', 'нужно']
+    if any(w in text_lower for w in add_words):
+        if found:
+            if len(found) > 1:
+                return {
+                    'action': 'choose_object',
+                    'objects': found,
+                    'original_text': text,
+                    'intent': 'add_task'
+                }
+            obj = found[0]
+            title = text_lower
+            for w in add_words:
+                title = title.replace(w, '')
+            for w in ['в', 'на', 'для']:
+                title = title.replace(w, '', 1)
+            title = title.replace(obj['name'].lower(), '')
+            simple = obj['name'].lower().split('(')[0].strip()
+            if simple:
+                title = title.replace(simple, '')
+            title = title.strip() or text
+            return {'action': 'add_task', 'object': obj, 'title': title}
+
+    # === ТОЛЬКО СУММА (без объекта, без триггера) ===
+    # Если в тексте только число — спрашиваем: личный расход или по объекту?
+    if amount and not found:
+        stripped = text_lower.strip()
+        # Проверяем: только цифры и пробелы
+        if re.match(r'^[\d\s]+$', stripped):
+            return {
+                'action': 'ask_expense_type',
+                'amount': amount,
+                'original_text': text
+            }
+
+    return {'action': 'unknown', 'text': text}
+
+
+def parse_amount(text: str):
+    """Парсит сумму: 450, 5000, 5к, 5 к, 5К, 5 кк"""
+    import re
+    text_lower = text.lower().replace(',', '.')
+
+    m = re.search(r'(\d+)\s*кк', text_lower)
+    if m:
+        return int(m.group(1)) * 1000000
+
+    m = re.search(r'(\d+)\s*к(?!к)', text_lower)
+    if m:
+        return int(m.group(1)) * 1000
+
+    m = re.search(r'(\d[\d\s]*\d|\d)', text_lower)
+    if m:
+        digits = re.sub(r'\s+', '', m.group(1))
+        if digits.isdigit():
+            amount = int(digits)
+            if 0 < amount <= 100_000_000:
+                return amount
+
+    return None
+
+### modules/finance.py ###
+"""Модуль финансов БО 7.2"""
+from db import get_connection
+
+
+def add_expense(object_id: int, amount: int, category: str, note: str = None, is_personal: bool = False, reimbursable: bool = False) -> int:
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO finance (object_id, category, amount, type, date, note, is_personal, reimbursable) VALUES (?, ?, ?, 'expense', DATE('now'), ?, ?, ?)",
+        (object_id, category, amount, note, 1 if is_personal else 0, 1 if reimbursable else 0)
+    )
+    finance_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return finance_id
+
+
+def add_income(object_id: int, amount: int, category: str, note: str = None) -> int:
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO finance (object_id, category, amount, type, date, note) VALUES (?, ?, ?, 'income', DATE('now'), ?)",
+        (object_id, category, amount, note)
+    )
+    finance_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return finance_id
+
+
+def get_finance_summary(object_id: int) -> dict:
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT SUM(amount) FROM finance WHERE object_id = ? AND type = 'expense'", (object_id,))
+    expense = c.fetchone()[0] or 0
+    c.execute("SELECT SUM(amount) FROM finance WHERE object_id = ? AND type = 'income'", (object_id,))
+    income = c.fetchone()[0] or 0
+    conn.close()
+    return {'expense': expense, 'income': income, 'balance': income - expense}
+
+
+def get_personal_expenses() -> int:
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT SUM(amount) FROM finance WHERE is_personal = 1 AND type = 'expense'")
+    total = c.fetchone()[0] or 0
+    conn.close()
+    return total
+
+def get_all_finance_summary():
+    """Возвращает финансы по всем объектам"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT o.id, o.name,
+               COALESCE(SUM(CASE WHEN f.type = 'income' THEN f.amount ELSE 0 END), 0) as income,
+               COALESCE(SUM(CASE WHEN f.type = 'expense' THEN f.amount ELSE 0 END), 0) as expense
+        FROM objects o
+        LEFT JOIN finance f ON f.object_id = o.id
+        WHERE o.status != 'archived'
+        GROUP BY o.id, o.name
+        ORDER BY o.name
+    """)
+    rows = c.fetchall()
+
+    # Общая сводка
+    c.execute("SELECT COALESCE(SUM(amount), 0) FROM finance WHERE type = 'income'")
+    total_income = c.fetchone()[0] or 0
+    c.execute("SELECT COALESCE(SUM(amount), 0) FROM finance WHERE type = 'expense'")
+    total_expense = c.fetchone()[0] or 0
+
+    conn.close()
+
+    objects = []
+    for r in rows:
+        objects.append({
+            'id': r[0],
+            'name': r[1],
+            'income': r[2],
+            'expense': r[3],
+            'balance': r[2] - r[3]
+        })
+
+    return {
+        'total_income': total_income,
+        'total_expense': total_expense,
+        'total_balance': total_income - total_expense,
+        'objects': objects
+    }
+
+
+def get_finance_by_period(object_id: int, start_date: str, end_date: str) -> dict:
+    """Финансы объекта за период (start и end в формате YYYY-MM-DD)"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT COALESCE(SUM(amount), 0) FROM finance "
+        "WHERE object_id = ? AND type = 'income' AND date BETWEEN ? AND ?",
+        (object_id, start_date, end_date)
+    )
+    income = c.fetchone()[0] or 0
+    c.execute(
+        "SELECT COALESCE(SUM(amount), 0) FROM finance "
+        "WHERE object_id = ? AND type = 'expense' AND date BETWEEN ? AND ?",
+        (object_id, start_date, end_date)
+    )
+    expense = c.fetchone()[0] or 0
+    conn.close()
+    return {'income': income, 'expense': expense, 'balance': income - expense}
+
+
+def get_finance_by_category(object_id: int, start_date: str, end_date: str) -> list:
+    """Расходы объекта по категориям за период"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "SELECT category, COALESCE(SUM(amount), 0) FROM finance "
+        "WHERE object_id = ? AND type = 'expense' AND date BETWEEN ? AND ? "
+        "GROUP BY category ORDER BY SUM(amount) DESC",
+        (object_id, start_date, end_date)
+    )
+    rows = c.fetchall()
+    conn.close()
+    return [{'category': r[0] or 'прочее', 'amount': r[1]} for r in rows]
+
+### modules/users.py ###
+"""Модуль пользователей БО 7.4"""
+from db import get_connection
+
+
+def save_user(tg_id: int, name: str = None, username: str = None, role: str = 'guest') -> int:
+    """Сохраняет юзера при /start. Если есть — обновляет имя."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT id FROM users WHERE tg_id = ?", (tg_id,))
+    row = c.fetchone()
+    if row:
+        c.execute("UPDATE users SET name = ?, role = ? WHERE tg_id = ?", (name, role, tg_id))
+        user_id = row['id']
+    else:
+        c.execute("INSERT INTO users (tg_id, name, role) VALUES (?, ?, ?)", (tg_id, name, role))
+        user_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return user_id
+
+
+def get_user(tg_id: int) -> dict:
+    """Получить юзера по tg_id"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT id, tg_id, name, role FROM users WHERE tg_id = ?", (tg_id,))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        return {'id': row['id'], 'tg_id': row['tg_id'], 'name': row['name'], 'role': row['role']}
+    return None
+
+
+def get_all_users(role: str = None) -> list:
+    """Получить всех юзеров (опционально по роли)"""
+    conn = get_connection()
+    c = conn.cursor()
+    if role:
+        c.execute("SELECT id, tg_id, name, role FROM users WHERE role = ?", (role,))
+    else:
+        c.execute("SELECT id, tg_id, name, role FROM users")
+    rows = c.fetchall()
+    conn.close()
+    return [{'id': r['id'], 'tg_id': r['tg_id'], 'name': r['name'], 'role': r['role']} for r in rows]
+
+
+def set_role(tg_id: int, role: str):
+    """Установить роль юзеру"""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("UPDATE users SET role = ? WHERE tg_id = ?", (role, tg_id))
+    conn.commit()
+    conn.close()
+
+
+def mark_onboarded(tg_id: int):
+    """Отметить, что юзер прошёл онбординг."""
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute("UPDATE users SET onboarded=1 WHERE tg_id=?", (tg_id,))
+        conn.commit()
+    except Exception as e:
+        print(f"⚠️ mark_onboarded: {e}")
+    finally:
+        conn.close()
+
+
+def is_onboarded(tg_id: int) -> bool:
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute("SELECT onboarded FROM users WHERE tg_id=?", (tg_id,))
+        row = c.fetchone()
+        return bool(row and row[0])
+    except Exception:
+        return False
+    finally:
+        conn.close()
