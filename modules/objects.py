@@ -116,31 +116,3 @@ def delete_object(object_id):
         return False
     finally:
         conn.close()
-
-
-def update_object(object_id, name=None, status=None, address=None, note=None):
-    """Обновляет объект."""
-    from db import get_connection
-    fields, params = [], []
-    if name is not None:
-        fields.append("name = ?"); params.append(name)
-    if status is not None:
-        fields.append("status = ?"); params.append(status)
-    if address is not None:
-        fields.append("address = ?"); params.append(address)
-    if note is not None:
-        fields.append("note = ?"); params.append(note)
-    if not fields:
-        return False
-    params.append(object_id)
-    conn = get_connection()
-    c = conn.cursor()
-    try:
-        c.execute(f"UPDATE objects SET {', '.join(fields)} WHERE id = ?", params)
-        conn.commit()
-        return True
-    except Exception as e:
-        print(f"⚠️ update_object: {e}", flush=True)
-        return False
-    finally:
-        conn.close()
