@@ -1,3 +1,6 @@
 python-telegram-bot[job-queue]
 Pillow
 rapidfuzz
+APScheduler
+ezdxf
+reportlab
