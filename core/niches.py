@@ -14,13 +14,15 @@ def add_niche(measure_id, room_id, name=None,
             offset_x, offset_y,
             width_bottom, width_top, height,
             depth_bottom, depth_top,
-            niche_type, note)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            niche_type, note,
+            world_x, world_y, world_z)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (measure_id, room_id, session_id, name,
          offset_x, offset_y,
          width_bottom, width_top, height,
          depth_bottom, depth_top,
-         niche_type, note)
+         niche_type, note,
+         None, None, None)
     )
 
 

@@ -37,10 +37,12 @@ def add_comm(room_id, comm_type, label=None, wall=None,
     return commit(
         "INSERT INTO room_comms "
         "(room_id, comm_type, label, wall, offset_x, offset_y, depth, "
-        "diameter, voltage, size, note, photo_id, tenant_id, created_by) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "diameter, voltage, size, note, photo_id, tenant_id, created_by, "
+        "session_id, world_x, world_y, world_z) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (room_id, comm_type, label, wall, offset_x, offset_y, depth,
-         diameter, voltage, size, note, photo_id, tenant_id, created_by)
+         diameter, voltage, size, note, photo_id, tenant_id, created_by,
+         session_id, None, None, None)
     )
 
 

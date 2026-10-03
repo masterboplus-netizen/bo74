@@ -479,14 +479,42 @@ def get_height_step(step):
 
 
 def get_wall_step(step_name, n=None, pos=None, length=None):
+    """Возвращает шаблон шага стены с подстановкой доступных переменных.
+
+    Подставляет только те placeholder'ы, которые реально есть в шаблоне:
+    {n}, {pos}, {length}. Это защищает от KeyError.
+    """
     spec = WALL_STEPS.get(step_name)
     if not spec:
         return None
     result = dict(spec)
-    if n is not None and "title" in result:
-        result["title"] = result["title"].format(n=n, pos=pos or "")
-    if length is not None and "title" in result and "{length}" in result["title"]:
-        result["title"] = result["title"].format(length=length)
+
+    def _safe_format(text, **values):
+        """Форматирует, подставляя только известные ключи, остальные оставляет как есть."""
+        if not text:
+            return text
+        # Определяем какие placeholder'ы реально есть в тексте
+        import re
+        placeholders = set(re.findall(r"\{(\w+)\}", text))
+        available = {k: v for k, v in values.items() if k in placeholders and v is not None}
+        # Если есть placeholder без значения — оставляем его буквально (не роняем)
+        try:
+            return text.format(**{**{k: v for k, v in values.items() if v is not None}, **{
+                p: "{" + p + "}" for p in placeholders if p not in available and values.get(p) is None
+            }})
+        except (KeyError, IndexError):
+            return text
+
+    if "title" in result:
+        result["title"] = _safe_format(
+            result["title"],
+            n=n, pos=pos or "", length=length if length is not None else None
+        )
+    if "subtitle" in result:
+        result["subtitle"] = _safe_format(
+            result["subtitle"],
+            n=n, pos=pos or "", length=length if length is not None else None
+        )
     if "image_tpl" in result and result["image_tpl"] and n is not None:
         result["image"] = result["image_tpl"].format(n=n)
     return result
