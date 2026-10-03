@@ -75,6 +75,12 @@ try:
     from core import elec as core_elec
 except Exception:
     core_elec = None
+
+# --- Помещения (этажи / зоны) ---
+try:
+    from core import floors as core_floors
+except Exception:
+    core_floors = None
 try:
     from core.export.json_export import save_json, export_json
 except Exception:
@@ -3678,6 +3684,29 @@ async def handle_measure_input(update: Update, context: ContextTypes.DEFAULT_TYP
     # --- ЭОМ: ввод мощности группы ---
     if step == 'group_load_watt':
         await _handle_group_load_input(update, context)
+        return
+
+    # --- Помещения: ввод названия ---
+    if step == 'floor_new_name':
+        object_id = context.user_data.get('floor_obj_id')
+        name = (update.message.text or '').strip()
+        if object_id and name:
+            try:
+                floor_id = core_floors.create_floor(object_id, floor_number=1, floor_name=name)
+                context.user_data['waiting_for'] = None
+                context.user_data['floor_obj_id'] = None
+                # Показать карточку помещения
+                await update.message.reply_text(
+                    f"✅ Помещение «{name}» создано.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🏠 Открыть", callback_data=f"floor_{floor_id}")],
+                        [InlineKeyboardButton("⬅️ К помещениям", callback_data=f"obj_floors_{object_id}")],
+                    ])
+                )
+            except Exception as e:
+                await update.message.reply_text(f"❌ Ошибка: {e}")
+        else:
+            await update.message.reply_text("❌ Введи название")
         return
 
     # --- Переименование комнаты ---
