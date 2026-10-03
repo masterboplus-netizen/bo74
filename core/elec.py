@@ -44,17 +44,20 @@ def get_supply(object_id):
 def create_group(object_id, room_id, name, phase=1, purpose='socket',
                  cable_type=None, load_watt=None, breaker_type=None,
                  breaker_curve='C', ip_class='ip20',
-                 is_emergency=0, diff_protection=0, note=None):
+                 is_emergency=0, diff_protection=0, note=None,
+                 floor_id=None, phase_l1=1, phase_l2=0, phase_l3=0):
     """Создаёт группу. Возвращает group_id."""
     return commit(
         """INSERT INTO elec_groups
            (object_id, room_id, name, phase, purpose, cable_type,
             load_watt, breaker_type, breaker_curve, ip_class,
-            is_emergency, diff_protection, note)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            is_emergency, diff_protection, note, floor_id,
+            phase_l1, phase_l2, phase_l3)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (object_id, room_id, name, phase, purpose, cable_type,
          load_watt, breaker_type, breaker_curve, ip_class,
-         is_emergency, diff_protection, note)
+         is_emergency, diff_protection, note, floor_id,
+         phase_l1, phase_l2, phase_l3)
     )
 
 
@@ -221,3 +224,196 @@ def get_summary(object_id):
         'phase_count': phase,
         'voltage': voltage,
     }
+
+# ============================================================
+# ЭОМ ОБЪЕКТА (полная логика)
+# ============================================================
+
+def get_all_groups(object_id):
+    """Все группы объекта (синоним get_groups_by_object)."""
+    return get_groups_by_object(object_id)
+
+
+def calc_supply_breaker(object_id, safety_factor=1.2):
+    """Подбор вводного автомата по суммарной нагрузке объекта."""
+    supply = get_supply(object_id) or {}
+    phase = supply.get('phase_count') or 1
+    voltage = supply.get('voltage') or (380 if phase == 3 else 220)
+    total_watt = calc_total_load(object_id)
+    # Запас 20%
+    total_watt_with_margin = total_watt * safety_factor
+    current = calc_current(total_watt_with_margin, phase, voltage)
+    rating = spec.pick_breaker_by_current(current)
+    curve = 'C'
+    prefix = '3P' if phase == 3 else '1P'
+    return {
+        'rating': rating,
+        'curve': curve,
+        'breaker_type': f"{prefix} {curve}{rating}",
+        'current_a': current,
+        'total_watt': total_watt,
+    }
+
+
+def format_elec_full(object_id):
+    """Полный ЭОМ объекта текстом."""
+    supply = get_supply(object_id) or {}
+    groups = get_all_groups(object_id)
+
+    phase = supply.get('phase_count') or 1
+    voltage = supply.get('voltage') or (380 if phase == 3 else 220)
+    total_watt = calc_total_load(object_id)
+    total_current = calc_current(total_watt, phase, voltage)
+    supply_breaker = calc_supply_breaker(object_id)
+
+    lines = [
+        f"⚡ *ЭОМ объекта*\n",
+        f"🔌 Питание: {phase}-фазное ({voltage}В)",
+        f"   Вводной автомат: *{supply_breaker['breaker_type']}*",
+        f"   Счётчик: {supply.get('meter_type') or '—'}",
+        f"",
+        f"📊 Суммарная нагрузка: *{int(total_watt)} Вт* · {total_current} А",
+        f"📋 Групп: *{len(groups)}*",
+    ]
+
+    if groups:
+        lines.append("")
+        for g in groups:
+            icon = "🚨" if g.get('is_emergency') else (spec.PURPOSE_TYPES.get(g.get('purpose'), '📦').split(' ', 1)[0])
+            name = g.get('name') or '—'
+            ph = g.get('phase') or 1
+            w = g.get('load_watt') or 0
+            breaker = g.get('breaker_type') or '—'
+            cable = g.get('cable_type') or '—'
+            diff = " + УЗО" if g.get('diff_protection') else ""
+            lines.append(f"   {icon} *{name}*")
+            lines.append(f"      {ph}ф · {int(w)} Вт · {breaker}{diff} · {cable}")
+
+    return "\n".join(lines)
+
+# ============================================================
+# РАБОТА С ФАЗАМИ L1 / L2 / L3
+# ============================================================
+
+def get_active_phases(group_id):
+    """Возвращает список активных фаз группы: ['L1'], ['L1','L2'] и т.д."""
+    g = get_group(group_id)
+    if not g:
+        return []
+    result = []
+    if g.get('phase_l1'):
+        result.append('L1')
+    if g.get('phase_l2'):
+        result.append('L2')
+    if g.get('phase_l3'):
+        result.append('L3')
+    return result
+
+
+def calc_group_current(group_id, voltage=220, cos_phi=0.9):
+    """Ток группы с учётом задействованных фаз."""
+    g = get_group(group_id)
+    if not g:
+        return 0
+    load = g.get('load_watt') or 0
+    phases = get_active_phases(group_id)
+    n = len(phases) or 1
+    if n == 1:
+        return round(load / (voltage * cos_phi), 2)
+    # 2ф или 3ф: I = P / (√3 × U_лин × cos φ), U_лин = 380
+    u_line = 380 if n >= 2 else voltage
+    return round(load / (1.73 * u_line * cos_phi), 2)
+
+
+def auto_pick_phase(object_id, load_watt=0):
+    """Находит наименее загруженную фазу.
+    Возвращает 'L1', 'L2' или 'L3'.
+    """
+    groups = get_groups_by_object(object_id)
+    loads = {'L1': 0, 'L2': 0, 'L3': 0}
+    for g in groups:
+        w = g.get('load_watt') or 0
+        if g.get('phase_l1'):
+            loads['L1'] += w
+        if g.get('phase_l2'):
+            loads['L2'] += w
+        if g.get('phase_l3'):
+            loads['L3'] += w
+    return min(loads, key=loads.get)
+
+
+def calc_balance(object_id):
+    """Распределение нагрузки по фазам L1/L2/L3 + перекос."""
+    groups = get_groups_by_object(object_id)
+    loads = {'L1': 0, 'L2': 0, 'L3': 0}
+    for g in groups:
+        w = g.get('load_watt') or 0
+        if g.get('phase_l1'):
+            loads['L1'] += w
+        if g.get('phase_l2'):
+            loads['L2'] += w
+        if g.get('phase_l3'):
+            loads['L3'] += w
+    max_load = max(loads.values()) or 1
+    min_load = min(loads.values())
+    imbalance = round((max_load - min_load) / max_load * 100, 1) if max_load else 0
+    return {
+        'l1_watt': loads['L1'],
+        'l2_watt': loads['L2'],
+        'l3_watt': loads['L3'],
+        'imbalance_percent': imbalance,
+        'balanced': imbalance < 20,
+    }
+
+
+def assign_phases_by_load(group_id, object_id, load_watt):
+    """Автоматически раскидывает фазы для группы:
+    - 1ф нагрузка → на самую свободную фазу
+    - 2ф/3ф → сразу на все нужные
+    """
+    g = get_group(group_id)
+    if not g:
+        return False
+    n_phases = g.get('phase') or 1
+    if n_phases >= 3:
+        # Трёхфазная — все три
+        update_group(group_id, phase_l1=1, phase_l2=1, phase_l3=1)
+        return True
+    if n_phases == 2:
+        # Двухфазная — две самые свободные
+        bal = calc_balance(object_id)
+        order = sorted(
+            [('L1', bal['l1_watt']), ('L2', bal['l2_watt']), ('L3', bal['l3_watt'])],
+            key=lambda x: x[1]
+        )
+        best = {order[0][0], order[1][0]}
+        update_group(group_id,
+                     phase_l1=1 if 'L1' in best else 0,
+                     phase_l2=1 if 'L2' in best else 0,
+                     phase_l3=1 if 'L3' in best else 0)
+        return True
+    # 1ф — самая свободная
+    best = auto_pick_phase(object_id, load_watt)
+    update_group(group_id,
+                 phase_l1=1 if best == 'L1' else 0,
+                 phase_l2=1 if best == 'L2' else 0,
+                 phase_l3=1 if best == 'L3' else 0)
+    return True
+
+
+def format_phase_distribution(object_id):
+    """Текст распределения по фазам."""
+    bal = calc_balance(object_id)
+    l1 = bal['l1_watt']
+    l2 = bal['l2_watt']
+    l3 = bal['l3_watt']
+    imb = bal['imbalance_percent']
+    icon = '✅' if bal['balanced'] else '⚠️'
+    return (
+        f"📊 *Распределение по фазам*\n"
+        f"   L1: {int(l1)} Вт\n"
+        f"   L2: {int(l2)} Вт\n"
+        f"   L3: {int(l3)} Вт\n"
+        f"   {icon} Перекос: {imb}%"
+    )
+

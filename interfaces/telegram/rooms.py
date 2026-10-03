@@ -50,6 +50,10 @@ from core.sessions import ensure_session, get_active_session
 from core.geometry import calc_wall_coords, check_closure
 from core.db import fetchone, fetchall, commit as db_commit
 from core import spec
+try:
+    from core import spec as core_spec
+except Exception:
+    core_spec = spec
 
 # --- Объекты комнат ---
 from core.room_objects import get_room_objects, format_room_object
@@ -65,6 +69,12 @@ try:
     from core.visualize import render_room_plan
 except Exception:
     render_room_plan = None
+
+# --- ЭОМ ---
+try:
+    from core import elec as core_elec
+except Exception:
+    core_elec = None
 try:
     from core.export.json_export import save_json, export_json
 except Exception:
@@ -379,6 +389,7 @@ def room_card_keyboard(room_id):
          InlineKeyboardButton("📸 Фото", callback_data=f"room_photos_{room_id}")],
         [InlineKeyboardButton("📊 Отчёты", callback_data=f"room_reports_{room_id}"),
          InlineKeyboardButton("📤 Экспорт", callback_data=f"room_export_{room_id}")],
+        [InlineKeyboardButton("⚡ Группы ЭОМ", callback_data=f"room_groups_{room_id}")],
         [InlineKeyboardButton("✏️ Переименовать", callback_data=f"room_rename_{room_id}")],
         [InlineKeyboardButton("🗑 Удалить", callback_data=f"room_del_{room_id}")],
         [InlineKeyboardButton("⬅️ К комнатам", callback_data=f"rooms_list_obj_{object_id}")],
@@ -2561,6 +2572,106 @@ async def handle_openings_callback(query, context, data):
 # ПЛАН КОМНАТЫ (PNG)
 # ============================================================
 
+async def handle_groups_callback(query, context, data):
+    """Управление группами ЭОМ."""
+    if not core_elec:
+        try:
+            await query.edit_message_text("❌ Модуль ЭОМ не загружен")
+        except Exception:
+            pass
+        return True
+
+    # --- СПИСОК ГРУПП КОМНАТЫ ---
+    if data.startswith("room_groups_"):
+        room_id = int(data.replace("room_groups_", ""))
+        room = get_room(room_id)
+        name = room.get('name', '?') if room else '?'
+
+        groups = core_elec.get_groups(room_id)
+        lines = [f"⚡ *Группы ЭОМ — «{name}»*\n"]
+        if not groups:
+            lines.append("_Пока групп нет._\n")
+        else:
+            total_w = 0
+            for g in groups:
+                lines.append(core_elec.format_group(g))
+                total_w += g.get('load_watt') or 0
+            lines.append(f"\n📊 *Групп: {len(groups)} · Σ {int(total_w)} Вт*")
+
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Создать группу", callback_data=f"group_new_{room_id}")],
+            [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
+        ])
+        try:
+            await query.edit_message_text(
+                "\n".join(lines), parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        except Exception:
+            pass
+        return True
+
+    # --- СОЗДАНИЕ ГРУППЫ (шаг 1: назначение) ---
+    if data.startswith("group_new_"):
+        room_id = int(data.replace("group_new_", ""))
+        buttons = []
+        for code, label in core_spec.PURPOSE_TYPES.items():
+            buttons.append([InlineKeyboardButton(label, callback_data=f"group_purpose_{room_id}_{code}")])
+        buttons.append([InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_groups_{room_id}")])
+        try:
+            await query.edit_message_text(
+                "⚡ *Новая группа*\n\nВыбери назначение:",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        except Exception:
+            pass
+        return True
+
+    # --- ВЫБОР НАЗНАЧЕНИЯ (шаг 2: фаза) ---
+    if data.startswith("group_purpose_"):
+        parts = data.replace("group_purpose_", "").rsplit("_", 1)
+        room_id = int(parts[0])
+        purpose = parts[1]
+        context.user_data['group_room_id'] = room_id
+        context.user_data['group_purpose'] = purpose
+        label = core_spec.PURPOSE_TYPES.get(purpose, purpose)
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("1-фазная", callback_data=f"group_phase_{room_id}_1")],
+            [InlineKeyboardButton("3-фазная", callback_data=f"group_phase_{room_id}_3")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_groups_{room_id}")],
+        ])
+        try:
+            await query.edit_message_text(
+                f"⚡ *{label}*\n\nФаза:",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=kb
+            )
+        except Exception:
+            pass
+        return True
+
+    # --- ВЫБОР ФАЗЫ (шаг 3: ввод мощности) ---
+    if data.startswith("group_phase_"):
+        parts = data.replace("group_phase_", "").rsplit("_", 1)
+        room_id = int(parts[0])
+        phase = int(parts[1])
+        context.user_data['group_phase'] = phase
+        context.user_data['waiting_for'] = 'group_load_watt'
+        try:
+            await query.edit_message_text(
+                f"⚡ Мощность группы в *Вт*?\n\n_Например: 2000_",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_groups_{room_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    return False
+
+
 async def handle_reports_callback(query, context, data):
     """Меню планов и отчётов."""
     if data.startswith("room_reports_"):
@@ -3191,6 +3302,11 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     # --- План комнаты (PNG) ---
+    if data.startswith("room_groups_") or data.startswith("group_"):
+        handled = await handle_groups_callback(query, context, data)
+        if handled:
+            return
+
     if data.startswith("room_reports_") or data.startswith("room_report_"):
         handled = await handle_reports_callback(query, context, data)
         if handled:
@@ -3557,6 +3673,11 @@ async def handle_measure_input(update: Update, context: ContextTypes.DEFAULT_TYP
     """Роутер текстового ввода по waiting_for."""
     step = context.user_data.get('waiting_for')
     if not step:
+        return
+
+    # --- ЭОМ: ввод мощности группы ---
+    if step == 'group_load_watt':
+        await _handle_group_load_input(update, context)
         return
 
     # --- Переименование комнаты ---
