@@ -1,0 +1,639 @@
+### bot.py ###
+"""Точка сборки БО 7.2"""
+import logging
+from telegram import BotCommand
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
+from config import TOKEN, validate_config
+from db import init_db
+from handlers.onboarding import register_onboarding_handlers
+from handlers.admin import register_admin_handlers
+from handlers.commands import (
+    handle_task_action, handle_add_menu, handle_confirm_date,
+    handle_choose_object, handle_category,
+    start, help_command, add_object_command, objects_command,
+    add_task_command, tasks_command, done_command,
+    finance_command, add_expense_command, handle_callback, handle_text
+)
+from handlers.digest_cmd import digest_now_command, survey_now_command
+from modules.digest import send_morning_digest, send_evening_survey, send_morning_digest_with_log, send_evening_survey_with_log, catch_up_digests
+from modules.backup_db import send_daily_backup, backup_now_command
+from datetime import time
+from zoneinfo import ZoneInfo
+
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+
+def main():
+    if not validate_config():
+        return
+    init_db()
+
+    app = Application.builder().token(TOKEN).build()
+
+    # Настройка постоянного меню команд
+    async def post_init(app):
+        await app.bot.set_my_commands([
+            BotCommand("start", "🏠 Главное меню"),
+            BotCommand("objects", "🏗️ Объекты"),
+            BotCommand("tasks", "📋 Задачи"),
+            BotCommand("finance", "💰 Финансы"),
+            BotCommand("add", "➕ Добавить"),
+            BotCommand("help", "⚙️ Помощь"),
+        ])
+
+    # Настройка постоянного меню команд + дайджестов
+    async def post_init(app):
+        await app.bot.set_my_commands([
+            BotCommand("start", "🏠 Главное меню"),
+            BotCommand("objects", "🏗️ Объекты"),
+            BotCommand("tasks", "📋 Задачи"),
+            BotCommand("finance", "💰 Финансы"),
+            BotCommand("add", "➕ Добавить"),
+            BotCommand("help", "⚙️ Помощь"),
+        ])
+        # Утренний дайджест — 9:00 МСК (6:00 UTC)
+        app.job_queue.run_daily(
+            send_morning_digest_with_log,
+            time=time(hour=6, minute=0, tzinfo=ZoneInfo("UTC")),
+            name="morning_digest"
+        )
+        # Вечерний опрос — 18:00 МСК (15:00 UTC)
+        app.job_queue.run_daily(
+            send_evening_survey_with_log,
+            time=time(hour=15, minute=0, tzinfo=ZoneInfo("UTC")),
+            name="evening_survey"
+        )
+        # Автобэкап БД — 23:00 МСК (20:00 UTC)
+        app.job_queue.run_daily(
+            send_daily_backup,
+            time=time(hour=20, minute=0, tzinfo=ZoneInfo("UTC")),
+            name="daily_backup"
+        )
+        logger.info("⏰ Дайджесты: 9:00 и 18:00 МСК, автобэкап БД: 23:00 МСК")
+
+        # Догоняющий дайджест — если бот запущен после 9:00 / 18:00
+        try:
+            await catch_up_digests(app)
+        except Exception as e:
+            logger.error(f"⚠️ catch_up_digests: {e}")
+
+    app.post_init = post_init
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("add_object", add_object_command))
+    app.add_handler(CommandHandler("objects", objects_command))
+    app.add_handler(CommandHandler("add", add_task_command))
+    app.add_handler(CommandHandler("tasks", tasks_command))
+    app.add_handler(CommandHandler("done", done_command))
+    app.add_handler(CommandHandler("finance", finance_command))
+    app.add_handler(CommandHandler("add_expense", add_expense_command))
+    app.add_handler(CommandHandler("digest_now", digest_now_command))
+    app.add_handler(CommandHandler("survey_now", survey_now_command))
+    app.add_handler(CommandHandler("backup_now", backup_now_command))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
+    logger.info("🚀 БО 7.2 запущен!")
+    app.add_handler(CallbackQueryHandler(handle_category, pattern="^cat_"))
+    app.add_handler(CallbackQueryHandler(handle_choose_object, pattern="^choose_obj_"))
+    app.add_handler(CallbackQueryHandler(handle_confirm_date, pattern="^confirmdate_"))
+    app.add_handler(CallbackQueryHandler(handle_add_menu, pattern="^(menu_add|add_object|add_task|add_expense|newtask_obj_|newexp_obj_)"))
+    app.add_handler(CallbackQueryHandler(handle_task_action, pattern="^(task_|taskdone_|taskdel_|setdate_|taskdate_|tasknodate_|taskprio_|setprio_|taskrename_)"))
+    register_onboarding_handlers(app)
+    register_admin_handlers(app)
+    app.add_handler(CallbackQueryHandler(handle_callback, pattern="^(?!cat_|choose_obj_|task_|taskdone_|taskdel_|setdate_|taskdate_|taskprio_|setprio_|taskrename_).*"))
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
+### config.py ###
+"""Конфигурация БО 7.2 — без dotenv"""
+import os
+
+# === TELEGRAM ===
+TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
+
+# === БАЗА ДАННЫХ ===
+DB_PATH = os.getenv("DB_PATH", "bo72.db")
+
+# === СИСТЕМНЫЕ ===
+DEFAULT_LANGUAGE = "ru"
+DEFAULT_MODE = "brief"
+TIMEZONE = "Europe/Moscow"
+VERSION = "7.2"
+
+
+def validate_config() -> bool:
+    errors = []
+    if TOKEN == "YOUR_BOT_TOKEN_HERE":
+        errors.append("❌ BOT_TOKEN не задан")
+    if not ADMIN_IDS:
+        errors.append("⚠️ ADMIN_IDS пуст")
+    if errors:
+        for e in errors:
+            print(e)
+        return False
+    print(f"✅ Конфиг БО {VERSION} валиден")
+    return True
+
+
+if __name__ == "__main__":
+    validate_config()
+### db.py ###
+"""База данных БО 7.2 — 27 таблиц"""
+import sqlite3
+from config import DB_PATH
+
+def get_connection():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = get_connection()
+    c = conn.cursor()
+
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tg_id INTEGER UNIQUE, name TEXT, role TEXT DEFAULT 'guest',
+        phone TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS objects (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT UNIQUE, name TEXT NOT NULL, address TEXT,
+        status TEXT DEFAULT 'active', budget INTEGER DEFAULT 0,
+        execution_type TEXT DEFAULT 'self', created_by INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        object_id INTEGER, title TEXT NOT NULL, description TEXT,
+        status TEXT DEFAULT 'open', priority TEXT DEFAULT 'medium',
+        type TEXT DEFAULT 'direct', assigned_to INTEGER, deadline DATE,
+        completed_at DATETIME, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (object_id) REFERENCES objects(id))''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS finance (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        object_id INTEGER, task_id INTEGER, category TEXT,
+        amount INTEGER, type TEXT, date DATE, note TEXT,
+        is_personal INTEGER DEFAULT 0,
+        reimbursable INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (object_id) REFERENCES objects(id))''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS calendar_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER, object_id INTEGER, task_id INTEGER,
+        title TEXT, event_date DATE, event_type TEXT DEFAULT 'task',
+        priority TEXT DEFAULT 'medium', is_completed INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS clients (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, phone TEXT,
+        email TEXT, address TEXT, source TEXT, tg_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS crm_deals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER,
+        object_id INTEGER, status TEXT DEFAULT 'new', budget INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS crm_activities (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER,
+        user_id INTEGER, type TEXT, description TEXT, due_date DATE,
+        status TEXT DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP, completed_at DATETIME)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS user_preferences (
+        user_id INTEGER PRIMARY KEY,
+        communication_style TEXT DEFAULT 'brief',
+        thinking_style TEXT DEFAULT 'task_based',
+        response_mode TEXT DEFAULT 'brief',
+        target_language TEXT DEFAULT 'ru',
+        emoji_usage INTEGER DEFAULT 1,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS marketplace_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, object_id INTEGER,
+        item_name TEXT, platform TEXT, price INTEGER, url TEXT,
+        added_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS offline_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER,
+        command TEXT, data TEXT, status TEXT DEFAULT 'pending',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP, synced_at DATETIME)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS report_schedule (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER,
+        object_id INTEGER, template TEXT, frequency TEXT,
+        weekday INTEGER, day_of_month INTEGER, hour INTEGER,
+        minute INTEGER, last_sent DATETIME, next_send DATETIME,
+        active INTEGER DEFAULT 1)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS task_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER,
+        old_status TEXT, new_status TEXT, changed_by INTEGER,
+        changed_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS finance_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, finance_id INTEGER,
+        old_amount INTEGER, new_amount INTEGER,
+        changed_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, object_id INTEGER,
+        task_id INTEGER, user_id INTEGER, text TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS photos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, object_id INTEGER,
+        task_id INTEGER, file_id TEXT, caption TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, object_id INTEGER,
+        name TEXT, file_id TEXT, type TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS estimates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, object_id INTEGER,
+        name TEXT, total INTEGER, status TEXT DEFAULT 'draft',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS estimate_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, estimate_id INTEGER,
+        name TEXT, qty REAL, unit TEXT, price INTEGER, total INTEGER)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS suppliers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, phone TEXT,
+        category TEXT, note TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS kpi (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER,
+        object_id INTEGER, quality_score INTEGER DEFAULT 0,
+        speed_score INTEGER DEFAULT 0, reliability_score INTEGER DEFAULT 0,
+        total_score INTEGER DEFAULT 0,
+        calculated_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS report_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, blocks TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS action_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER,
+        action TEXT, entity TEXT, entity_id INTEGER, details TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS reminders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER,
+        task_id INTEGER, remind_at DATETIME, text TEXT,
+        is_sent INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS checklists (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, object_id INTEGER,
+        task_id INTEGER, item TEXT, is_done INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS locations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, object_id INTEGER,
+        user_id INTEGER, lat REAL, lon REAL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS system_settings (
+        key TEXT PRIMARY KEY, value TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+
+    c.execute("CREATE INDEX IF NOT EXISTS idx_tasks_object ON tasks(object_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_finance_object ON finance(object_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_finance_date ON finance(date)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_events_date ON calendar_events(event_date)")
+
+    conn.commit()
+    conn.close()
+    print("✅ База БО 7.2 инициализирована (27 таблиц)")
+
+if __name__ == '__main__':
+    init_db()
+### handlers/admin.py ###
+# -*- coding: utf-8 -*-
+"""Бо 7.5 — Админ-команды."""
+from telegram import Update
+from telegram.ext import ContextTypes, CommandHandler
+from telegram.constants import ParseMode
+from handlers.onboarding import MAIN_ADMIN_TG_ID
+
+
+def _is_admin(update: Update) -> bool:
+    return update.effective_user.id == MAIN_ADMIN_TG_ID
+
+
+async def cmd_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_admin(update):
+        await update.message.reply_text("⛔ Только для админа.")
+        return
+    from modules.users import get_all_users
+    users = get_all_users()
+    if not users:
+        await update.message.reply_text("Юзеров нет.")
+        return
+    lines = ["👥 *Пользователи:*\n"]
+    for u in users:
+        uid  = u.get("tg_id") if isinstance(u, dict) else u[1]
+        name = u.get("name")  if isinstance(u, dict) else u[2]
+        role = u.get("role")  if isinstance(u, dict) else u[3]
+        lines.append(f"• `{uid}` — {name} ({role})")
+    await update.message.reply_text(
+        "\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+
+
+async def cmd_set_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not _is_admin(update):
+        await update.message.reply_text("⛔ Только для админа.")
+        return
+    args = context.args or []
+    if len(args) < 2:
+        await update.message.reply_text(
+            "Использование: /set_role <tg_id> <role>\n"
+            "Роли: admin, designer, prorab, master, guest")
+        return
+    try:
+        tg_id = int(args[0])
+    except ValueError:
+        await update.message.reply_text("tg_id должен быть числом")
+        return
+    role = args[1].lower()
+    valid = {"admin", "designer", "prorab", "master", "client", "guest"}
+    if role not in valid:
+        await update.message.reply_text(f"Недопустимая роль. Доступно: {', '.join(sorted(valid))}")
+        return
+    from modules.users import set_role, mark_onboarded
+    set_role(tg_id, role)
+    try:
+        mark_onboarded(tg_id)
+    except Exception:
+        pass
+    await update.message.reply_text(
+        f"✅ Юзеру `{tg_id}` назначена роль: *{role}*",
+        parse_mode=ParseMode.MARKDOWN)
+
+
+def register_admin_handlers(app):
+    app.add_handler(CommandHandler("users", cmd_users))
+    app.add_handler(CommandHandler("set_role", cmd_set_role))
+
+### handlers/onboarding.py ###
+# -*- coding: utf-8 -*-
+"""Бо 7.5 — Онбординг: выбор роли + меню по ролям."""
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes, CallbackQueryHandler
+from telegram.constants import ParseMode
+
+
+# === ГЛАВНЫЙ АДМИН (всегда admin, онбординг пропускает) ===
+MAIN_ADMIN_TG_ID = 1821030188
+
+
+ONBOARDING_ROLES = [
+    ("designer", "🎨 Дизайнер"),
+    ("prorab",   "👷 Прораб"),
+    ("master",   "🔧 Мастер"),
+]
+
+
+def role_menu_keyboard(role: str):
+    if role in ("admin", "prorab", "designer"):
+        rows = [
+            [InlineKeyboardButton("🏗️ Объекты",  callback_data="menu_objects")],
+            [InlineKeyboardButton("📋 Задачи",   callback_data="menu_tasks")],
+            [InlineKeyboardButton("💰 Финансы",  callback_data="menu_finance")],
+            [InlineKeyboardButton("📊 Отчёты",   callback_data="menu_reports")],
+            [InlineKeyboardButton("💸 Личные",   callback_data="menu_personal")],
+            [InlineKeyboardButton("🌐 Дашборд",  callback_data="menu_dashboard")],
+            [InlineKeyboardButton("➕ Добавить", callback_data="menu_add")],
+            [InlineKeyboardButton("⚙️ Помощь",   callback_data="menu_help")],
+        ]
+    elif role == "master":
+        rows = [
+            [InlineKeyboardButton("🏗️ Объекты",  callback_data="menu_objects")],
+            [InlineKeyboardButton("📋 Задачи",   callback_data="menu_tasks")],
+            [InlineKeyboardButton("💸 Личные",   callback_data="menu_personal")],
+            [InlineKeyboardButton("➕ Добавить", callback_data="menu_add")],
+            [InlineKeyboardButton("⚙️ Помощь",   callback_data="menu_help")],
+        ]
+    else:
+        rows = [
+            [InlineKeyboardButton("🏗️ Объекты",  callback_data="menu_objects")],
+            [InlineKeyboardButton("📋 Задачи",   callback_data="menu_tasks")],
+            [InlineKeyboardButton("💸 Личные",   callback_data="menu_personal")],
+            [InlineKeyboardButton("⚙️ Помощь",   callback_data="menu_help")],
+        ]
+    return InlineKeyboardMarkup(rows)
+
+
+def onboarding_keyboard():
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton(label, callback_data=f"setrole_{code}")]
+         for code, label in ONBOARDING_ROLES]
+    )
+
+
+async def ask_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "👋 Привет! Я *Бо 7.5* — твой помощник по стройке.\n\n"
+        "Выбери свою роль:\n\n"
+        "🎨 *Дизайнер* — объекты, задачи, финансы, отчёты\n"
+        "👷 *Прораб* — объекты, задачи, финансы, отчёты\n"
+        "🔧 *Мастер* — задачи, объекты, личные расходы\n\n"
+        "_Роль можно изменить у админа._"
+    )
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, reply_markup=onboarding_keyboard(), parse_mode=ParseMode.MARKDOWN)
+    else:
+        await update.message.reply_text(
+            text, reply_markup=onboarding_keyboard(), parse_mode=ParseMode.MARKDOWN)
+
+
+async def handle_setrole(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data or ""
+    if not data.startswith("setrole_"):
+        return
+    role = data.replace("setrole_", "", 1)
+    user = update.effective_user
+
+    try:
+        from modules.users import save_user, set_role, mark_onboarded
+        save_user(user.id, user.first_name or "", user.username or "", role=role)
+        set_role(user.id, role)
+        mark_onboarded(user.id)
+    except Exception as e:
+        print(f"⚠️ Ошибка сохранения роли: {e}")
+
+    role_label = dict(ONBOARDING_ROLES).get(role, role)
+    await query.edit_message_text(
+        f"✅ Отлично! Твоя роль: *{role_label}*\n\n"
+        f"Команды всегда доступны через /help.",
+        reply_markup=role_menu_keyboard(role),
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+def register_onboarding_handlers(app):
+    app.add_handler(CallbackQueryHandler(handle_setrole, pattern=r"^setrole_"))
+
+### modules/tasks.py ###
+"""Модуль задач БО 7.2"""
+from db import get_connection
+
+
+def create_task(object_id: int, title: str, description: str = "", deadline: str = None, priority: str = 'medium') -> int:
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO tasks (object_id, title, description, deadline, priority) VALUES (?, ?, ?, ?, ?)",
+        (object_id, title, description, deadline, priority)
+    )
+    task_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return task_id
+
+
+def close_task(task_id: int, user_id: int = None):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("UPDATE tasks SET status = 'done', completed_at = CURRENT_TIMESTAMP WHERE id = ?", (task_id,))
+    c.execute("INSERT INTO task_history (task_id, old_status, new_status, changed_by) VALUES (?, 'open', 'done', ?)", (task_id, user_id))
+    conn.commit()
+    conn.close()
+
+
+def cancel_task(task_id: int, reason: str = None):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("UPDATE tasks SET status = 'cancelled' WHERE id = ?", (task_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_active_tasks(user_id: int = None) -> list:
+    conn = get_connection()
+    c = conn.cursor()
+    query = "SELECT id, object_id, title, status, priority, deadline FROM tasks WHERE status IN ('open', 'in_progress')"
+    params = []
+    if user_id:
+        query += " AND assigned_to = ?"
+        params.append(user_id)
+    c.execute(query, params)
+    rows = c.fetchall()
+    conn.close()
+    return [{'id': r[0], 'object_id': r[1], 'title': r[2], 'status': r[3], 'priority': r[4], 'deadline': r[5]} for r in rows]
+
+
+def get_tasks_by_object(object_id: int) -> list:
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT id, title, status, priority, type, assigned_to, deadline FROM tasks WHERE object_id = ? AND status != 'archived'", (object_id,))
+    rows = c.fetchall()
+    conn.close()
+    return [{'id': r[0], 'title': r[1], 'status': r[2], 'priority': r[3], 'type': r[4], 'assigned_to': r[5], 'deadline': r[6]} for r in rows]
+
+def get_tasks_stats_by_object(object_id: int) -> dict:
+    """Статистика задач объекта: всего, выполнено, открыто, просрочено"""
+    from datetime import date
+    today = date.today().strftime('%Y-%m-%d')
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM tasks WHERE object_id = ?", (object_id,))
+    total = c.fetchone()[0] or 0
+    c.execute("SELECT COUNT(*) FROM tasks WHERE object_id = ? AND status = 'done'", (object_id,))
+    done = c.fetchone()[0] or 0
+    c.execute(
+        "SELECT COUNT(*) FROM tasks WHERE object_id = ? AND status IN ('open', 'in_progress')",
+        (object_id,)
+    )
+    open_count = c.fetchone()[0] or 0
+    c.execute(
+        "SELECT COUNT(*) FROM tasks WHERE object_id = ? AND status IN ('open', 'in_progress') "
+        "AND deadline IS NOT NULL AND deadline < ?",
+        (object_id, today)
+    )
+    overdue = c.fetchone()[0] or 0
+    conn.close()
+    return {
+        'total': total,
+        'done': done,
+        'open': open_count,
+        'overdue': overdue,
+        'percent_done': int(done / total * 100) if total > 0 else 0
+    }
+
+### modules/objects.py ###
+"""Модуль объектов БО 7.2"""
+from db import get_connection
+from datetime import datetime
+
+
+def create_object(name: str, address: str = None, budget: int = 0, user_id: int = None) -> int:
+    conn = get_connection()
+    c = conn.cursor()
+    import uuid; code = f"OBJ-{uuid.uuid4().hex[:8].upper()}"
+    c.execute(
+        "INSERT INTO objects (code, name, address, budget, created_by) VALUES (?, ?, ?, ?, ?)",
+        (code, name, address, budget, user_id)
+    )
+    object_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return object_id
+
+
+def get_object(object_id: int) -> dict:
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT id, code, name, address, status, budget FROM objects WHERE id = ?", (object_id,))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        return {'id': row[0], 'code': row[1], 'name': row[2], 'address': row[3], 'status': row[4], 'budget': row[5]}
+    return None
+
+
+def get_object_by_name(name: str) -> dict:
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT id, code, name, address, status, budget FROM objects WHERE LOWER(name) LIKE LOWER(?) AND status != 'archived'", (f'%{name}%',))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        return {'id': row[0], 'code': row[1], 'name': row[2], 'address': row[3], 'status': row[4], 'budget': row[5]}
+    return None
+
+
+def get_all_objects() -> list:
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT id, code, name, status FROM objects WHERE status IN ('active', 'paused', 'waiting') ORDER BY created_at DESC")
+    rows = c.fetchall()
+    conn.close()
+    return [{'id': r[0], 'code': r[1], 'name': r[2], 'status': r[3]} for r in rows]
+
+
+def update_object_status(object_id: int, status: str):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("UPDATE objects SET status = ? WHERE id = ?", (status, object_id))
+    conn.commit()
+    conn.close()
