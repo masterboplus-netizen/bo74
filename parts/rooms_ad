@@ -1,3 +1,21 @@
+                context.user_data['wall_remaining_steps'] = remaining[1:]
+                await _do_wall_step(query, context, room_id, first)
+                return
+            await _wall_save_and_next(query, context, room_id, step)
+            return
+        if method in ('60', '100'):
+            context.user_data['waiting_for'] = 'wall_round_angle_val'
+            hint = 'Идеал: 100 см' if method == '60' else 'Идеал: 141 см'
+            await query.edit_message_text(
+                f"📏 *Диагональ ({method})*\n_{hint}_\n\nВведи в СМ:",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+                ])
+            )
+            return
+        if method == 'deg':
+            context.user_data['waiting_for'] = 'wall_round_angle_val'
             await query.edit_message_text(
                 "📐 *Угол в градусах*\n\nВведи (например 93):",
                 parse_mode=ParseMode.MARKDOWN,
@@ -28,7 +46,7 @@
         context.user_data['wall_niche_current'] = 1
         context.user_data['wall_niches'] = []
         context.user_data['waiting_for'] = 'wall_niche_width'
-        _save_wall_draft(context, room_id, 'niche')
+        _save_wall_draft(context, room_id, 'niche_width')
         import os as _os
         _base = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
         _png = _os.path.join(_base, "docs", "images", "niche_width.png")
@@ -380,21 +398,3 @@ async def handle_measure_input(update, context):
         await _comm_save(update, context)
         return
 
-    if step == 'comm_edit_value':
-        comm_id = context.user_data.get('comm_edit_id')
-        field = context.user_data.get('comm_edit_field')
-        text_val = (update.message.text or '').strip().replace(',', '.')
-        if not all([comm_id, field]):
-            await update.message.reply_text("❌ Потерялись данные")
-            context.user_data['waiting_for'] = None
-            return
-        try:
-            if field in ('offset_x', 'offset_y', 'diameter'):
-                val = float(text_val)
-            elif field == 'voltage':
-                val = int(float(text_val))
-            else:
-                val = text_val
-        except ValueError:
-            await update.message.reply_text("❌ Введи число")
-            return

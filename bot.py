@@ -30,6 +30,11 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+# Отключаем логи httpx/httpcore/telegram (чтобы токен не утекал в логи)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("telegram").setLevel(logging.WARNING)
+logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 async def error_handler(update, context):

@@ -247,19 +247,37 @@
                 return
             await _wall_save_and_next(query, context, room_id, next_step)
             return
-        if step_name == 'niche':
-            # Продолжаем с ниши
+        if step_name in ('niche', 'niche_width'):
             context.user_data['waiting_for'] = 'wall_niche_width'
             await query.message.chat.send_message(
                 "🕳 *Продолжаем нишу*\n\n📏 Ширина (СМ):",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
-        if step_name == 'niche':
-            context.user_data['waiting_for'] = 'wall_niche_width'
+        if step_name == 'niche_depth':
+            context.user_data['waiting_for'] = 'wall_niche_depth'
             await query.message.chat.send_message(
-                "🕳 *Продолжаем нишу*\n\n📏 Ширина (СМ):",
+                "🕳 *Продолжаем нишу*\n\n📏 Глубина (СМ):",
                 parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        if step_name == 'niche_height':
+            context.user_data['waiting_for'] = 'wall_niche_height'
+            await query.message.chat.send_message(
+                "🕳 *Продолжаем нишу*\n\n📏 Высота (СМ):",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        if step_name == 'niche_plane':
+            _rid = context.user_data.get('wall_room_id')
+            await query.message.chat.send_message(
+                "🕳 *Ниша ровная или неровная по высоте?*",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Ровная", callback_data=f"wall_niche_plane_rect_{_rid}")],
+                    [InlineKeyboardButton("📏 Неровная", callback_data=f"wall_niche_plane_irr_{_rid}")],
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{_rid}")],
+                ])
             )
             return
         # По умолчанию — галочки
@@ -380,21 +398,3 @@
             remaining = context.user_data.get('wall_remaining_steps') or []
             if remaining:
                 first = remaining[0]
-                context.user_data['wall_remaining_steps'] = remaining[1:]
-                await _do_wall_step(query, context, room_id, first)
-                return
-            await _wall_save_and_next(query, context, room_id, step)
-            return
-        if method in ('60', '100'):
-            context.user_data['waiting_for'] = 'wall_round_angle_val'
-            hint = 'Идеал: 100 см' if method == '60' else 'Идеал: 141 см'
-            await query.edit_message_text(
-                f"📏 *Диагональ ({method})*\n_{hint}_\n\nВведи в СМ:",
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
-                ])
-            )
-            return
-        if method == 'deg':
-            context.user_data['waiting_for'] = 'wall_round_angle_val'

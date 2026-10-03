@@ -1,3 +1,21 @@
+    if step == 'comm_edit_value':
+        comm_id = context.user_data.get('comm_edit_id')
+        field = context.user_data.get('comm_edit_field')
+        text_val = (update.message.text or '').strip().replace(',', '.')
+        if not all([comm_id, field]):
+            await update.message.reply_text("❌ Потерялись данные")
+            context.user_data['waiting_for'] = None
+            return
+        try:
+            if field in ('offset_x', 'offset_y', 'diameter'):
+                val = float(text_val)
+            elif field == 'voltage':
+                val = int(float(text_val))
+            else:
+                val = text_val
+        except ValueError:
+            await update.message.reply_text("❌ Введи число")
+            return
         update_comm(comm_id, **{field: val})
         c = get_comm(comm_id)
         context.user_data['waiting_for'] = None
@@ -380,21 +398,3 @@ async def _show_wall_step(query, context, room_id, step, phase='flags'):
         except Exception:
             pass
         await query.message.chat.send_message(caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
-
-
-async def _show_wall_plane(target, context, room_id):
-    """Экран плоскости стены."""
-    step = context.user_data.get('wall_step') or 1
-    # Проверяем — если галочка "Разная по высоте" уже стоит — пропускаем вопрос
-    flags = context.user_data.get('wall_flags') or {}
-    if flags.get('wavy'):
-        # Сразу — ввод 3 точек
-        context.user_data['wall_plane'] = 'wavy'
-        context.user_data['waiting_for'] = 'wall_round_plane_bottom'
-        text = (
-            f"🧱 *Стена {step}*\n\n"
-            f"📏 *Замер в 3 точках:*\n\n"
-            f"Введи НИЗ стены (СМ):"
-        )
-        if hasattr(target, 'message'):
-            try:

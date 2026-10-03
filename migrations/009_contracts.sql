@@ -86,17 +86,5 @@ ALTER TABLE documents ADD COLUMN uploaded_by INTEGER;
 ALTER TABLE documents ADD COLUMN tenant_id INTEGER DEFAULT 1;
 ALTER TABLE documents ADD COLUMN note TEXT;
 
--- Миграция: добавляем поля в старую documents
-ALTER TABLE documents ADD COLUMN entity_type TEXT;
-ALTER TABLE documents ADD COLUMN entity_id INTEGER;
-ALTER TABLE documents ADD COLUMN doc_type TEXT;
-ALTER TABLE documents ADD COLUMN file_uuid TEXT;
-ALTER TABLE documents ADD COLUMN file_path TEXT;
-ALTER TABLE documents ADD COLUMN mime TEXT;
-ALTER TABLE documents ADD COLUMN size INTEGER;
-ALTER TABLE documents ADD COLUMN uploaded_by INTEGER;
-ALTER TABLE documents ADD COLUMN tenant_id INTEGER DEFAULT 1;
-ALTER TABLE documents ADD COLUMN note TEXT;
-
 CREATE INDEX IF NOT EXISTS idx_docs_entity ON documents(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_docs_type ON documents(doc_type);

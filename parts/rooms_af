@@ -1,3 +1,21 @@
+
+
+async def _show_wall_plane(target, context, room_id):
+    """Экран плоскости стены."""
+    step = context.user_data.get('wall_step') or 1
+    # Проверяем — если галочка "Разная по высоте" уже стоит — пропускаем вопрос
+    flags = context.user_data.get('wall_flags') or {}
+    if flags.get('wavy'):
+        # Сразу — ввод 3 точек
+        context.user_data['wall_plane'] = 'wavy'
+        context.user_data['waiting_for'] = 'wall_round_plane_bottom'
+        text = (
+            f"🧱 *Стена {step}*\n\n"
+            f"📏 *Замер в 3 точках:*\n\n"
+            f"Введи НИЗ стены (СМ):"
+        )
+        if hasattr(target, 'message'):
+            try:
                 await target.message.delete()
             except Exception:
                 pass
@@ -362,17 +380,7 @@ async def _handle_wall_round_input(update, context, step):
             return
         context.user_data['wall_niche_temp'] = {'width': round(val, 2)}
         context.user_data['waiting_for'] = 'wall_niche_depth'
-        # Сохраняем черновик
-        step_num = context.user_data.get('wall_step') or 1
-        flags = context.user_data.get('wall_flags') or {}
-        context.user_data[f'wall_draft_{room_id}'] = {
-            'step': step_num, 'flags': flags,
-            'length': context.user_data.get('wall_length'),
-            'niches': context.user_data.get('wall_niches') or [],
-            'niche_count': context.user_data.get('wall_niche_count') or 1,
-            'niche_current': context.user_data.get('wall_niche_current') or 1,
-            'niche_temp': {'width': round(val, 2)},
-        }
+        _save_wall_draft(context, room_id, 'niche_depth')
         room_id = context.user_data.get('wall_room_id')
         import os as _os
         _base = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
@@ -390,11 +398,3 @@ async def _handle_wall_round_input(update, context, step):
             except Exception:
                 pass
         await update.message.reply_text(_cap, parse_mode=ParseMode.MARKDOWN, reply_markup=_kb)
-        return
-
-    if step == 'wall_niche_depth':
-        try:
-            val = float(text_val)
-        except ValueError:
-            await update.message.reply_text("❌ Нужно число")
-            return
