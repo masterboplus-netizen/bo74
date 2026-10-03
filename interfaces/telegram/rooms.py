@@ -2578,6 +2578,202 @@ async def handle_openings_callback(query, context, data):
 # ПЛАН КОМНАТЫ (PNG)
 # ============================================================
 
+async def handle_floors_callback(query, context, data):
+    """Помещения объекта (этажи / зоны)."""
+    if not core_floors:
+        try:
+            await query.edit_message_text("❌ Модуль помещений не загружен")
+        except Exception:
+            pass
+        return True
+
+    # --- СПИСОК ПОМЕЩЕНИЙ ---
+    if data.startswith("obj_floors_"):
+        object_id = int(data.replace("obj_floors_", ""))
+        await _show_floors_list(query, object_id)
+        return True
+
+    # --- СОЗДАТЬ ПОМЕЩЕНИЕ ---
+    if data.startswith("floor_add_"):
+        object_id = int(data.replace("floor_add_", ""))
+        context.user_data['waiting_for'] = 'floor_new_name'
+        context.user_data['floor_obj_id'] = object_id
+        try:
+            await query.edit_message_text(
+                "🏠 *Новое помещение*\n\nНапиши название (например «1 этаж», «Цоколь», «Зал»):",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"obj_floors_{object_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    # --- КАРТОЧКА ПОМЕЩЕНИЯ ---
+    if data.startswith("floor_"):
+        parts = data.replace("floor_", "").split("_", 1)
+        if parts[0].isdigit():
+            floor_id = int(parts[0])
+            action = parts[1] if len(parts) > 1 else ''
+            if action == 'del':
+                await _do_delete_floor(query, floor_id)
+            else:
+                await _show_floor_card(query, floor_id)
+            return True
+
+    return False
+
+
+async def _show_floors_list(query, object_id):
+    """Список помещений объекта."""
+    from modules.objects import get_object
+    obj = get_object(object_id)
+    obj_name = obj['name'] if obj else f'Объект {object_id}'
+
+    floors = core_floors.get_floors(object_id)
+    text = f"🏠 *Помещения «{obj_name}»*\n\n{core_floors.list_floors_text(object_id)}"
+
+    buttons = []
+    for f in floors:
+        name = f.get('floor_name') or f"Этаж {f.get('floor_number')}"
+        rooms = core_floors.count_rooms(f['id'])
+        buttons.append([InlineKeyboardButton(
+            f"🏠 {name} ({rooms} комн.)",
+            callback_data=f"floor_{f['id']}"
+        )])
+    buttons.append([InlineKeyboardButton("➕ Добавить помещение", callback_data=f"floor_add_{object_id}")])
+    buttons.append([InlineKeyboardButton("⬅️ К объекту", callback_data=f"obj_{object_id}")])
+
+    try:
+        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN,
+                                      reply_markup=InlineKeyboardMarkup(buttons))
+    except Exception as e:
+        print(f"⚠️ _show_floors_list: {e}", flush=True)
+
+
+async def _show_floor_card(query, floor_id):
+    """Карточка помещения."""
+    f = core_floors.get_floor(floor_id)
+    if not f:
+        try:
+            await query.edit_message_text("❌ Помещение не найдено")
+        except Exception:
+            pass
+        return
+
+    object_id = f.get('object_id')
+    name = f.get('floor_name') or f"Этаж {f.get('floor_number')}"
+    rooms = core_floors.get_rooms_of_floor(floor_id)
+
+    lines = [f"🏠 *{name}*"]
+    if f.get('area_sqm'):
+        lines.append(f"📐 Площадь: {f['area_sqm']} м²")
+    if f.get('height_avg'):
+        lines.append(f"📏 Высота: {f['height_avg']} см")
+    lines.append("")
+    lines.append(f"📦 *Комнаты ({len(rooms)}):*")
+    if not rooms:
+        lines.append("_Пока нет комнат_")
+    else:
+        for r in rooms:
+            lines.append(f"  • {r['name']}")
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📦 Комнаты помещения", callback_data=f"floor_rooms_{floor_id}")],
+        [InlineKeyboardButton("⚡ ЭОМ объекта", callback_data=f"obj_elec_{object_id}")],
+        [InlineKeyboardButton("✏️ Переименовать", callback_data=f"floor_rename_{floor_id}")],
+        [InlineKeyboardButton("🗑 Удалить", callback_data=f"floor_{floor_id}_del")],
+        [InlineKeyboardButton("⬅️ К помещениям", callback_data=f"obj_floors_{object_id}")],
+    ])
+    try:
+        await query.edit_message_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+    except Exception as e:
+        print(f"⚠️ _show_floor_card: {e}", flush=True)
+
+
+async def _do_delete_floor(query, floor_id):
+    f = core_floors.get_floor(floor_id)
+    if not f:
+        return
+    object_id = f.get('object_id')
+    core_floors.delete_floor(floor_id)
+    await _show_floors_list(query, object_id)
+
+
+async def handle_obj_elec_callback(query, context, data):
+    """ЭОМ объекта — основной экран."""
+    if not core_elec:
+        try:
+            await query.edit_message_text("❌ Модуль ЭОМ не загружен")
+        except Exception:
+            pass
+        return True
+
+    # --- ОСНОВНОЙ ЭКРАН ЭОМ ---
+    if data.startswith("obj_elec_setup_"):
+        object_id = int(data.replace("obj_elec_setup_", ""))
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("1-фазное (220В)", callback_data=f"obj_elec_set_{object_id}_1")],
+            [InlineKeyboardButton("3-фазное (380В)", callback_data=f"obj_elec_set_{object_id}_3")],
+            [InlineKeyboardButton("⬅️ К ЭОМ", callback_data=f"obj_elec_{object_id}")],
+        ])
+        try:
+            await query.edit_message_text(
+                "⚡ *Тип электроснабжения объекта*\n\nВыбери:",
+                parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("obj_elec_set_"):
+        parts = data.replace("obj_elec_set_", "").rsplit("_", 1)
+        object_id = int(parts[0])
+        phase = int(parts[1])
+        voltage = 380 if phase == 3 else 220
+        try:
+            core_elec.set_supply(object_id, phase_count=phase, voltage=voltage,
+                                 meter_type='трёхфазный' if phase == 3 else 'однофазный')
+        except Exception as e:
+            print(f"⚠️ set_supply: {e}", flush=True)
+        await _show_obj_elec(query, object_id)
+        return True
+
+    if data.startswith("obj_elec_"):
+        object_id = int(data.replace("obj_elec_", ""))
+        await _show_obj_elec(query, object_id)
+        return True
+
+    return False
+
+
+async def _show_obj_elec(query, object_id):
+    """Показ основного экрана ЭОМ объекта."""
+    from modules.objects import get_object
+    obj = get_object(object_id)
+    obj_name = obj['name'] if obj else f'Объект {object_id}'
+
+    text = f"🏢 *{obj_name}*\n\n" + core_elec.format_elec_full(object_id)
+
+    supply = core_elec.get_supply(object_id)
+    supply_btn = "⚙️ Настроить питание" if not supply else "⚙️ Изменить питание"
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton(supply_btn, callback_data=f"obj_elec_setup_{object_id}")],
+        [InlineKeyboardButton("⬅️ К объекту", callback_data=f"obj_{object_id}")],
+    ])
+
+    try:
+        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+    except Exception as e:
+        print(f"⚠️ _show_obj_elec: {e}", flush=True)
+        try:
+            await query.message.chat.send_message(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        except Exception:
+            pass
+
+
 async def handle_groups_callback(query, context, data):
     """Управление группами ЭОМ."""
     if not core_elec:
@@ -3307,7 +3503,39 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
             pass
         return
 
-    # --- План комнаты (PNG) ---
+    # --- План комнаты (PNG) ---    # --- Помещения ---
+    if data.startswith("obj_floors_") or data.startswith("floor_"):
+        handled = await handle_floors_callback(query, context, data)
+        if handled:
+            return
+
+    # --- ЭОМ объекта ---
+    if data.startswith("obj_elec_"):
+        handled = await handle_obj_elec_callback(query, context, data)
+        if handled:
+            return
+    # --- Помещения ---
+
+    if data.startswith("obj_floors_") or data.startswith("floor_"):
+
+        handled = await handle_floors_callback(query, context, data)
+
+        if handled:
+
+            return
+
+
+    # --- ЭОМ объекта ---
+
+    if data.startswith("obj_elec_"):
+
+        handled = await handle_obj_elec_callback(query, context, data)
+
+        if handled:
+
+            return
+
+
     if data.startswith("room_groups_") or data.startswith("group_"):
         handled = await handle_groups_callback(query, context, data)
         if handled:
