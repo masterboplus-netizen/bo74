@@ -1,0 +1,150 @@
+        pass
+
+
+async def _show_comm_card(query, context, comm_id):
+    """Карточка коммуникации."""
+    c = get_comm(comm_id)
+    if not c:
+        try:
+            await query.edit_message_text("❌ Не найдено")
+        except Exception:
+            pass
+        return
+    label = get_comm_type_label(c.get('comm_type'))
+    text = f"🔧 *Коммуникация #{comm_id}*\n\n{label}\n"
+    text += f"🧱 Стена: {c.get('wall') or '?'}\n"
+    if c.get('offset_x') is not None:
+        text += f"📐 От угла: {c['offset_x']} см\n"
+    if c.get('offset_y') is not None:
+        text += f"📏 От пола: {c['offset_y']} см\n"
+    if c.get('diameter'):
+        text += f"⭕ Диаметр: {c['diameter']} мм\n"
+    if c.get('voltage'):
+        text += f"⚡ Напряжение: {c['voltage']} В\n"
+    if c.get('size'):
+        text += f"📦 Размер: {c['size']} см\n"
+    buttons = [
+        [InlineKeyboardButton("✏️ От угла", callback_data=f"comm_edit_{comm_id}_offset_x"),
+         InlineKeyboardButton("✏️ От пола", callback_data=f"comm_edit_{comm_id}_offset_y")],
+    ]
+    ctype = c.get('comm_type')
+    if ctype == 'elec_panel':
+        buttons.append([InlineKeyboardButton("✏️ Размер щита", callback_data=f"comm_edit_{comm_id}_size")])
+    elif ctype in ('water_cold', 'water_hot', 'sewer', 'heating', 'gas', 'drain', 'vent'):
+        buttons.append([InlineKeyboardButton("✏️ Диаметр", callback_data=f"comm_edit_{comm_id}_diameter")])
+    buttons.append([InlineKeyboardButton("🗑 Удалить", callback_data=f"comm_del_{comm_id}")])
+    buttons.append([InlineKeyboardButton("⬅️ К коммуникациям", callback_data=f"room_comms_{c['room_id']}")])
+    try:
+        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(buttons))
+    except Exception:
+        pass
+
+
+async def _comm_save_from_context(query, context, room_id):
+    """Сохраняет коммуникацию из context.user_data."""
+    ctype = context.user_data.get('comm_type')
+    wall = context.user_data.get('comm_wall')
+    offset_x = context.user_data.get('comm_offset_x')
+    offset_y = context.user_data.get('comm_offset_y')
+    if not all([room_id, ctype, wall]):
+        try:
+            await query.edit_message_text("❌ Потерялись данные")
+        except Exception:
+            pass
+        return
+    try:
+        add_comm(room_id=room_id, comm_type=ctype, wall=wall,
+                 offset_x=offset_x, offset_y=offset_y)
+    except Exception as e:
+        print(f"⚠️ add_comm: {e}", flush=True)
+        return
+    for k in ['comm_room_id', 'comm_type', 'comm_wall', 'comm_offset_x',
+              'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_size',
+              'comm_size_w', 'comm_size_h', 'comm_size_d', 'waiting_for']:
+        context.user_data[k] = None
+    label = get_comm_type_label(ctype)
+    text = f"✅ *{label}* добавлена!\n\n🧱 {wall}\n"
+    if offset_x is not None:
+        text += f"📐 От угла: {offset_x} см\n"
+    if offset_y is not None:
+        text += f"📏 От пола: {offset_y} см\n"
+    try:
+        await query.edit_message_text(
+            text, parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Ещё", callback_data=f"comm_add_{room_id}")],
+                [InlineKeyboardButton("✅ К списку", callback_data=f"room_comms_{room_id}")],
+            ])
+        )
+    except Exception:
+        pass
+
+
+# ============================================================
+# ПРОЁМЫ (отдельные) — CALLBACK'И
+# ============================================================
+
+async def handle_openings_callback(query, context, data):
+    """Обработчик callback'ов проёмов."""
+    if data.startswith("openings_list_"):
+        room_id = int(data.replace("openings_list_", ""))
+        openings = get_openings(room_id)
+        room = get_room(room_id)
+        room_name = room['name'] if room else '?'
+        text = f"🚪 *Проёмы в комнате «{room_name}»*\n\n"
+        if not openings:
+            text += "_Пока проёмов нет._"
+        else:
+            for i, o in enumerate(openings, 1):
+                text += f"{i}. {format_opening(o)}\n"
+        buttons = []
+        for o in openings:
+            label = OPENING_TYPES.get(o.get('opening_type'), '?')
+            wall = o.get('wall_pos') or '?'
+            buttons.append([InlineKeyboardButton(f"{label} ({wall})", callback_data=f"opening_show_{o['id']}")])
+        buttons.append([InlineKeyboardButton("➕ Добавить проём", callback_data=f"opening_add_{room_id}")])
+        buttons.append([InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")])
+        try:
+            await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(buttons))
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("opening_add_"):
+        room_id = int(data.replace("opening_add_", ""))
+        buttons = []
+        for code, label in OPENING_TYPES.items():
+            buttons.append([InlineKeyboardButton(label, callback_data=f"opening_type_{room_id}_{code}")])
+        buttons.append([InlineKeyboardButton("⬅️ Отмена", callback_data=f"openings_list_{room_id}")])
+        try:
+            await query.edit_message_text(
+                "🚪 *Новый проём*\n\nВыбери тип:",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("opening_type_"):
+        parts = data.replace("opening_type_", "").split("_", 1)
+        room_id = int(parts[0])
+        otype = parts[1] if len(parts) > 1 else 'window'
+        context.user_data['opening_room_id'] = room_id
+        context.user_data['opening_type'] = otype
+        label = OPENING_TYPES.get(otype, otype)
+        buttons = [
+            [InlineKeyboardButton("1. Напротив", callback_data=f"opening_wall_{room_id}_напротив")],
+            [InlineKeyboardButton("2. Слева", callback_data=f"opening_wall_{room_id}_слева")],
+            [InlineKeyboardButton("3. У входа", callback_data=f"opening_wall_{room_id}_у входа")],
+            [InlineKeyboardButton("4. Справа", callback_data=f"opening_wall_{room_id}_справа")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data=f"openings_list_{room_id}")],
+        ]
+        try:
+            await query.edit_message_text(
+                f"🚪 *{label}*\n\nНа какой стене?",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        except Exception:
+            pass

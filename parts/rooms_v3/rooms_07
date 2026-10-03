@@ -1,0 +1,150 @@
+async def handle_wall_round_callback(query, context, data):
+    """Обработчик всех callback'ов обхода стен.
+
+    Возвращает True, если обработано.
+    """
+    # --- СТАРТ / ПРОДОЛЖЕНИЕ ---
+    if data.startswith("wall_round_start_"):
+        room_id = int(data.replace("wall_round_start_", ""))
+        await _wall_round_start(query, context, room_id)
+        return True
+
+    # --- СБРОС ---
+    if data.startswith("wall_round_reset_"):
+        room_id = int(data.replace("wall_round_reset_", ""))
+        walls = get_measures(room_id, category='wall')
+        for w in walls:
+            delete_measure(w['id'])
+        try:
+            db_commit("UPDATE rooms SET walls_started_at = NULL, walls_completed_at = NULL WHERE id = ?", (room_id,))
+        except Exception:
+            pass
+        _clear_wall_draft(room_id)
+        _reset_wall_state(context)
+        state = _get_wall_state(context)
+        state['step_num'] = 1
+        state['step_name'] = 'flags'
+        await _show_wall_step(query, context, room_id, 1, phase='flags', use_photo=True)
+        return True
+
+    # --- ФЛАГИ (галочки) ---
+    if data.startswith("wall_round_flag_"):
+        parts = data.replace("wall_round_flag_", "").rsplit("_", 1)
+        flag = parts[0]
+        room_id = int(parts[1])
+        state = _get_wall_state(context)
+        flags = state.get('flags') or dict(DEFAULT_FLAGS)
+        flags[flag] = not flags.get(flag, False)
+        state['flags'] = flags
+        _save_wall_draft(context, room_id)
+        step = state.get('step_num') or 1
+        # use_photo=False — обновление галочки, без мигания
+        await _show_wall_step(query, context, room_id, step, phase='flags', use_photo=False)
+        return True
+
+    # --- ФЛАГИ → ДАЛЬШЕ ---
+    if data.startswith("wall_round_flags_done_"):
+        room_id = int(data.replace("wall_round_flags_done_", ""))
+        state = _get_wall_state(context)
+        state['step_name'] = 'plane'
+        _save_wall_draft(context, room_id)
+        await _show_wall_plane(query, context, room_id)
+        return True
+
+    # --- ПРОПУСК СТЕНЫ ---
+    if data.startswith("wall_round_skip_"):
+        room_id = int(data.replace("wall_round_skip_", ""))
+        state = _get_wall_state(context)
+        step = state.get('step_num') or 1
+        if step >= 4:
+            complete_walls_round(room_id)
+            _clear_wall_draft(room_id)
+            _reset_wall_state(context)
+            await _wall_finish(query, context, room_id, "⏭ Стена пропущена")
+            return True
+        # Сбрасываем state и идём к следующей стене
+        _reset_wall_state(context)
+        state = _get_wall_state(context)
+        state['step_num'] = step + 1
+        state['step_name'] = 'flags'
+        _save_wall_draft(context, room_id)
+        await _show_wall_step(query, context, room_id, step + 1, phase='flags')
+        return True
+
+    # --- ПЛОСКОСТЬ ---
+    if data.startswith("wall_round_plane_straight_"):
+        room_id = int(data.replace("wall_round_plane_straight_", ""))
+        context.user_data['wall_room_id'] = room_id
+        state = _get_wall_state(context)
+        state['plane'] = 'straight'
+        state['step_name'] = 'length'
+        _save_wall_draft(context, room_id)
+        await _show_wall_length(query, context, room_id, state.get('step_num') or 1)
+        return True
+
+    if data.startswith("wall_round_plane_wavy_"):
+        room_id = int(data.replace("wall_round_plane_wavy_", ""))
+        context.user_data['wall_room_id'] = room_id
+        state = _get_wall_state(context)
+        state['plane'] = 'wavy'
+        state['step_name'] = 'plane_wavy'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = 'wall_round_plane_bottom'
+        step = state.get('step_num') or 1
+        caption = (
+            f"🧱 *Стена {step}*\n\n"
+            f"📏 *Замер в 3 точках:*\n\n"
+            f"Введи НИЗ стены (СМ):"
+        )
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ В комнату", callback_data=f"room_{room_id}")],
+        ])
+        # Фото для этого шага нет (нужна специальная схема «вид на стену»)
+        # Просто текстовое сообщение — БЕЗ вводящего в заблуждение PNG
+        try:
+            await query.edit_message_text(
+                caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        except Exception:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            try:
+                await query.get_bot().send_message(
+                    chat_id=query.message.chat_id, text=caption,
+                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                )
+            except Exception as e:
+                print(f"⚠️ plane_wavy send: {e}", flush=True)
+        return True
+
+    # --- ПРОЁМЫ ПРИ ОБХОДЕ ---
+    if data.startswith("wall_round_open_win_"):
+        room_id = int(data.replace("wall_round_open_win_", ""))
+        return await _wall_round_open_start(query, context, room_id, 'window')
+
+    if data.startswith("wall_round_open_door_"):
+        room_id = int(data.replace("wall_round_open_door_", ""))
+        return await _wall_round_open_start(query, context, room_id, 'door_interior')
+
+    if data.startswith("wall_round_open_vent_"):
+        room_id = int(data.replace("wall_round_open_vent_", ""))
+        return await _wall_round_open_start(query, context, room_id, 'vent')
+
+    if data.startswith("wall_round_openings_done_"):
+        room_id = int(data.replace("wall_round_openings_done_", ""))
+        state = _get_wall_state(context)
+        state['step_name'] = 'angle'
+        _save_wall_draft(context, room_id)
+        await _show_wall_angle(query, context, room_id, state.get('step_num') or 1)
+        return True
+
+    # --- УГОЛ ---
+    if data.startswith("wall_round_angle_90_"):
+        room_id = int(data.replace("wall_round_angle_90_", ""))
+        state = _get_wall_state(context)
+        state['angle_value'] = 90
+        state['angle_method'] = '90'
+        state['step_name'] = 'angle_done'
+        _save_wall_draft(context, room_id)

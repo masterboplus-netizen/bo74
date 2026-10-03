@@ -1,0 +1,150 @@
+                caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        except Exception:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            try:
+                await query.get_bot().send_message(
+                    chat_id=query.message.chat_id, text=caption,
+                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                )
+            except Exception as e:
+                print(f"⚠️ plane (wavy) send: {e}", flush=True)
+        return
+
+    spec_step = spec.get_wall_step('plane', n=step, pos=WALL_NAMES.get(step, '?'))
+    if spec_step:
+        caption = f"{spec_step.get('title', '')}\n\n{spec_step.get('subtitle', '')}"
+        if spec_step.get('hint'):
+            caption += f"\n\n{spec_step['hint']}"
+        image = spec_step.get('image')
+    else:
+        caption = (
+            f"🧱 *Стена {step}*\n\n"
+            f"📐 *Плоскость стены:*\n\n"
+            f"Стена ровная или кривая по высоте?\n\n"
+            f"_Если стена «горбатая» — нужно замерить в 3 точках._"
+        )
+        image = f"wall_scheme_s{step}_plane.png"
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Ровная", callback_data=f"wall_round_plane_straight_{room_id}")],
+        [InlineKeyboardButton("📏 Разная (3 точки)", callback_data=f"wall_round_plane_wavy_{room_id}")],
+        [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, image)
+
+
+async def _show_wall_length(query, context, room_id, step):
+    """Экран длины стены."""
+    state = _get_wall_state(context)
+    state['step_num'] = step
+    state['step_name'] = 'length'
+    _save_wall_draft(context, room_id)
+
+    context.user_data['waiting_for'] = 'wall_round_length'
+    pos = WALL_NAMES.get(step, '?')
+
+    spec_step = spec.get_wall_step('length', n=step, pos=pos)
+    if spec_step:
+        caption = f"{spec_step.get('title', '')}\n\n{spec_step.get('subtitle', '')}"
+        if spec_step.get('hint'):
+            caption += f"\n\n{spec_step['hint']}"
+        if spec_step.get('prompt'):
+            caption += f"\n\n{spec_step['prompt']}"
+        image = spec_step.get('image')
+    else:
+        caption = (
+            f"🧱 *Стена {step} — {pos}*\n\n"
+            f"📏 *Длина стены* (СМ):\n\n"
+            f"⚠️ *ВАЖНО:* дальномер в режиме «от ЗАДНЕЙ СТЕНКИ».\n\n"
+            f"Напиши число и отправь."
+        )
+        image = f"wall_scheme_s{step}_length.png"
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, image)
+
+
+async def _show_wall_openings(query, context, room_id, step):
+    """Экран проёмов стены."""
+    state = _get_wall_state(context)
+    state['step_num'] = step
+    state['step_name'] = 'openings'
+    _save_wall_draft(context, room_id)
+
+    context.user_data['waiting_for'] = None
+    pos = WALL_NAMES.get(step, '?')
+    length_cm = state.get('length') or 0
+    openings = get_openings_by_wall(room_id, pos)
+
+    text = f"🧱 *Стена {step} — {pos}*\n📏 Длина: *{length_cm} см*\n\n"
+    if openings:
+        text += f"🚪 *Проёмы ({len(openings)}):*\n"
+        for o in openings:
+            text += f"  • {format_opening(o)}\n"
+    else:
+        text += "🚪 *Есть ли на этой стене проёмы?*"
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🪟 Окно", callback_data=f"wall_round_open_win_{room_id}"),
+         InlineKeyboardButton("🚪 Дверь", callback_data=f"wall_round_open_door_{room_id}")],
+        [InlineKeyboardButton("💨 Вентиляция", callback_data=f"wall_round_open_vent_{room_id}")],
+        [InlineKeyboardButton("✅ Готово", callback_data=f"wall_round_openings_done_{room_id}")],
+    ])
+    await _send_png_or_edit(query, text, kb, None)
+
+
+async def _show_wall_angle(query, context, room_id, step):
+    """Экран угла между стенами."""
+    state = _get_wall_state(context)
+    state['step_num'] = step
+    state['step_name'] = 'angle'
+    _save_wall_draft(context, room_id)
+
+    context.user_data['waiting_for'] = None
+    length_cm = state.get('length') or 0
+
+    spec_step = spec.get_wall_step('angle', n=step, pos=WALL_NAMES.get(step, '?'), length=length_cm)
+    if spec_step:
+        caption = f"{spec_step.get('title', '')}\n\n{spec_step.get('subtitle', '')}"
+        if spec_step.get('hint'):
+            caption += f"\n\n{spec_step['hint']}"
+        image = spec_step.get('image')
+    else:
+        caption = (
+            f"✅ Длина: *{length_cm} см*\n\n"
+            f"📐 *Угол между этой стеной и следующей:*\n\n"
+            f"Обычно 90° — прямой угол."
+        )
+        image = f"wall_scheme_s{step}_angle.png"
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📐 90° (прямой)", callback_data=f"wall_round_angle_90_{room_id}")],
+        [InlineKeyboardButton("📏 60-80-100", callback_data=f"wall_round_angle_60_{room_id}")],
+        [InlineKeyboardButton("📏 100-100", callback_data=f"wall_round_angle_100_{room_id}")],
+        [InlineKeyboardButton("✏️ Угол в °", callback_data=f"wall_round_angle_deg_{room_id}")],
+        [InlineKeyboardButton("⬅️ В комнату", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, image)
+
+
+# ============================================================
+# НИШИ — ПОКАЗ ЭКРАНОВ
+# ============================================================
+
+async def _show_niche_count(query, context, room_id):
+    """Сколько нишей на стене?"""
+    state = _get_wall_state(context)
+    state['step_name'] = 'niche_count'
+    _save_wall_draft(context, room_id)
+    context.user_data['waiting_for'] = None
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("1", callback_data=f"wall_niche_count_1_{room_id}")],
+        [InlineKeyboardButton("2", callback_data=f"wall_niche_count_2_{room_id}")],
+        [InlineKeyboardButton("3", callback_data=f"wall_niche_count_3_{room_id}")],

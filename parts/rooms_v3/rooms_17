@@ -1,0 +1,150 @@
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return
+
+    # --- Список комнат объекта ---
+    if data.startswith("rooms_list_obj_"):
+        object_id = int(data.replace("rooms_list_obj_", ""))
+        await show_rooms_list(update, context, object_id)
+        return
+
+    # --- Добавление комнаты ---
+    if data.startswith("room_add_"):
+        object_id = int(data.replace("room_add_", ""))
+        context.user_data['waiting_for'] = 'room_name'
+        context.user_data['room_object_id'] = object_id
+        try:
+            await query.edit_message_text(
+                "📦 *Новая комната*\n\nНапиши название:",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"rooms_list_obj_{object_id}")]
+                ])
+            )
+        except Exception:
+            pass
+        return
+
+    if data.startswith("room_type_"):
+        parts = data.replace("room_type_", "").split("_", 1)
+        object_id = int(parts[0])
+        room_type = parts[1] if len(parts) > 1 else 'rough'
+        name = context.user_data.get('room_name_pending') or 'Комната'
+        new_room_id = create_room(object_id, name, room_type=room_type)
+        if new_room_id:
+            context.user_data['room_name_pending'] = None
+            context.user_data['waiting_for'] = None
+            await show_room_card(update, context, new_room_id)
+        else:
+            try:
+                await query.edit_message_text("❌ Не удалось создать комнату")
+            except Exception:
+                pass
+        return
+
+    # --- Удаление комнаты ---
+    if data.startswith("room_del_"):
+        room_id = int(data.replace("room_del_", ""))
+        room = get_room(room_id)
+        if not room:
+            return
+        try:
+            await query.edit_message_text(
+                f"🗑 *Удалить «{room['name']}»?*",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🗑 Да, удалить", callback_data=f"room_delok_{room_id}")],
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return
+
+    if data.startswith("room_delok_"):
+        room_id = int(data.replace("room_delok_", ""))
+        room = get_room(room_id)
+        if room:
+            object_id = room['object_id']
+            delete_room(room_id)
+            await show_rooms_list(update, context, object_id)
+        return
+
+    # --- Прогресс / размеры / комм / мебель / задачи / фото ---
+    if data.startswith("room_progress_"):
+        room_id = int(data.replace("room_progress_", ""))
+        await _show_room_progress(query, context, room_id)
+        return
+
+    if data.startswith("room_measures_"):
+        room_id = int(data.replace("room_measures_", ""))
+        await _show_room_measures(query, context, room_id)
+        return
+
+    if data.startswith("room_objects_"):
+        room_id = int(data.replace("room_objects_", ""))
+        await _show_room_objects(query, context, room_id)
+        return
+
+    if data.startswith("room_tasks_"):
+        room_id = int(data.replace("room_tasks_", ""))
+        try:
+            await query.edit_message_text(
+                "📋 Задачи комнаты — в разработке.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Назад", callback_data=f"room_{room_id}")]
+                ])
+            )
+        except Exception:
+            pass
+        return
+
+    if data.startswith("room_photos_"):
+        room_id = int(data.replace("room_photos_", ""))
+        try:
+            await query.edit_message_text(
+                "📸 Фото комнаты — в разработке.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Назад", callback_data=f"room_{room_id}")]
+                ])
+            )
+        except Exception:
+            pass
+        return
+
+    # --- Коммуникации ---
+    if data.startswith("comm_") or data.startswith("room_comms_"):
+        handled = await handle_comm_callback(query, context, data)
+        if handled:
+            return
+
+    # --- Проёмы (отдельные) ---
+    if data.startswith("openings_") or data.startswith("opening_"):
+        handled = await handle_openings_callback(query, context, data)
+        if handled:
+            return
+
+    # --- Обход стен ---
+    if (data.startswith("wall_round_") or data.startswith("wall_niche_")):
+        handled = await handle_wall_round_callback(query, context, data)
+        if handled:
+            return
+
+    # --- room_start / высота ---
+    if data.startswith("room_start_"):
+        room_id = int(data.replace("room_start_", ""))
+        await _handle_room_start(query, context, room_id)
+        return
+
+    if data.startswith("room_height_"):
+        handled = await _handle_height_callback(query, context, data)
+        if handled:
+            return
+
+    # --- room_<id> — карточка комнаты ---
+    _exclude = ("room_add_", "room_del_", "room_delok_", "room_tasks_",
+                "room_measures_", "room_comms_", "room_objects_", "room_photos_",

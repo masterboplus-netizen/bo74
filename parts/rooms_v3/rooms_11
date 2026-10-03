@@ -1,0 +1,150 @@
+        bottom = state.get('plane_bottom') or 0
+        middle = state.get('plane_middle') or 0
+        # Отклонение — насколько «кривая» стена
+        avg = (bottom + middle + val) / 3
+        deviation = max(bottom, middle, val) - min(bottom, middle, val)
+        caption = (
+            f"✅ *Замер стены завершён!*\n\n"
+            f"🧱 *Стена {step_num} — {pos}*\n"
+            f"• Низ: *{bottom} см*\n"
+            f"• Середина: *{middle} см*\n"
+            f"• Верх: *{val} см*\n\n"
+            f"📊 Отклонение: *{round(deviation, 1)} см*\n"
+            f"📏 Средняя высота: *{round(avg, 1)} см*\n\n"
+            f"Дальше — *длина стены*."
+        )
+        await update.message.reply_text(caption, parse_mode=ParseMode.MARKDOWN)
+        # Непрерывный переход: сразу показываем экран длины
+        await _show_wall_length_from_update(update, context, room_id, step_num)
+        return
+
+    if step == 'wall_round_angle_val':
+        try: val = float(text_val)
+        except ValueError:
+            await update.message.reply_text("❌ Нужно число"); return
+        method = state.get('angle_method') or '60'
+        if method == '60':
+            c = (60*60 + 80*80 - val*val) / (2*60*80)
+            c = max(-1, min(1, c))
+            angle_deg = round(math.degrees(math.acos(c)), 1)
+        elif method == '100':
+            c = (100*100 + 100*100 - val*val) / (2*100*100)
+            c = max(-1, min(1, c))
+            angle_deg = round(math.degrees(math.acos(c)), 1)
+        else:
+            angle_deg = val
+        state['angle_value'] = angle_deg
+        state['step_name'] = 'angle_done'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = None
+        await _after_angle_from_update(update, context, room_id)
+        return
+
+    if step == 'wall_niche_width':
+        try: val = float(text_val)
+        except ValueError:
+            await update.message.reply_text("❌ Нужно число"); return
+        temp = state.get('niche_temp') or {}
+        temp['width'] = round(val, 2)
+        state['niche_temp'] = temp
+        state['step_name'] = 'niche_depth'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = 'wall_niche_depth'
+        await _show_niche_depth_from_update(update, context, room_id)
+        return
+
+    if step == 'wall_niche_depth':
+        try: val = float(text_val)
+        except ValueError:
+            await update.message.reply_text("❌ Нужно число"); return
+        temp = state.get('niche_temp') or {}
+        temp['depth'] = round(val, 2)
+        state['niche_temp'] = temp
+        state['step_name'] = 'niche_height'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = 'wall_niche_height'
+        await _show_niche_height_from_update(update, context, room_id)
+        return
+
+    if step == 'wall_niche_height':
+        try: val = float(text_val)
+        except ValueError:
+            await update.message.reply_text("❌ Нужно число"); return
+        temp = state.get('niche_temp') or {}
+        temp['height'] = round(val, 2)
+        state['niche_temp'] = temp
+        state['step_name'] = 'niche_plane'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = None
+        await _show_niche_plane_from_update(update, context, room_id)
+        return
+
+    if step == 'wall_niche_top_width':
+        try: val = float(text_val)
+        except ValueError:
+            await update.message.reply_text("❌ Нужно число"); return
+        temp = state.get('niche_temp') or {}
+        temp['width_top'] = round(val, 2)
+        state['niche_temp'] = temp
+        state['step_name'] = 'niche_top_depth'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = 'wall_niche_top_depth'
+        await _show_niche_top_depth_from_update(update, context, room_id)
+        return
+
+    if step == 'wall_niche_top_depth':
+        try: val = float(text_val)
+        except ValueError:
+            await update.message.reply_text("❌ Нужно число"); return
+        temp = state.get('niche_temp') or {}
+        temp['depth_top'] = round(val, 2)
+        niches = state.get('niches') or []
+        niches.append(temp)
+        state['niches'] = niches
+        state['niche_temp'] = {}
+        total = state.get('niche_count') or 1
+        current = state.get('niche_current') or 1
+        if current < total:
+            state['niche_current'] = current + 1
+            state['step_name'] = 'niche_width'
+            _save_wall_draft(context, room_id)
+            context.user_data['waiting_for'] = 'wall_niche_width'
+            await update.message.reply_text(
+                f"✅ Ниша {current}\n\n🕳 *Ниша {current+1}* — Ширина (СМ):",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        state['step_name'] = 'angle_done'
+        _save_wall_draft(context, room_id)
+        await _after_angle_from_update(update, context, room_id)
+        return
+
+    if step in ('wall_rounded_radius', 'wall_wavy_note', 'wall_hidden_note'):
+        state['flags'] = state.get('flags') or dict(DEFAULT_FLAGS)
+        if step == 'wall_rounded_radius':
+            state['flags']['rounded'] = True
+        elif step == 'wall_wavy_note':
+            state['flags']['wavy'] = True
+        else:
+            state['flags']['hidden'] = True
+        state['step_name'] = 'angle_done'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = None
+        await _after_angle_from_update(update, context, room_id)
+        return
+
+    if step in ('wall_round_opening_width', 'wall_round_opening_height'):
+        await _handle_wall_round_opening_input(update, context, step)
+        return
+
+    context.user_data['waiting_for'] = None
+    await update.message.reply_text("⚠️ Неизвестный шаг.")
+
+
+async def _after_angle_from_update(update, context, room_id):
+    """После угла (через update) — остаток шагов или сохранение.
+
+    ЧИСТАЯ ЛОГИКА: см. _after_angle.
+    """
+    state = _get_wall_state(context)
+    remaining = state.get('remaining_steps')

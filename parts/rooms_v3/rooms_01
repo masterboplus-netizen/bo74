@@ -1,0 +1,150 @@
+    except Exception as e:
+        print(f"⚠️ _load_wall_draft: {e}", flush=True)
+        return None
+    if not draft:
+        return None
+    draft = dict(draft)
+    state = _get_wall_state(context)
+    state['step_num'] = draft.get('step_num') or 1
+    state['step_name'] = draft.get('step_name') or 'flags'
+    try:
+        flags = json.loads(draft.get('flags') or '{}')
+        state['flags'] = flags if flags else dict(DEFAULT_FLAGS)
+    except Exception:
+        state['flags'] = dict(DEFAULT_FLAGS)
+    state['length'] = draft.get('length')
+    state['plane'] = draft.get('plane')
+    state['angle_value'] = draft.get('angle_value')
+    state['angle_method'] = draft.get('angle_method')
+    try:
+        state['niches'] = json.loads(draft.get('niches') or '[]')
+    except Exception:
+        state['niches'] = []
+    state['niche_count'] = draft.get('niche_count') or 0
+    state['niche_current'] = draft.get('niche_current') or 0
+    try:
+        state['niche_temp'] = json.loads(draft.get('niche_temp') or '{}')
+    except Exception:
+        state['niche_temp'] = {}
+    try:
+        rs = json.loads(draft.get('remaining_steps') or 'null')
+        # Сохраняем None как маркер «первый заход», [] как «всё обработано»
+        state['remaining_steps'] = rs
+    except Exception:
+        state['remaining_steps'] = None
+    return state['step_name']
+
+
+def _clear_wall_draft(room_id):
+    """Удаляет черновик стены."""
+    try:
+        db_commit("DELETE FROM wall_drafts WHERE room_id = ?", (room_id,))
+    except Exception as e:
+        print(f"⚠️ _clear_wall_draft: {e}", flush=True)
+
+
+# ============================================================
+# ХЕЛПЕРЫ
+# ============================================================
+
+def _current_wall_pos(context):
+    """Текущая позиция стены (строка) из state."""
+    state = _get_wall_state(context)
+    return WALL_NAMES.get(state.get('step_num') or 1, '?')
+
+
+def _wall_flags_list(context):
+    """Возвращает список флагов, которые надо обработать после угла.
+
+    ПРАВИЛО:
+    - wavy не добавляем, если плоскость УЖЕ пройдена через 3 точки (plane='wavy').
+    - Функция НЕ очищает флаги — этим занимается _after_angle.
+    """
+    state = _get_wall_state(context)
+    flags = state.get('flags') or {}
+    steps = []
+    if flags.get('niche'):
+        steps.append('niche')
+    if flags.get('rounded'):
+        steps.append('rounded')
+    if flags.get('wavy') and state.get('plane') != 'wavy':
+        steps.append('wavy')
+    if flags.get('hidden'):
+        steps.append('hidden')
+    return steps
+
+
+def _image_path(filename):
+    """Путь к PNG-схеме."""
+    if not filename:
+        return None
+    base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.join(base, "docs", "images", filename)
+
+
+async def _send_png_or_edit(query, caption, kb, png_filename=None):
+    """Отправляет фото или редактирует сообщение.
+
+    Если png есть — удаляет старое сообщение, шлёт фото в тот же чат.
+    Если png нет — пытается edit, при неудаче — новое сообщение.
+    """
+    png = _image_path(png_filename)
+    chat_id = query.message.chat_id
+
+    if png and os.path.exists(png):
+        # Удаляем старое сообщение (в try — может быть уже удалено)
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        # Отправляем фото — ВСЕГДА в chat_id (не через query.message.chat)
+        try:
+            with open(png, "rb") as f:
+                await query.get_bot().send_photo(
+                    chat_id=chat_id,
+                    photo=f, caption=caption,
+                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                )
+            return
+        except Exception as e:
+            print(f"⚠️ send_photo: {e}", flush=True)
+        # Fallback — просто текст, тоже через bot
+        try:
+            await query.get_bot().send_message(
+                chat_id=chat_id, text=caption,
+                parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+            return
+        except Exception as e:
+            print(f"⚠️ send_message fallback: {e}", flush=True)
+        return
+
+    # PNG нет — редактируем существующее сообщение.
+    # Если это ФОТО — используем edit_message_caption, если текст — edit_message_text.
+    msg = query.message
+    is_photo = bool(getattr(msg, "photo", None))
+    print(f"🟡 _send_png_or_edit (no png): is_photo={is_photo}, caption={caption[:60]!r}", flush=True)
+
+    try:
+        if is_photo:
+            await query.edit_message_caption(
+                caption=caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        else:
+            await query.edit_message_text(
+                caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        print(f"🟢 _send_png_or_edit (no png): OK", flush=True)
+    except Exception as e:
+        err = str(e).lower()
+        print(f"⚠️ _send_png_or_edit (no png) edit failed: {e}", flush=True)
+        if "message is not modified" in err:
+            return
+        if "message to edit not found" in err or "not found" in err or "query is too old" in err:
+            try:
+                await query.get_bot().send_message(
+                    chat_id=chat_id, text=caption,
+                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                )
+                print(f"🟢 _send_png_or_edit (no png): fallback OK", flush=True)
+            except Exception as e2:

@@ -1,0 +1,150 @@
+                print(f"⚠️ send_message: {e2}", flush=True)
+
+
+async def _send_png_or_reply(message, caption, kb=None, png_filename=None):
+    """Отправляет фото или текстовое сообщение (для update.message)."""
+    png = _image_path(png_filename)
+    if png and os.path.exists(png):
+        try:
+            with open(png, "rb") as f:
+                await message.reply_photo(
+                    photo=f, caption=caption,
+                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                )
+            return
+        except Exception as e:
+            print(f"⚠️ reply_photo: {e}", flush=True)
+    await message.reply_text(caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+
+
+# ============================================================
+# КЛАВИАТУРЫ
+# ============================================================
+
+def rooms_list_keyboard(object_id):
+    """Клавиатура списка комнат объекта."""
+    rooms = get_rooms(object_id)
+    buttons = []
+    for r in rooms:
+        mark = "🏠" if r.get('is_default') else "📦"
+        buttons.append([InlineKeyboardButton(f"{mark} {r['name']}", callback_data=f"room_{r['id']}")])
+    buttons.append([InlineKeyboardButton("➕ Добавить комнату", callback_data=f"room_add_{object_id}")])
+    buttons.append([InlineKeyboardButton("⬅️ К объекту", callback_data=f"obj_{object_id}")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def room_card_keyboard(room_id):
+    """Клавиатура карточки комнаты."""
+    room = get_room(room_id)
+    object_id = room['object_id'] if room else 0
+    walls = get_walls_ordered(room_id)
+    height_ok = bool(room.get('height_bottom') and room.get('height_middle') and room.get('height_top'))
+    walls_ok = len(walls) >= 4
+
+    if not height_ok and not walls:
+        start_btn = InlineKeyboardButton("🚀 Начать замер", callback_data=f"room_start_{room_id}")
+    elif height_ok and walls_ok:
+        start_btn = InlineKeyboardButton("✅ Замер завершён", callback_data=f"room_start_{room_id}")
+    else:
+        start_btn = InlineKeyboardButton("▶️ Продолжить замер", callback_data=f"room_start_{room_id}")
+
+    return InlineKeyboardMarkup([
+        [start_btn],
+        [InlineKeyboardButton("📐 Размеры", callback_data=f"room_measures_{room_id}"),
+         InlineKeyboardButton("👁 Что замерено", callback_data=f"room_progress_{room_id}")],
+        [InlineKeyboardButton("🚪 Проёмы", callback_data=f"openings_list_{room_id}"),
+         InlineKeyboardButton("🔧 Коммуникации", callback_data=f"room_comms_{room_id}")],
+        [InlineKeyboardButton("🪑 Мебель", callback_data=f"room_objects_{room_id}")],
+        [InlineKeyboardButton("📋 Задачи", callback_data=f"room_tasks_{room_id}"),
+         InlineKeyboardButton("📸 Фото", callback_data=f"room_photos_{room_id}")],
+        [InlineKeyboardButton("✏️ Переименовать", callback_data=f"room_rename_{room_id}")],
+        [InlineKeyboardButton("🗑 Удалить", callback_data=f"room_del_{room_id}")],
+        [InlineKeyboardButton("⬅️ К комнатам", callback_data=f"rooms_list_obj_{object_id}")],
+    ])
+
+
+# ============================================================
+# ПОКАЗ КОМНАТ
+# ============================================================
+
+async def show_rooms_list(update, context, object_id):
+    """Показ списка комнат объекта."""
+    from modules.objects import get_object
+    obj = get_object(object_id)
+    obj_name = obj['name'] if obj else '—'
+    text = f"📦 *Комнаты «{obj_name}»*\n\n{format_rooms_list(object_id)}"
+    kb = rooms_list_keyboard(object_id)
+    if update.callback_query:
+        try:
+            await update.callback_query.edit_message_text(
+                text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
+            )
+        except Exception:
+            try:
+                await update.callback_query.message.delete()
+            except Exception:
+                pass
+            await update.callback_query.message.chat.send_message(
+                text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
+            )
+    else:
+        await update.message.reply_text(
+            text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
+        )
+
+
+async def show_room_card(update, context, room_id):
+    """Показ карточки комнаты."""
+    room = get_room(room_id)
+    if not room:
+        if update.callback_query:
+            await update.callback_query.edit_message_text("❌ Комната не найдена")
+        else:
+            await update.message.reply_text("❌ Комната не найдена")
+        return
+    text = format_room_card(room_id)
+    kb = room_card_keyboard(room_id)
+
+    if update.callback_query:
+        query = update.callback_query
+        has_photo = bool(getattr(query.message, "photo", None))
+        if has_photo:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            await query.message.chat.send_message(
+                text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            try:
+                await query.edit_message_text(
+                    text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
+                )
+            except Exception as e:
+                if "message is not modified" in str(e).lower():
+                    return
+                try:
+                    await query.message.delete()
+                except Exception:
+                    pass
+                await query.message.chat.send_message(
+                    text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
+                )
+    else:
+        await update.message.reply_text(
+            text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
+        )
+
+
+# ============================================================
+# МАСТЕР ВЫСОТЫ (3 точки)
+# ============================================================
+
+async def _send_height_scheme(message, context, room_id, step, caption, kb_extra=None):
+    """Отправка PNG-схемы высоты."""
+    kb_rows = list(kb_extra or [])
+    kb_rows.append([InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")])
+    kb = InlineKeyboardMarkup(kb_rows)
+    png = _image_path(f"height_scheme_step{step}.png")
+    if png and os.path.exists(png):

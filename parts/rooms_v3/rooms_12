@@ -1,0 +1,150 @@
+
+    # --- ФАЗА 1: первый заход ---
+    if remaining is None:
+        flags_queue = _wall_flags_list(context)
+        state['flags'] = dict(DEFAULT_FLAGS)
+        state['remaining_steps'] = flags_queue
+        _save_wall_draft(context, room_id)
+        remaining = flags_queue
+        print(f"🔷 _after_angle_from_update: первый заход, очередь={remaining}", flush=True)
+
+    # --- ФАЗА 2: пусто → сохраняем ---
+    if not remaining:
+        print(f"🔷 _after_angle_from_update: очередь пуста → сохранение", flush=True)
+        await _wall_save_and_next_from_update(update, context, room_id, state.get('step_num') or 1)
+        return
+
+    # --- ФАЗА 3: берём [0] ---
+    first = remaining[0]
+    state['remaining_steps'] = remaining[1:]
+    _save_wall_draft(context, room_id)
+    print(f"🔷 _after_angle_from_update: берём {first!r}, осталось {state['remaining_steps']}", flush=True)
+
+    if first == 'niche':
+        state['step_name'] = 'niche_count'
+        _save_wall_draft(context, room_id)
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("1", callback_data=f"wall_niche_count_1_{room_id}")],
+            [InlineKeyboardButton("2", callback_data=f"wall_niche_count_2_{room_id}")],
+            [InlineKeyboardButton("3", callback_data=f"wall_niche_count_3_{room_id}")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+        ])
+        await update.message.reply_text("🕳 *Сколько нишей на этой стене?*", parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        return
+    if first == 'rounded':
+        state['step_name'] = 'rounded'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = 'wall_rounded_radius'
+        await update.message.reply_text("🔄 *Закругление*\n\n📏 Радиус (СМ):", parse_mode=ParseMode.MARKDOWN)
+        return
+    if first == 'wavy':
+        # Уже прошли через 3 точки — пропускаем
+        if state.get('plane') == 'wavy':
+            state['remaining_steps'] = remaining[1:] if len(remaining) > 1 else []
+            _save_wall_draft(context, room_id)
+            await _after_angle_from_update(update, context, room_id)
+            return
+        context.user_data['wall_room_id'] = room_id
+        state['plane'] = 'wavy'
+        state['step_name'] = 'plane_wavy'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = 'wall_round_plane_bottom'
+        await update.message.reply_text("📐 *Разная по высоте*\n\n📏 Введи НИЗ стены (СМ):", parse_mode=ParseMode.MARKDOWN)
+        return
+    if first == 'hidden':
+        state['step_name'] = 'hidden'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = 'wall_hidden_note'
+        await update.message.reply_text("🔧 *Скрытые коммуникации*\n\nОпиши что и где:", parse_mode=ParseMode.MARKDOWN)
+        return
+    await _wall_save_and_next_from_update(update, context, room_id, state.get('step_num') or 1)
+
+
+async def _wall_save_and_next_from_update(update, context, room_id, step):
+    """Сохранение стены (версия для update.message)."""
+    state = _get_wall_state(context)
+    pos = WALL_NAMES.get(step, '?')
+    length = state.get('length') or 0
+    angle = state.get('angle_value') or 90
+    angle_method = state.get('angle_method') or '90'
+    flags = state.get('flags') or {}
+
+    note_parts = []
+    if flags.get('rounded'): note_parts.append('Закругление')
+    if flags.get('wavy'): note_parts.append('Разная по высоте')
+    if flags.get('hidden'): note_parts.append('Скрытые коммуникации')
+    note = '; '.join(note_parts) if note_parts else None
+
+    try: session_id = ensure_session(room_id)
+    except Exception: session_id = None
+
+    kwargs = {
+        'label': f'Стена {pos}', 'wall_pos': pos, 'length': length,
+        'unit': 'см', 'order_num': step,
+        'angle_value': angle, 'angle_method': angle_method,
+        'session_id': session_id,
+    }
+    if flags.get('rounded'): kwargs['has_rounded'] = 1
+    if flags.get('wavy'): kwargs['is_wavy'] = 1
+    if flags.get('hidden'):
+        kwargs['has_hidden'] = 1
+        kwargs['hidden_note'] = note
+    if note: kwargs['note'] = note
+
+    measure_id = add_measure(room_id, 'wall', **kwargs)
+
+    niches = state.get('niches') or []
+    if niches and measure_id:
+        for n in niches:
+            try:
+                add_niche(
+                    measure_id=measure_id, room_id=room_id,
+                    width_bottom=n.get('width'),
+                    width_top=n.get('width_top') or n.get('width'),
+                    height=n.get('height'),
+                    depth_bottom=n.get('depth'),
+                    depth_top=n.get('depth_top') or n.get('depth'),
+                    session_id=session_id,
+                )
+            except Exception as e:
+                print(f"⚠️ add_niche: {e}", flush=True)
+
+    _clear_wall_draft(room_id)
+    next_step = step + 1 if step < 4 else 1
+    _reset_wall_state(context, keep_step_num=next_step)
+
+    summary = f"✅ *Стена {step} ({pos}) сохранена!*\n\n📏 Длина: {length} см\n📐 Угол: {angle}°"
+    if niches: summary += f"\n🕳 Нишей: {len(niches)}"
+
+    if step >= 4:
+        complete_walls_round(room_id)
+        areas = calculate_room_areas(room_id)
+        text = summary + "\n\n🎉 *Все 4 стены замерены!*\n\n"
+        if areas.get('walls_net') is not None:
+            text += f"📊 Площадь стен: {areas['walls_net']} м²\n"
+        if areas.get('floor'):
+            text += f"📊 Площадь пола: {areas['floor']} м²\n"
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📐 К размерам", callback_data=f"room_measures_{room_id}")],
+            [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+        ])
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        return
+
+    next_step = step + 1
+    state_next = _get_wall_state(context)
+    state_next['step_num'] = next_step
+    state_next['step_name'] = 'flags'
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"➡️ Стена {next_step}", callback_data=f"wall_round_start_{room_id}")],
+        [InlineKeyboardButton("📐 К размерам", callback_data=f"room_measures_{room_id}")],
+    ])
+    await update.message.reply_text(summary, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+
+
+async def _show_wall_openings_from_update(update, context, room_id):
+    """Экран проёмов через update.message."""
+    state = _get_wall_state(context)
+    step = state.get('step_num') or 1
+    pos = WALL_NAMES.get(step, '?')
+    length_cm = state.get('length') or 0

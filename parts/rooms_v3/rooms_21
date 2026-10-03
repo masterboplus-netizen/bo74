@@ -1,0 +1,79 @@
+    if step == 'opening_edit_value':
+        opening_id = context.user_data.get('opening_edit_id')
+        field = context.user_data.get('opening_edit_field')
+        if field == 'width':
+            update_opening(opening_id, width=val)
+        elif field == 'height':
+            update_opening(opening_id, height=val)
+        elif field == 'sill':
+            update_opening(opening_id, sill_height=val)
+        context.user_data['waiting_for'] = None
+        context.user_data['opening_edit_id'] = None
+        context.user_data['opening_edit_field'] = None
+        await update.message.reply_text(
+            "✅ Обновлено!",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ К проёму", callback_data=f"opening_show_{opening_id}")],
+            ])
+        )
+        return
+
+
+# ============================================================
+# ОБЪЕКТЫ — РЕДАКТИРОВАНИЕ
+# ============================================================
+
+async def handle_object_callback(update, context, data):
+    """Обработчик obj_* — вызывается из handle_rooms_callback."""
+    from modules.objects import get_object, delete_object
+
+    if data.startswith("obj_del_"):
+        object_id = int(data.replace("obj_del_", ""))
+        obj = get_object(object_id)
+        name = obj['name'] if obj else '?'
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🗑 Да, удалить", callback_data=f"obj_delok_{object_id}")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data=f"obj_{object_id}")],
+        ])
+        try:
+            await update.callback_query.edit_message_text(
+                f"🗑 *Удалить объект «{name}»?*\n\n"
+                f"Будут удалены: комнаты, замеры, проёмы, коммуникации.\n"
+                f"Задачи и финансы — отвязаны (не удалены).",
+                parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("obj_delok_"):
+        object_id = int(data.replace("obj_delok_", ""))
+        delete_object(object_id)
+        try:
+            await update.callback_query.edit_message_text(
+                "✅ Объект удалён",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("obj_rename_"):
+        object_id = int(data.replace("obj_rename_", ""))
+        context.user_data['waiting_for'] = 'obj_rename'
+        context.user_data['obj_rename_id'] = object_id
+        try:
+            await update.callback_query.edit_message_text(
+                "✏️ *Новое имя объекта:*",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"obj_{object_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    return False

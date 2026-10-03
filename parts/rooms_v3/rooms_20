@@ -1,0 +1,150 @@
+            context.user_data['room_rename_id'] = None
+            await update.message.reply_text(
+                f"✅ Имя комнаты изменено на «{new_name}»",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+        return
+
+    # --- Высота ---
+    if step == 'room_height_point':
+        room_id = context.user_data.get('height_room_id')
+        if not room_id:
+            await update.message.reply_text("❌ Потерялась комната")
+            return
+        text_val = (update.message.text or '').strip().replace(',', '.')
+        try:
+            val = float(text_val)
+        except ValueError:
+            await update.message.reply_text("❌ Введи число")
+            return
+        h_step = context.user_data.get('height_step') or 1
+        if h_step == 1:
+            context.user_data['height_bottom'] = val
+            context.user_data['height_step'] = 2
+            await _show_height_step(update, context, room_id, step=2)
+        elif h_step == 2:
+            context.user_data['height_middle'] = val
+            context.user_data['height_step'] = 3
+            await _show_height_step(update, context, room_id, step=3)
+        else:
+            context.user_data['height_top'] = val
+            h_bottom = context.user_data.get('height_bottom')
+            h_middle = context.user_data.get('height_middle')
+            h_top = val
+            h_avg = (h_bottom + h_middle + h_top) / 3
+            update_room(room_id, height=h_avg, height_bottom=h_bottom,
+                        height_middle=h_middle, height_top=h_top)
+            for k in ['waiting_for', 'height_room_id', 'height_step',
+                      'height_bottom', 'height_middle', 'height_top']:
+                context.user_data[k] = None
+            await update.message.reply_text(
+                f"✅ *Высота сохранена:*\n"
+                f"Центр: {h_bottom} см\nЛевый: {h_middle} см\nПравый: {h_top} см\n"
+                f"Среднее: {round(h_avg, 1)} см",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📐 Начать обход стен", callback_data=f"wall_round_start_{room_id}")],
+                    [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+        return
+
+    if step == 'room_height_same':
+        room_id = context.user_data.get('height_room_id')
+        text_val = (update.message.text or '').strip().replace(',', '.')
+        try:
+            val = float(text_val)
+        except ValueError:
+            await update.message.reply_text("❌ Введи число")
+            return
+        update_room(room_id, height=val, height_bottom=val, height_middle=val, height_top=val)
+        for k in ['waiting_for', 'height_room_id', 'height_step']:
+            context.user_data[k] = None
+        await update.message.reply_text(
+            f"✅ *Высота: {val} см* (везде одинаковая)",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📐 Начать обход", callback_data=f"wall_round_start_{room_id}")],
+                [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+            ])
+        )
+        return
+
+    # --- Обход стен ---
+    if step in ('wall_round_length', 'wall_round_angle_val',
+                'wall_round_plane_bottom', 'wall_round_plane_middle', 'wall_round_plane_top',
+                'wall_niche_width', 'wall_niche_depth', 'wall_niche_height',
+                'wall_niche_top_width', 'wall_niche_top_depth',
+                'wall_rounded_radius', 'wall_wavy_note', 'wall_hidden_note',
+                'wall_round_opening_width', 'wall_round_opening_height'):
+        await _handle_wall_round_input(update, context, step)
+        return
+
+    # --- Коммуникации ---
+    if step in ('comm_offset_x', 'comm_offset_y', 'comm_diameter', 'comm_voltage',
+                'comm_size_w', 'comm_size_h', 'comm_size_d',
+                'comm_edit_value', 'comm_edit_size_part'):
+        await _handle_comm_input(update, context, step)
+        return
+
+    # --- Проёмы (отдельные) ---
+    if step in ('opening_width', 'opening_height', 'opening_edit_value'):
+        await _handle_opening_input(update, context, step)
+        return
+
+
+async def _handle_comm_input(update, context, step):
+    """Ввод коммуникаций — заглушка, реализуем отдельно при необходимости."""
+    context.user_data['waiting_for'] = None
+    await update.message.reply_text("⚠️ Ввод коммуникаций временно отключён — используйте кнопки.")
+
+
+async def _handle_opening_input(update, context, step):
+    """Ввод проёмов (отдельных)."""
+    text_val = (update.message.text or '').strip().replace(',', '.')
+    try:
+        val = float(text_val)
+    except ValueError:
+        await update.message.reply_text("❌ Введи число")
+        return
+
+    if step == 'opening_width':
+        room_id = context.user_data.get('opening_room_id')
+        context.user_data['opening_width'] = val
+        context.user_data['waiting_for'] = 'opening_height'
+        await update.message.reply_text(
+            "📏 *Высота проёма* (СМ):",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"openings_list_{room_id}")],
+            ])
+        )
+        return
+
+    if step == 'opening_height':
+        room_id = context.user_data.get('opening_room_id')
+        otype = context.user_data.get('opening_type')
+        wall_pos = context.user_data.get('opening_wall_pos')
+        width = context.user_data.get('opening_width')
+        try:
+            session_id = ensure_session(room_id)
+        except Exception:
+            session_id = None
+        add_opening(room_id=room_id, opening_type=otype, wall_pos=wall_pos,
+                    width=width, height=val, session_id=session_id,
+                    created_by=update.effective_user.id if update.effective_user else None)
+        for k in ['opening_room_id', 'opening_type', 'opening_wall_pos',
+                  'opening_width', 'opening_height', 'waiting_for']:
+            context.user_data[k] = None
+        await update.message.reply_text(
+            f"✅ *Проём добавлен!*\n\n{OPENING_TYPES.get(otype, otype)} на стене «{wall_pos}»\n📏 {width} × {val} см",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Ещё", callback_data=f"opening_add_{room_id}")],
+                [InlineKeyboardButton("✅ К проёмам", callback_data=f"openings_list_{room_id}")],
+            ])
+        )
+        return
+

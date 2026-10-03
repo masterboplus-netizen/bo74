@@ -1,0 +1,150 @@
+        [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+    ])
+    caption = "🕳 *Сколько нишей на этой стене?*"
+    print(f"🟠 _show_niche_count вызван, room_id={room_id}", flush=True)
+
+    # Правильный выбор: если текущее сообщение — фото, edit_caption; иначе edit_text
+    msg = query.message
+    is_photo = bool(getattr(msg, "photo", None))
+
+    try:
+        if is_photo:
+            await query.edit_message_caption(
+                caption=caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        else:
+            await query.edit_message_text(
+                caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        print(f"🟢 _show_niche_count OK (photo={is_photo})", flush=True)
+    except Exception as e:
+        err = str(e).lower()
+        print(f"⚠️ _show_niche_count edit failed: {e}", flush=True)
+        # Удаляем старое и шлём новое
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        try:
+            await query.get_bot().send_message(
+                chat_id=query.message.chat_id, text=caption,
+                parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+            print(f"🟢 _show_niche_count fallback send OK", flush=True)
+        except Exception as e2:
+            print(f"⚠️ _show_niche_count fallback failed: {e2}", flush=True)
+
+
+async def _show_niche_width(query, context, room_id):
+    """Ширина ниши."""
+    state = _get_wall_state(context)
+    state['step_name'] = 'niche_width'
+    _save_wall_draft(context, room_id)
+
+    count = state.get('niche_count') or 1
+    current = state.get('niche_current') or 1
+    context.user_data['waiting_for'] = 'wall_niche_width'
+
+    spec_step = spec.get_niche_step('width', i=current, count=count)
+    if spec_step:
+        caption = (
+            f"🕳 *Ниша {current} из {count}*\n\n"
+            f"{spec_step.get('subtitle', '📏 Ширина ниши (СМ):')}\n\n"
+            f"_Например: {spec_step.get('example', '80')}_"
+        )
+        image = spec_step.get('image')
+    else:
+        caption = f"🕳 *Ниша {current} из {count}*\n\n📏 *Ширина ниши* (СМ):\n\n_Например: 80_"
+        image = "niche_width.png"
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, image)
+
+
+async def _show_niche_depth(query, context, room_id):
+    """Глубина ниши."""
+    state = _get_wall_state(context)
+    state['step_name'] = 'niche_depth'
+    _save_wall_draft(context, room_id)
+    context.user_data['waiting_for'] = 'wall_niche_depth'
+
+    spec_step = spec.get_niche_step('depth')
+    caption = spec_step.get('title', '🕳 *Ниша — ГЛУБИНА* (СМ):')
+    hint = spec_step.get('hint')
+    if hint:
+        caption += f"\n\n{hint}"
+    image = spec_step.get('image', 'niche_depth.png')
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, image)
+
+
+async def _show_niche_height(query, context, room_id):
+    """Высота ниши."""
+    state = _get_wall_state(context)
+    state['step_name'] = 'niche_height'
+    _save_wall_draft(context, room_id)
+    context.user_data['waiting_for'] = 'wall_niche_height'
+
+    spec_step = spec.get_niche_step('height')
+    caption = spec_step.get('title', '🕳 *Ниша — ВЫСОТА* (СМ):')
+    example = spec_step.get('example')
+    if example:
+        caption += f"\n\n_Например: {example}_"
+    image = spec_step.get('image', 'niche_height.png')
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, image)
+
+
+async def _show_niche_plane(query, context, room_id):
+    """Ниша ровная или неровная?"""
+    state = _get_wall_state(context)
+    state['step_name'] = 'niche_plane'
+    _save_wall_draft(context, room_id)
+    context.user_data['waiting_for'] = None
+
+    spec_step = spec.get_niche_step('plane')
+    caption = spec_step.get('title', '🕳 *Ниша ровная или неровная по высоте?*')
+    hint = spec_step.get('hint')
+    if hint:
+        caption += f"\n\n{hint}"
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Ровная", callback_data=f"wall_niche_plane_rect_{room_id}")],
+        [InlineKeyboardButton("📏 Неровная", callback_data=f"wall_niche_plane_irr_{room_id}")],
+        [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, None)
+
+
+async def _show_niche_top_width(query, context, room_id):
+    """Ширина ниши СВЕРХУ (для неровной)."""
+    state = _get_wall_state(context)
+    state['step_name'] = 'niche_top_width'
+    _save_wall_draft(context, room_id)
+    context.user_data['waiting_for'] = 'wall_niche_top_width'
+
+    spec_step = spec.get_niche_step('top_width')
+    caption = spec_step.get('title', '🕳 *Ширина СВЕРХУ* (СМ):')
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, None)
+
+
+async def _show_niche_top_depth(query, context, room_id):
+    """Глубина ниши СВЕРХУ (для неровной)."""
+    state = _get_wall_state(context)
+    state['step_name'] = 'niche_top_depth'
+    _save_wall_draft(context, room_id)
+    context.user_data['waiting_for'] = 'wall_niche_top_depth'
+
+    spec_step = spec.get_niche_step('top_depth')
+    caption = spec_step.get('title', '🕳 *Глубина сверху* (СМ):')
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],

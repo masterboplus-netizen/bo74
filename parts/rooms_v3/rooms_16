@@ -1,0 +1,150 @@
+        return True
+
+    if data.startswith("opening_wall_"):
+        parts = data.replace("opening_wall_", "").split("_", 1)
+        room_id = int(parts[0])
+        wall_pos = parts[1] if len(parts) > 1 else 'напротив'
+        context.user_data['opening_wall_pos'] = wall_pos
+        context.user_data['waiting_for'] = 'opening_width'
+        try:
+            await query.edit_message_text(
+                "📏 *Ширина проёма* (СМ):",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"openings_list_{room_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("opening_show_"):
+        opening_id = int(data.replace("opening_show_", ""))
+        o = get_opening(opening_id)
+        if not o:
+            try:
+                await query.edit_message_text("❌ Проём не найден")
+            except Exception:
+                pass
+            return True
+        otype = o.get('opening_type') or '?'
+        label = OPENING_TYPES.get(otype, otype)
+        text = f"🚪 *Проём #{opening_id}*\n\n{label}\n"
+        text += f"🧱 Стена: {o.get('wall_pos') or '?'}\n"
+        if o.get('width'): text += f"📏 Ширина: {o['width']} см\n"
+        if o.get('height'): text += f"📏 Высота: {o['height']} см\n"
+        if o.get('sill_height'): text += f"📏 Подоконник: {o['sill_height']} см\n"
+        buttons = [
+            [InlineKeyboardButton("✏️ Ширина", callback_data=f"opening_edit_{opening_id}_width")],
+            [InlineKeyboardButton("✏️ Высота", callback_data=f"opening_edit_{opening_id}_height")],
+            [InlineKeyboardButton("🗑 Удалить", callback_data=f"opening_del_{opening_id}")],
+            [InlineKeyboardButton("⬅️ К проёмам", callback_data=f"openings_list_{o['room_id']}")],
+        ]
+        try:
+            await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(buttons))
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("opening_edit_"):
+        parts = data.replace("opening_edit_", "").split("_")
+        opening_id = int(parts[0])
+        field = parts[1] if len(parts) > 1 else 'width'
+        context.user_data['opening_edit_id'] = opening_id
+        context.user_data['opening_edit_field'] = field
+        context.user_data['waiting_for'] = 'opening_edit_value'
+        prompts = {'width': 'Ширина', 'height': 'Высота', 'sill': 'Подоконник'}
+        try:
+            await query.edit_message_text(
+                f"✏️ *{prompts.get(field, 'Значение')}* (СМ):",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"opening_show_{opening_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("opening_del_"):
+        opening_id = int(data.replace("opening_del_", ""))
+        o = get_opening(opening_id)
+        room_id = o['room_id'] if o else None
+        delete_opening(opening_id)
+        if room_id:
+            try:
+                await query.edit_message_text(
+                    "✅ Проём удалён",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К проёмам", callback_data=f"openings_list_{room_id}")],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
+    return False
+
+
+# ============================================================
+# ГЛАВНЫЙ РОУТЕР CALLBACK'ОВ
+# ============================================================
+
+async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Роутер всех callback'ов комнат."""
+    query = update.callback_query
+    print(f"🔴 HANDLE_ROOMS_CALLBACK ВЫЗВАН: {query.data!r}", flush=True)
+    await query.answer()
+    data = query.data
+    print(f"🔍 ROOMS: data={data!r}", flush=True)
+
+    # --- Объекты ---
+    if data.startswith(("obj_del_", "obj_delok_", "obj_rename_")):
+        handled = await handle_object_callback(update, context, data)
+        if handled:
+            return
+
+    # --- obj_<id> — карточка объекта ---
+    if data.startswith("obj_") and not data.startswith(("obj_del_", "obj_delok_", "obj_rename_")):
+        try:
+            object_id = int(data.replace("obj_", ""))
+        except ValueError:
+            return
+        from modules.objects import get_object
+        from handlers.commands import object_detail_keyboard
+        obj = get_object(object_id)
+        if not obj:
+            try:
+                await query.edit_message_text("❌ Объект не найден")
+            except Exception:
+                pass
+            return
+        text = (
+            f"🏗️ *{obj['name']}*\n\n"
+            f"📍 {obj.get('address') or '—'}\n"
+            f"📊 Статус: {obj.get('status') or '—'}"
+        )
+        try:
+            kb = object_detail_keyboard(object_id)
+        except Exception as e:
+            print(f"⚠️ object_detail_keyboard: {e}", flush=True)
+            kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ К объектам", callback_data="menu_objects")]])
+        try:
+            await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        except Exception:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            await query.message.chat.send_message(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        return
+
+    # --- Переименование комнаты ---
+    if data.startswith("room_rename_"):
+        room_id = int(data.replace("room_rename_", ""))
+        context.user_data['waiting_for'] = 'room_rename'
+        context.user_data['room_rename_id'] = room_id
+        try:
+            await query.edit_message_text(
+                "✏️ *Новое имя комнаты:*",
+                parse_mode=ParseMode.MARKDOWN,
