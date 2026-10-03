@@ -197,7 +197,11 @@ def _current_wall_pos(context):
 
 
 def _wall_flags_list(context):
-    """Возвращает список флагов, которые надо обработать после угла."""
+    """Возвращает список флагов, которые надо обработать после угла.
+
+    Если 'wavy' уже обработан на этапе плоскости (state['plane'] == 'wavy'),
+    не добавляем его повторно.
+    """
     state = _get_wall_state(context)
     flags = state.get('flags') or {}
     steps = []
@@ -205,7 +209,8 @@ def _wall_flags_list(context):
         steps.append('niche')
     if flags.get('rounded'):
         steps.append('rounded')
-    if flags.get('wavy'):
+    # wavy — если уже прошли плоскость через 3 точки, не повторяем
+    if flags.get('wavy') and state.get('plane') != 'wavy':
         steps.append('wavy')
     if flags.get('hidden'):
         steps.append('hidden')
@@ -222,36 +227,56 @@ def _image_path(filename):
 
 async def _send_png_or_edit(query, caption, kb, png_filename=None):
     """Отправляет фото или редактирует сообщение.
-    Если png есть — удаляет старое сообщение, шлёт фото.
+
+    Если png есть — удаляет старое сообщение, шлёт фото в тот же чат.
     Если png нет — пытается edit, при неудаче — новое сообщение.
     """
     png = _image_path(png_filename)
+    chat_id = query.message.chat_id
+
     if png and os.path.exists(png):
+        # Удаляем старое сообщение (в try — может быть уже удалено)
         try:
             await query.message.delete()
         except Exception:
             pass
+        # Отправляем фото — ВСЕГДА в chat_id (не через query.message.chat)
         try:
             with open(png, "rb") as f:
-                await query.message.chat.send_photo(
+                await query.get_bot().send_photo(
+                    chat_id=chat_id,
                     photo=f, caption=caption,
                     parse_mode=ParseMode.MARKDOWN, reply_markup=kb
                 )
             return
         except Exception as e:
             print(f"⚠️ send_photo: {e}", flush=True)
+        # Fallback — просто текст, тоже через bot
+        try:
+            await query.get_bot().send_message(
+                chat_id=chat_id, text=caption,
+                parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+            return
+        except Exception as e:
+            print(f"⚠️ send_message fallback: {e}", flush=True)
+        return
+
+    # PNG нет — пытаемся edit или отправить новое текстовое
     try:
         await query.edit_message_text(caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
     except Exception as e:
-        if "message is not modified" in str(e).lower():
+        err = str(e).lower()
+        if "message is not modified" in err:
             return
-        try:
-            await query.message.delete()
-        except Exception:
-            pass
-        await query.message.chat.send_message(
-            caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
-        )
+        if "message to edit not found" in err or "not found" in err or "query is too old" in err:
+            try:
+                await query.get_bot().send_message(
+                    chat_id=chat_id, text=caption,
+                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                )
+            except Exception as e2:
+                print(f"⚠️ send_message: {e2}", flush=True)
 
 
 async def _send_png_or_reply(message, caption, kb=None, png_filename=None):
@@ -498,17 +523,31 @@ async def _show_wall_step(query, context, room_id, step, phase='flags', use_phot
         [InlineKeyboardButton("⏭ Пропустить стену", callback_data=f"wall_round_skip_{room_id}")],
         [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
     ])
-    # При обновлении галочек — просто edit (плавно, без мигания)
+    # При обновлении галочек — просто редактируем (плавно, без мигания)
     if use_photo:
         await _send_png_or_edit(query, caption, kb, image)
-    else:
-        try:
-            await query.edit_message_text(caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
-        except Exception as e:
-            if "message is not modified" in str(e).lower():
-                return
-            # Если edit не сработал (например, старое сообщение с фото) — пересоздаём
-            await _send_png_or_edit(query, caption, kb, image)
+        return
+
+    # use_photo=False — редактируем существующее сообщение.
+    # Если это фото — edit_caption; если текст — edit_text.
+    # Никогда не пересоздаём, не шлём новое сообщение.
+    msg = query.message
+    is_photo = bool(getattr(msg, "photo", None))
+
+    try:
+        if is_photo:
+            await query.edit_message_caption(
+                caption=caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        else:
+            await query.edit_message_text(
+                caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+    except Exception as e:
+        err = str(e).lower()
+        if "message is not modified" in err:
+            return
+        print(f"⚠️ _show_wall_step edit: {e}", flush=True)
 
 
 async def _show_wall_plane(query, context, room_id):
@@ -520,18 +559,37 @@ async def _show_wall_plane(query, context, room_id):
     step = state.get('step_num') or 1
     flags = state.get('flags') or {}
 
-    # Если галочка "Разная по высоте" уже стоит — сразу ввод 3 точек
+    # Если галочка "Разная по высоте" уже стоит — сразу ввод 3 точек (с фото)
     if flags.get('wavy'):
         state['plane'] = 'wavy'
         state['step_name'] = 'plane_wavy'
         _save_wall_draft(context, room_id)
         context.user_data['waiting_for'] = 'wall_round_plane_bottom'
-        await query.message.chat.send_message(
+        caption = (
             f"🧱 *Стена {step}*\n\n"
             f"📏 *Замер в 3 точках:*\n\n"
-            f"Введи НИЗ стены (СМ):",
-            parse_mode=ParseMode.MARKDOWN
+            f"Введи НИЗ стены (СМ):"
         )
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ В комнату", callback_data=f"room_{room_id}")],
+        ])
+        # Фото для этого шага нет — только текст
+        try:
+            await query.edit_message_text(
+                caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        except Exception:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            try:
+                await query.get_bot().send_message(
+                    chat_id=query.message.chat_id, text=caption,
+                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                )
+            except Exception as e:
+                print(f"⚠️ plane (wavy) send: {e}", flush=True)
         return
 
     spec_step = spec.get_wall_step('plane', n=step, pos=WALL_NAMES.get(step, '?'))
@@ -1046,16 +1104,32 @@ async def handle_wall_round_callback(query, context, data):
         _save_wall_draft(context, room_id)
         context.user_data['waiting_for'] = 'wall_round_plane_bottom'
         step = state.get('step_num') or 1
-        try:
-            await query.message.delete()
-        except Exception:
-            pass
-        await query.message.chat.send_message(
+        caption = (
             f"🧱 *Стена {step}*\n\n"
             f"📏 *Замер в 3 точках:*\n\n"
-            f"Введи НИЗ стены (СМ):",
-            parse_mode=ParseMode.MARKDOWN
+            f"Введи НИЗ стены (СМ):"
         )
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ В комнату", callback_data=f"room_{room_id}")],
+        ])
+        # Фото для этого шага нет (нужна специальная схема «вид на стену»)
+        # Просто текстовое сообщение — БЕЗ вводящего в заблуждение PNG
+        try:
+            await query.edit_message_text(
+                caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        except Exception:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            try:
+                await query.get_bot().send_message(
+                    chat_id=query.message.chat_id, text=caption,
+                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                )
+            except Exception as e:
+                print(f"⚠️ plane_wavy send: {e}", flush=True)
         return True
 
     # --- ПРОЁМЫ ПРИ ОБХОДЕ ---
@@ -1359,7 +1433,13 @@ async def _after_angle(query, context, room_id):
         return
 
     if first == 'wavy':
-        # wavy — это подшаг plane, значит 3 точки + длина
+        # wavy — если УЖЕ прошли через 3 точки — пропускаем, идём дальше
+        if state.get('plane') == 'wavy':
+            state['remaining_steps'] = remaining[1:] if len(remaining) > 1 else []
+            _save_wall_draft(context, room_id)
+            await _after_angle(query, context, room_id)
+            return
+        # Иначе — первый раз, показываем 3 точки
         state['plane'] = 'wavy'
         state['step_name'] = 'plane_wavy'
         _save_wall_draft(context, room_id)
@@ -1470,7 +1550,17 @@ async def _handle_wall_round_input(update, context, step):
             await update.message.reply_text("❌ Нужно число"); return
         state['plane_bottom'] = val
         context.user_data['waiting_for'] = 'wall_round_plane_middle'
-        await update.message.reply_text("📏 *Середина стены* (СМ):", parse_mode=ParseMode.MARKDOWN)
+        step_num = state.get('step_num') or 1
+        pos = WALL_NAMES.get(step_num, '?')
+        caption = (
+            f"🧱 *Стена {step_num} — {pos}*\n\n"
+            f"📏 *Замер в 3 точках*\n"
+            f"✅ Точка 1 (низ): *{val} см*\n\n"
+            f"📍 *Точка 2 — СЕРЕДИНА стены*\n"
+            f"Приложи дальномер на середине стены по высоте.\n\n"
+            f"Введи результат в СМ:"
+        )
+        await update.message.reply_text(caption, parse_mode=ParseMode.MARKDOWN)
         return
 
     if step == 'wall_round_plane_middle':
@@ -1479,7 +1569,19 @@ async def _handle_wall_round_input(update, context, step):
             await update.message.reply_text("❌ Нужно число"); return
         state['plane_middle'] = val
         context.user_data['waiting_for'] = 'wall_round_plane_top'
-        await update.message.reply_text("📏 *Верх стены* (СМ):", parse_mode=ParseMode.MARKDOWN)
+        step_num = state.get('step_num') or 1
+        pos = WALL_NAMES.get(step_num, '?')
+        bottom = state.get('plane_bottom') or 0
+        caption = (
+            f"🧱 *Стена {step_num} — {pos}*\n\n"
+            f"📏 *Замер в 3 точках*\n"
+            f"✅ Точка 1 (низ): *{bottom} см*\n"
+            f"✅ Точка 2 (середина): *{val} см*\n\n"
+            f"📍 *Точка 3 — ВЕРХ стены*\n"
+            f"Приложи дальномер вверху стены (под потолком).\n\n"
+            f"Введи результат в СМ:"
+        )
+        await update.message.reply_text(caption, parse_mode=ParseMode.MARKDOWN)
         return
 
     if step == 'wall_round_plane_top':
@@ -1491,7 +1593,26 @@ async def _handle_wall_round_input(update, context, step):
         state['step_name'] = 'length'
         _save_wall_draft(context, room_id)
         context.user_data['waiting_for'] = 'wall_round_length'
-        await update.message.reply_text("📏 *Длина стены* (СМ):", parse_mode=ParseMode.MARKDOWN)
+        step_num = state.get('step_num') or 1
+        pos = WALL_NAMES.get(step_num, '?')
+        bottom = state.get('plane_bottom') or 0
+        middle = state.get('plane_middle') or 0
+        # Отклонение — насколько «кривая» стена
+        avg = (bottom + middle + val) / 3
+        deviation = max(bottom, middle, val) - min(bottom, middle, val)
+        caption = (
+            f"✅ *Замер стены завершён!*\n\n"
+            f"🧱 *Стена {step_num} — {pos}*\n"
+            f"• Низ: *{bottom} см*\n"
+            f"• Середина: *{middle} см*\n"
+            f"• Верх: *{val} см*\n\n"
+            f"📊 Отклонение: *{round(deviation, 1)} см*\n"
+            f"📏 Средняя высота: *{round(avg, 1)} см*\n\n"
+            f"Дальше — *длина стены*."
+        )
+        await update.message.reply_text(caption, parse_mode=ParseMode.MARKDOWN)
+        # Непрерывный переход: сразу показываем экран длины
+        await _show_wall_length_from_update(update, context, room_id, step_num)
         return
 
     if step == 'wall_round_angle_val':
@@ -1659,6 +1780,12 @@ async def _after_angle_from_update(update, context, room_id):
         await update.message.reply_text("🔄 *Закругление*\n\n📏 Радиус (СМ):", parse_mode=ParseMode.MARKDOWN)
         return
     if first == 'wavy':
+        # Уже прошли через 3 точки — пропускаем
+        if state.get('plane') == 'wavy':
+            state['remaining_steps'] = remaining[1:] if len(remaining) > 1 else []
+            _save_wall_draft(context, room_id)
+            await _after_angle_from_update(update, context, room_id)
+            return
         state['plane'] = 'wavy'
         state['step_name'] = 'plane_wavy'
         _save_wall_draft(context, room_id)
@@ -1825,6 +1952,35 @@ async def _show_niche_top_depth_from_update(update, context, room_id):
         [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],
     ])
     await update.message.reply_text("🕳 *Глубина сверху* (СМ):", parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+
+
+async def _show_wall_length_from_update(update, context, room_id, step):
+    """Экран длины стены через update.message (после 3 точек)."""
+    state = _get_wall_state(context)
+    state['step_num'] = step
+    state['step_name'] = 'length'
+    _save_wall_draft(context, room_id)
+    context.user_data['waiting_for'] = 'wall_round_length'
+
+    pos = WALL_NAMES.get(step, '?')
+    spec_step = spec.get_wall_step('length', n=step, pos=pos)
+    if spec_step:
+        caption = f"{spec_step.get('title', '')}\n\n{spec_step.get('subtitle', '')}"
+        if spec_step.get('hint'):
+            caption += f"\n\n{spec_step['hint']}"
+        if spec_step.get('prompt'):
+            caption += f"\n\n{spec_step['prompt']}"
+        image = spec_step.get('image')
+    else:
+        caption = (
+            f"🧱 *Стена {step} — {pos}*\n\n"
+            f"📏 *Длина стены* (СМ):\n\n"
+            f"⚠️ *ВАЖНО:* дальномер в режиме «от ЗАДНЕЙ СТЕНКИ».\n\n"
+            f"Напиши число и отправь."
+        )
+        image = f"wall_scheme_s{step}_length.png"
+
+    await _send_png_or_reply(update.message, caption, None, image)
 
 
 async def _handle_wall_round_opening_input(update, context, step):
