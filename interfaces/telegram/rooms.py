@@ -89,10 +89,18 @@ def _get_wall_state(context):
     return context.user_data['wall_state']
 
 
-def _reset_wall_state(context):
-    """Сбрасывает state текущей стены."""
+
+def _reset_wall_state(context, keep_step_num=None):
+    """Сбрасывает state стены.
+
+    keep_step_num — сохранить этот номер стены. По умолчанию — из старого state.
+    """
+    step_num = keep_step_num
+    if step_num is None:
+        old_state = context.user_data.get('wall_state') or {}
+        step_num = old_state.get('step_num') or 1
     context.user_data['wall_state'] = {
-        'step_num': 1,
+        'step_num': step_num,
         'step_name': 'flags',
         'flags': dict(DEFAULT_FLAGS),
         'length': None,
@@ -103,9 +111,8 @@ def _reset_wall_state(context):
         'niche_count': 0,
         'niche_current': 0,
         'niche_temp': {},
-        'remaining_steps': None,  # None — чтобы _after_angle знал: первый заход
+        'remaining_steps': None,
     }
-
 
 def _save_wall_draft(context, room_id):
     """Сохраняет ВЕСЬ state стены в БД (без параметра step_name)."""
@@ -899,6 +906,7 @@ async def _show_niche_top_depth(query, context, room_id):
 # СОХРАНЕНИЕ СТЕНЫ
 # ============================================================
 
+
 async def _wall_save_and_next(query, context, room_id, step):
     """Сохраняет текущую стену, чистит черновик, идёт к следующей."""
     state = _get_wall_state(context)
@@ -906,25 +914,19 @@ async def _wall_save_and_next(query, context, room_id, step):
     length = state.get('length') or 0
     angle = state.get('angle_value') or 90
     angle_method = state.get('angle_method') or '90'
-    plane = state.get('plane') or 'straight'
     flags = state.get('flags') or {}
 
     note_parts = []
-    if flags.get('rounded'):
-        note_parts.append('Закругление')
-    if flags.get('wavy'):
-        note_parts.append('Разная по высоте')
-    if flags.get('hidden'):
-        note_parts.append('Скрытые коммуникации')
+    if flags.get('rounded'): note_parts.append('Закругление')
+    if flags.get('wavy'): note_parts.append('Разная по высоте')
+    if flags.get('hidden'): note_parts.append('Скрытые коммуникации')
     note = '; '.join(note_parts) if note_parts else None
 
-    # session_id для новых записей
     try:
         session_id = ensure_session(room_id)
     except Exception:
         session_id = None
 
-    # Координаты стены — считаем через geometry
     start_x = start_y = end_x = end_y = None
     try:
         walls_existing = get_walls_ordered(room_id)
@@ -934,41 +936,29 @@ async def _wall_save_and_next(query, context, room_id, step):
         coords = calc_wall_coords(walls_for_calc)
         if coords:
             last = coords[-1]
-            start_x = last.get('start_x')
-            start_y = last.get('start_y')
-            end_x = last.get('end_x')
-            end_y = last.get('end_y')
+            start_x = last.get('start_x'); start_y = last.get('start_y')
+            end_x = last.get('end_x'); end_y = last.get('end_y')
     except Exception as e:
         print(f"⚠️ calc_wall_coords: {e}", flush=True)
 
     kwargs = {
-        'label': f'Стена {pos}',
-        'wall_pos': pos,
-        'length': length,
-        'unit': 'см',
-        'order_num': step,
-        'angle_value': angle,
-        'angle_method': angle_method,
+        'label': f'Стена {pos}', 'wall_pos': pos, 'length': length,
+        'unit': 'см', 'order_num': step,
+        'angle_value': angle, 'angle_method': angle_method,
         'session_id': session_id,
     }
-    if flags.get('rounded'):
-        kwargs['has_rounded'] = 1
-    if flags.get('wavy'):
-        kwargs['is_wavy'] = 1
+    if flags.get('rounded'): kwargs['has_rounded'] = 1
+    if flags.get('wavy'): kwargs['is_wavy'] = 1
     if flags.get('hidden'):
         kwargs['has_hidden'] = 1
         kwargs['hidden_note'] = note
-    if note:
-        kwargs['note'] = note
+    if note: kwargs['note'] = note
     if start_x is not None:
-        kwargs['start_x'] = start_x
-        kwargs['start_y'] = start_y
-        kwargs['end_x'] = end_x
-        kwargs['end_y'] = end_y
+        kwargs['start_x'] = start_x; kwargs['start_y'] = start_y
+        kwargs['end_x'] = end_x; kwargs['end_y'] = end_y
 
     measure_id = add_measure(room_id, 'wall', **kwargs)
 
-    # Сохраняем ниши, привязанные к measure_id
     niches = state.get('niches') or []
     if niches and measure_id:
         for n in niches:
@@ -985,11 +975,10 @@ async def _wall_save_and_next(query, context, room_id, step):
             except Exception as e:
                 print(f"⚠️ add_niche: {e}", flush=True)
 
-    # Чистим черновик и state
     _clear_wall_draft(room_id)
-    _reset_wall_state(context)
+    next_step = step + 1 if step < 4 else 1
+    _reset_wall_state(context, keep_step_num=next_step)
 
-    # Сводка
     summary = f"✅ *Стена {step} ({pos}) сохранена!*\n\n📏 Длина: {length} см\n📐 Угол: {angle}°"
     if niches:
         summary += f"\n🕳 Нишей: {len(niches)}"
@@ -999,11 +988,10 @@ async def _wall_save_and_next(query, context, room_id, step):
         await _wall_finish(query, context, room_id, summary)
         return
 
-    # Следующая стена
-    next_step = step + 1
     state_next = _get_wall_state(context)
     state_next['step_num'] = next_step
     state_next['step_name'] = 'flags'
+    _save_wall_draft(context, room_id)
 
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(f"➡️ Стена {next_step}", callback_data=f"wall_round_start_{room_id}")],
@@ -1357,8 +1345,8 @@ async def _wall_round_start(query, context, room_id):
 
     # === ОБРАБОТКА ВСЕХ step_name ===
     if step_name == 'flags':
-        # Восстановление — плавно (без пересоздания)
-        await _show_wall_step(query, context, room_id, step_num, phase='flags', use_photo=False)
+        # Восстановление — показываем фото как при первом входе
+        await _show_wall_step(query, context, room_id, step_num, phase='flags', use_photo=True)
         return
 
     if step_name == 'plane':
@@ -1922,7 +1910,8 @@ async def _wall_save_and_next_from_update(update, context, room_id, step):
                 print(f"⚠️ add_niche: {e}", flush=True)
 
     _clear_wall_draft(room_id)
-    _reset_wall_state(context)
+    next_step = step + 1 if step < 4 else 1
+    _reset_wall_state(context, keep_step_num=next_step)
 
     summary = f"✅ *Стена {step} ({pos}) сохранена!*\n\n📏 Длина: {length} см\n📐 Угол: {angle}°"
     if niches: summary += f"\n🕳 Нишей: {len(niches)}"
