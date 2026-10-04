@@ -5065,6 +5065,95 @@ async def handle_panels_callback(query, context, data):
             print("panel groups show: " + str(e), flush=True)
         return True
 
+    if data.startswith("panel_auto_"):
+        panel_id = int(data.replace("panel_auto_", ""))
+        try:
+            result = core_elec_panels.autocomplete_panel(panel_id)
+        except Exception as e:
+            print("panel auto: " + str(e), flush=True)
+            result = None
+        if not result:
+            try:
+                await query.edit_message_text(
+                    "Не удалось автокомплектовать",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("К щиту", callback_data="panel_" + str(panel_id))],
+                    ])
+                )
+            except Exception:
+                pass
+            return True
+        text = (
+            "Автокомплектация выполнена" + chr(10) + chr(10) +
+            "Создано компонентов: " + str(result.get('created', 0)) + chr(10) +
+            "Ручных (сохранено): " + str(result.get('manual', 0)) + chr(10) +
+            "Групп: " + str(result.get('groups', 0)) + chr(10) +
+            "Нагрузка: " + str(result.get('total_watt', 0)) + " Вт" + chr(10) +
+            "С K_одновр: " + str(result.get('calc_watt', 0)) + " Вт"
+        )
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Комплектация", callback_data="panel_comp_" + str(panel_id))],
+                    [InlineKeyboardButton("К щиту", callback_data="panel_" + str(panel_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("panel_comp_"):
+        panel_id = int(data.replace("panel_comp_", ""))
+        try:
+            text = core_elec_panels.format_panel_components(panel_id)
+        except Exception as e:
+            print("panel comp: " + str(e), flush=True)
+            text = "Ошибка"
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "... (обрезано)"
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("К щиту", callback_data="panel_" + str(panel_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("panel_stats_"):
+        panel_id = int(data.replace("panel_stats_", ""))
+        try:
+            stats = core_elec_panels.get_panel_stats(panel_id)
+        except Exception as e:
+            print("panel stats: " + str(e), flush=True)
+            stats = None
+        if not stats:
+            try:
+                await query.edit_message_text("Ошибка статистики")
+            except Exception:
+                pass
+            return True
+        text = (
+            "Статистика щита" + chr(10) + chr(10) +
+            "Компонентов: " + str(stats.get('components_total', 0)) + chr(10) +
+            "Модулей занято: " + str(stats.get('modules_used', 0)) + chr(10) +
+            "Групп: " + str(stats.get('groups_count', 0)) + chr(10) +
+            "Нагрузка: " + str(stats.get('total_load_watt', 0)) + " Вт"
+        )
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("К щиту", callback_data="panel_" + str(panel_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
     if data.startswith("panel_del_"):
         panel_id = int(data.replace("panel_del_", ""))
         try:
@@ -5166,6 +5255,9 @@ async def handle_panels_callback(query, context, data):
         if children:
             lines.append("⬇️ Питает: " + ", ".join(c.get('name') or '?' for c in children))
         kb_rows = [
+            [InlineKeyboardButton("🪄 Автокомплектация", callback_data="panel_auto_" + str(panel_id))],
+            [InlineKeyboardButton("📋 Комплектация", callback_data="panel_comp_" + str(panel_id))],
+            [InlineKeyboardButton("📊 Статистика", callback_data="panel_stats_" + str(panel_id))],
             [InlineKeyboardButton("📋 Группы щита", callback_data="panel_groups_" + str(panel_id))],
             [InlineKeyboardButton("🗑 Удалить щит", callback_data="panel_del_" + str(panel_id))],
             [InlineKeyboardButton("⬅️ К щитам", callback_data="panels_list_" + str(p.get('object_id')))],
