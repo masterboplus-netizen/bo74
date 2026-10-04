@@ -4390,6 +4390,38 @@ async def handle_measure_input(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
 
+    if step == 'panel_new_name':
+        name = (update.message.text or '').strip()
+        if not name:
+            await update.message.reply_text("Введи название")
+            return
+        object_id = context.user_data.get('panel_new_object_id')
+        ptype = context.user_data.get('panel_new_type') or 'floor'
+        if not object_id:
+            await update.message.reply_text("Потерялись данные. Начни заново.")
+            context.user_data['waiting_for'] = None
+            return
+        try:
+            pid = core_elec_panels.create_panel(
+                object_id=object_id, name=name, panel_type=ptype, mount_type='wall'
+            )
+        except Exception as e:
+            print("panel create: " + str(e), flush=True)
+            pid = None
+        for k in ['panel_new_object_id', 'panel_new_type', 'waiting_for']:
+            context.user_data[k] = None
+        if pid:
+            await update.message.reply_text(
+                "Щит создан: " + name,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("К щиту", callback_data="panel_" + str(pid))],
+                    [InlineKeyboardButton("К щитам", callback_data="panels_list_" + str(object_id))],
+                ])
+            )
+        else:
+            await update.message.reply_text("Не удалось создать щит")
+        return
+
     if step == 'group_load_watt':
         await _handle_group_load_input(update, context)
         return
@@ -5052,6 +5084,53 @@ async def handle_panels_callback(query, context, data):
                 )
             except Exception:
                 pass
+        return True
+
+    # --- СОЗДАНИЕ ЩИТА: ШАГ 1 (тип) ---
+    if data.startswith("panel_add_type_"):
+        parts = data.replace("panel_add_type_", "").rsplit("_", 1)
+        object_id = int(parts[0])
+        ptype = parts[1]
+        context.user_data['panel_new_object_id'] = object_id
+        context.user_data['panel_new_type'] = ptype
+        context.user_data['waiting_for'] = 'panel_new_name'
+        type_labels = {
+            'vru': 'ВРУ (вводно-распределительное)',
+            'floor': 'Щит этажа',
+            'apartment': 'Щит квартиры',
+            'outdoor': 'Уличный щит',
+        }
+        tlabel = type_labels.get(ptype, ptype)
+        kb_rows = [
+            [InlineKeyboardButton("⬅️ Отмена", callback_data="panels_list_" + str(object_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                "⚡ Новый щит: " + tlabel + chr(10) + chr(10) +
+                "Напиши название (например «Щит 1 этажа», «ВРУ на столбе»):",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("panel_add_"):
+        object_id = int(data.replace("panel_add_", ""))
+        context.user_data['panel_new_object_id'] = object_id
+        kb_rows = [
+            [InlineKeyboardButton("🔌 ВРУ (ввод)", callback_data="panel_add_type_" + str(object_id) + "_vru")],
+            [InlineKeyboardButton("⚡ Щит этажа", callback_data="panel_add_type_" + str(object_id) + "_floor")],
+            [InlineKeyboardButton("🏢 Щит квартиры", callback_data="panel_add_type_" + str(object_id) + "_apartment")],
+            [InlineKeyboardButton("🌳 Уличный щит", callback_data="panel_add_type_" + str(object_id) + "_outdoor")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data="panels_list_" + str(object_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                "⚡ Новый щит" + chr(10) + chr(10) + "Выбери тип:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
         return True
 
     if data.startswith("panel_"):
