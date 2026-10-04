@@ -1,35 +1,30 @@
-# Бэкапы БД
-backups/
-*.db.bak
-bo72*.db.bak
+# Бэкапы
+*.bak_*
+*.bak2_*
+*.bak3_*
+*.bak4_*
+*.bak5_*
+*.bak
 
-# Тестовые БД
-bo72_test.db
-
-# Python кэш
-__pycache__/
-*.pyc
-*.pyo
+# Разбивка больших файлов
+parts_rooms/
+parts/
+parts_commands/
+parts_spec/
 
 # Логи
 *.log
 
-# Бэкапы кода
-*.bak
-*.bak_*
-*.py.bak_*
-*.sh.bak_*
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
+# Временные
+tmp/
+__pycache__/
+*.pyc
+venv/
 
 # Replit
-.local/
+.replit
+replit.nix
 .upm/
+
+# Бэкапы БД
+backups/*.db
