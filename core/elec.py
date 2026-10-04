@@ -519,3 +519,45 @@ def format_group_with_rooms(group_id):
         f"   Комнаты: {rooms_str}"
     )
 
+
+# ============================================================
+# КУХОННЫЕ ШАБЛОНЫ (кафе/рестораны)
+# ============================================================
+
+def get_kitchen_equipment():
+    """Возвращает список кухонного оборудования из справочника."""
+    result = []
+    for code, val in spec.KITCHEN_EQUIPMENT.items():
+        if isinstance(val, (list, tuple)) and len(val) >= 3:
+            result.append((code, val[0], int(val[1]), int(val[2])))
+    return result
+
+def create_kitchen_group(object_id, floor_id, equip_code):
+    """Создаёт группу ЭОМ для одной единицы кухонного оборудования."""
+    equip = spec.KITCHEN_EQUIPMENT.get(equip_code)
+    if not equip:
+        return None
+    if not isinstance(equip, (list, tuple)) or len(equip) < 3:
+        return None
+    name_label = equip[0]
+    load_watt = int(equip[1])
+    phase = int(equip[2])
+    purpose = 'kitchen'
+    voltage = 380 if phase == 3 else 220
+    current = calc_current(load_watt, phase, voltage)
+    rating, curve = pick_breaker(load_watt, phase, 'C')
+    cable = pick_cable(load_watt, phase, voltage)
+    breaker_type = ('3P' if phase == 3 else '1P') + ' ' + curve + str(rating)
+    group_name = name_label + ' ' + str(load_watt) + 'W'
+    return create_group(
+        object_id=object_id,
+        room_id=None,
+        name=group_name,
+        phase=phase,
+        purpose=purpose,
+        cable_type=cable,
+        load_watt=load_watt,
+        breaker_type=breaker_type,
+        breaker_curve=curve,
+        floor_id=floor_id,
+    )

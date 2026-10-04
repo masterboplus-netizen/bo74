@@ -2853,6 +2853,7 @@ async def _show_floor_groups(query, floor_id):
         print(f"⚠️ floor phase distribution: {e}", flush=True)
 
     kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🍳 Из шаблона (кухня)", callback_data=f"floor_kitchen_{floor_id}")],
         [InlineKeyboardButton("➕ Создать группу", callback_data=f"floor_group_new_{floor_id}")],
         [InlineKeyboardButton("⬅️ К помещению", callback_data=f"floor_{floor_id}")],
     ])
@@ -3790,6 +3791,12 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     # --- План комнаты (PNG) ---    # --- Помещения ---
+    # --- КУХОННЫЕ ШАБЛОНЫ (кафе/рестораны) ---
+    if data.startswith("floor_kitchen_"):
+        handled = await handle_kitchen_callback(query, context, data)
+        if handled:
+            return
+
     if data.startswith("obj_floors_") or data.startswith("obj_floor_") or data.startswith("floor_"):
         handled = await handle_floors_callback(query, context, data)
         if handled:
@@ -4565,6 +4572,168 @@ async def handle_object_callback(update, context, data):
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("⬅️ Отмена", callback_data=f"obj_{object_id}")],
                 ])
+            )
+        except Exception:
+            pass
+        return True
+
+    return False
+
+# ============================================================
+# КУХОННЫЕ ШАБЛОНЫ (кафе/рестораны) — UI
+# ============================================================
+
+async def handle_kitchen_callback(query, context, data):
+    """Обработчик кухонных шаблонов. Возвращает True если обработано."""
+    if not core_elec:
+        return False
+
+    # --- ПОКАЗ СПИСКА ОБОРУДОВАНИЯ ---
+    if data.startswith("floor_kitchen_add_"):
+        parts = data.replace("floor_kitchen_add_", "").rsplit("_", 1)
+        floor_id = int(parts[0])
+        equip_idx = int(parts[1])
+        items = core_elec.get_kitchen_equipment()
+        if equip_idx < 0 or equip_idx >= len(items):
+            try:
+                await query.edit_message_text("Оборудование не найдено")
+            except Exception:
+                pass
+            return True
+        equip_code = items[equip_idx][0]
+        try:
+            _floor = core_floors.get_floor(floor_id)
+            _obj_id = _floor.get('object_id') if _floor else None
+        except Exception:
+            _obj_id = None
+        if not _obj_id:
+            try:
+                await query.edit_message_text("Помещение не найдено")
+            except Exception:
+                pass
+            return True
+        try:
+            gid = core_elec.create_kitchen_group(_obj_id, floor_id, equip_code)
+        except Exception as e:
+            print(f"kitchen create: {e}", flush=True)
+            gid = None
+        if gid:
+            try:
+                _g = core_elec.get_group(gid)
+                _name = (_g.get('name') if _g else '?')
+                _phase = (_g.get('phase') if _g else 0) or 1
+                _load = int((_g.get('load_watt') if _g else 0) or 0)
+                _breaker = (_g.get('breaker_type') if _g else '-') or '-'
+                _cable = (_g.get('cable_type') if _g else '-') or '-'
+                _voltage = 380 if _phase == 3 else 220
+                try:
+                    _current = core_elec.calc_current(_load, _phase, _voltage)
+                except Exception:
+                    _current = 0
+                try:
+                    _cable_label = core_spec.get_cable_label(_cable)
+                except Exception:
+                    _cable_label = _cable
+                _text = (
+                    "✅ Группа создана!\n\n"
+                    "⚡ " + str(_name) + "\n"
+                    "Фаза: " + str(_phase) + "ф (" + str(_voltage) + "В)\n"
+                    "Мощность: " + str(_load) + " Вт\n"
+                    "Ток: " + str(_current) + " А\n"
+                    "Автомат: " + str(_breaker) + "\n"
+                    "Кабель: " + str(_cable_label)
+                )
+                await query.edit_message_text(
+                    _text,
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("➕ Ещё оборудование", callback_data="floor_kitchen_" + str(floor_id))],
+                        [InlineKeyboardButton("⚡ К группам этажа", callback_data="floor_groups_" + str(floor_id))],
+                    ])
+                )
+            except Exception as e:
+                print(f"kitchen msg: {e}", flush=True)
+                try:
+                    await query.edit_message_text(
+                        "✅ Группа создана (ID: " + str(gid) + ")",
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("<< Назад", callback_data="floor_kitchen_" + str(floor_id))],
+                        ])
+                    )
+                except Exception:
+                    pass
+        else:
+            try:
+                await query.edit_message_text(
+                    "❌ Не удалось создать группу.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("<< Назад", callback_data="floor_kitchen_" + str(floor_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
+    if data.startswith("floor_kitchen_all_"):
+        floor_id = int(data.replace("floor_kitchen_all_", ""))
+        try:
+            _floor = core_floors.get_floor(floor_id)
+            _obj_id = _floor.get('object_id') if _floor else None
+        except Exception:
+            _obj_id = None
+        if not _obj_id:
+            return True
+        created = 0
+        try:
+            items = core_elec.get_kitchen_equipment()
+            for code, name, watts, phase in items:
+                try:
+                    gid = core_elec.create_kitchen_group(_obj_id, floor_id, code)
+                    if gid:
+                        created += 1
+                except Exception as e:
+                    print(f"kitchen all {code}: {e}", flush=True)
+        except Exception as e:
+            print(f"kitchen all: {e}", flush=True)
+        try:
+            await query.edit_message_text(
+                "Создано: " + str(created) + " групп.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("<< Назад", callback_data="floor_groups_" + str(floor_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("floor_kitchen_"):
+        floor_id = int(data.replace("floor_kitchen_", ""))
+        try:
+            items = core_elec.get_kitchen_equipment()
+        except Exception as e:
+            print(f"kitchen list: {e}", flush=True)
+            items = []
+        if not items:
+            try:
+                await query.edit_message_text("Оборудование не найдено.")
+            except Exception:
+                pass
+            return True
+        buttons = []
+        for idx, (code, name, watts, phase) in enumerate(items):
+            label = name + " " + str(watts) + "W " + str(phase) + "f"
+            buttons.append([InlineKeyboardButton(
+                label[:60],
+                callback_data="floor_kitchen_add_" + str(floor_id) + "_" + str(idx)
+            )])
+        buttons.append([InlineKeyboardButton(
+            ">> Создать все",
+            callback_data="floor_kitchen_all_" + str(floor_id)
+        )])
+        buttons.append([InlineKeyboardButton("<< Назад", callback_data="floor_groups_" + str(floor_id))])
+        try:
+            await query.edit_message_text(
+                "🍳 Кухня. Выбери оборудование:",
+                reply_markup=InlineKeyboardMarkup(buttons)
             )
         except Exception:
             pass
