@@ -417,3 +417,105 @@ def format_phase_distribution(object_id):
         f"   {icon} Перекос: {imb}%"
     )
 
+# ============================================================
+# СВЯЗЬ ГРУППА ↔ КОМНАТА (через точки)
+# ============================================================
+
+def get_groups_by_floor(floor_id):
+    """Все группы щита этажа (все группы помещения)."""
+    rows = fetchall(
+        "SELECT * FROM elec_groups WHERE floor_id = ? ORDER BY id",
+        (floor_id,)
+    )
+    return [dict(r) for r in rows]
+
+
+def get_groups_by_room(room_id):
+    """Группы, которые ОБСЛУЖИВАЮТ эту комнату (через точки в room_comms).
+
+    Одна группа может обслуживать несколько комнат.
+    Возвращает список уникальных групп.
+    """
+    rows = fetchall(
+        """SELECT DISTINCT g.*
+           FROM elec_groups g
+           INNER JOIN room_comms c ON c.group_id = g.id
+           WHERE c.room_id = ?
+           ORDER BY g.id""",
+        (room_id,)
+    )
+    return [dict(r) for r in rows]
+
+
+def get_rooms_by_group(group_id):
+    """Комнаты, в которых есть точки этой группы.
+
+    Возвращает список комнат (id, name) + количество точек.
+    """
+    rows = fetchall(
+        """SELECT r.id, r.name, COUNT(c.id) as points_count
+           FROM rooms r
+           INNER JOIN room_comms c ON c.room_id = r.id
+           WHERE c.group_id = ?
+           GROUP BY r.id, r.name
+           ORDER BY r.id""",
+        (group_id,)
+    )
+    return [dict(r) for r in rows]
+
+
+def get_points_of_group(group_id):
+    """Все точки группы (в любых комнатах)."""
+    rows = fetchall(
+        """SELECT c.*, r.name as room_name
+           FROM room_comms c
+           LEFT JOIN rooms r ON r.id = c.room_id
+           WHERE c.group_id = ?
+           ORDER BY c.room_id, c.id""",
+        (group_id,)
+    )
+    return [dict(r) for r in rows]
+
+
+def get_group_load_actual(group_id):
+    """Фактическая нагрузка группы (сумма мощностей точек, если заданы).
+
+    Пока у точек нет мощности — возвращает 0.
+    """
+    # TODO: когда у room_comms появится поле power_watt — суммировать
+    return 0
+
+
+def assign_point_to_group(comm_id, group_id):
+    """Привязывает точку к группе. Синоним assign_comm_to_group."""
+    return assign_comm_to_group(comm_id, group_id)
+
+
+def unassign_point_from_group(comm_id):
+    """Отвязывает точку от группы."""
+    commit("UPDATE room_comms SET group_id = NULL WHERE id = ?", (comm_id,))
+    return True
+
+
+def format_group_with_rooms(group_id):
+    """Форматирует группу с указанием обслуживаемых комнат."""
+    g = get_group(group_id)
+    if not g:
+        return ""
+    rooms = get_rooms_by_group(group_id)
+    icon = "🚨" if g.get('is_emergency') else spec.PURPOSE_TYPES.get(g.get('purpose'), '📦').split(' ', 1)[0]
+    name = g.get('name') or '—'
+    phase = g.get('phase') or 1
+    load = g.get('load_watt') or 0
+    breaker = g.get('breaker_type') or '—'
+    cable = g.get('cable_type') or '—'
+    if rooms:
+        rooms_str = ", ".join(f"{r['name']} ({r['points_count']})" for r in rooms)
+    else:
+        rooms_str = "—"
+    return (
+        f"{icon} *{name}*\n"
+        f"   {phase}ф · {int(load)} Вт · {breaker} · {cable}\n"
+        f"   Комнаты: {rooms_str}"
+    )
+
