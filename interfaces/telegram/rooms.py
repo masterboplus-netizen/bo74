@@ -2623,6 +2623,66 @@ async def handle_floors_callback(query, context, data):
                 await _show_floor_card(query, floor_id)
             return True
 
+    # --- ГРУППЫ ЭТАЖА ---
+    if data.startswith("floor_groups_"):
+        fid = int(data.replace("floor_groups_", ""))
+        await _show_floor_groups(query, fid)
+        return True
+
+    if data.startswith("floor_group_new_"):
+        fid = int(data.replace("floor_group_new_", ""))
+        context.user_data['group_floor_id'] = fid
+        buttons = []
+        for code, label in core_spec.PURPOSE_TYPES.items():
+            buttons.append([InlineKeyboardButton(label, callback_data=f"floor_group_purpose_{fid}_{code}")])
+        buttons.append([InlineKeyboardButton("⬅️ Отмена", callback_data=f"floor_groups_{fid}")])
+        try:
+            await query.edit_message_text(
+                "⚡ *Новая группа этажа*\n\nНазначение:",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("floor_group_purpose_"):
+        parts = data.replace("floor_group_purpose_", "").rsplit("_", 1)
+        fid = int(parts[0])
+        purpose = parts[1]
+        context.user_data['group_floor_id'] = fid
+        context.user_data['group_purpose'] = purpose
+        label = core_spec.PURPOSE_TYPES.get(purpose, purpose)
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("1-фазная", callback_data=f"floor_group_phase_{fid}_1")],
+            [InlineKeyboardButton("3-фазная", callback_data=f"floor_group_phase_{fid}_3")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data=f"floor_groups_{fid}")],
+        ])
+        try:
+            await query.edit_message_text(f"⚡ *{label}*\n\nФаза:", parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("floor_group_phase_"):
+        parts = data.replace("floor_group_phase_", "").rsplit("_", 1)
+        fid = int(parts[0])
+        phase = int(parts[1])
+        context.user_data['group_floor_id'] = fid
+        context.user_data['group_phase'] = phase
+        context.user_data['waiting_for'] = 'group_load_watt'
+        try:
+            await query.edit_message_text(
+                "⚡ Мощность группы в *Вт*?\n\n_Например: 500_",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"floor_groups_{fid}")],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
     return False
 
 
@@ -2654,6 +2714,40 @@ async def _show_floors_list(query, object_id):
         print(f"⚠️ _show_floors_list: {e}", flush=True)
 
 
+async def _show_floor_groups(query, floor_id):
+    """Список групп этажа."""
+    if not core_elec:
+        try:
+            await query.edit_message_text("❌ Модуль ЭОМ не загружен")
+        except Exception:
+            pass
+        return
+
+    f = core_floors.get_floor(floor_id)
+    name = f.get('floor_name') or f"Этаж {f.get('floor_number')}" if f else "?"
+
+    groups = core_elec.get_groups_by_floor(floor_id)
+
+    lines = [f"⚡ *Группы этажа* «{name}»\n"]
+    if not groups:
+        lines.append("_Пока групп нет._\n")
+    else:
+        total_w = 0
+        for g in groups:
+            lines.append(core_elec.format_group_with_rooms(g['id']))
+            total_w += g.get('load_watt') or 0
+        lines.append(f"\n📊 *Групп: {len(groups)} · Σ {int(total_w)} Вт*")
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Создать группу", callback_data=f"floor_group_new_{floor_id}")],
+        [InlineKeyboardButton("⬅️ К помещению", callback_data=f"floor_{floor_id}")],
+    ])
+    try:
+        await query.edit_message_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+    except Exception as e:
+        print(f"⚠️ _show_floor_groups: {e}", flush=True)
+
+
 async def _show_floor_card(query, floor_id):
     """Карточка помещения."""
     f = core_floors.get_floor(floor_id)
@@ -2683,6 +2777,7 @@ async def _show_floor_card(query, floor_id):
 
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("📦 Комнаты помещения", callback_data=f"floor_rooms_{floor_id}")],
+        [InlineKeyboardButton("⚡ Группы этажа", callback_data=f"floor_groups_{floor_id}")],
         [InlineKeyboardButton("⚡ ЭОМ объекта", callback_data=f"obj_elec_{object_id}")],
         [InlineKeyboardButton("✏️ Переименовать", callback_data=f"floor_rename_{floor_id}")],
         [InlineKeyboardButton("🗑 Удалить", callback_data=f"floor_{floor_id}_del")],
@@ -3918,10 +4013,119 @@ async def _handle_height_callback(query, context, data):
 # ОБРАБОТЧИК ВВОДА (главный)
 # ============================================================
 
+async def _handle_group_load_input(update, context):
+    """Обработка ввода мощности группы ЭОМ."""
+    if not core_elec:
+        await update.message.reply_text("❌ Модуль ЭОМ не загружен")
+        context.user_data['waiting_for'] = None
+        return
+
+    floor_id = context.user_data.get('group_floor_id')
+    room_id = context.user_data.get('group_room_id')
+    purpose = context.user_data.get('group_purpose')
+    phase = context.user_data.get('group_phase') or 1
+
+    object_id = None
+    if floor_id:
+        try:
+            from core.floors import get_floor
+            floor = get_floor(floor_id)
+            object_id = floor.get('object_id') if floor else None
+        except Exception:
+            pass
+    if not object_id and room_id:
+        try:
+            from core.rooms import get_room
+            room = get_room(room_id)
+            object_id = room.get('object_id') if room else None
+            if not floor_id and room:
+                floor_id = room.get('floor_id')
+        except Exception:
+            pass
+
+    if not (object_id and purpose):
+        await update.message.reply_text("❌ Потерялись данные группы")
+        context.user_data['waiting_for'] = None
+        return
+
+    text_val = (update.message.text or '').strip().replace(',', '.')
+    try:
+        load_watt = float(text_val)
+    except ValueError:
+        await update.message.reply_text("❌ Нужно число (Вт)")
+        return
+
+    if load_watt <= 0 or load_watt > 100000:
+        await update.message.reply_text("❌ Мощность от 1 до 100 000 Вт")
+        return
+
+    supply = core_elec.get_supply(object_id)
+    if not supply:
+        core_elec.set_supply(object_id, phase_count=1, voltage=220)
+
+    voltage = 380 if phase == 3 else 220
+    current = core_elec.calc_current(load_watt, phase, voltage)
+    rating, curve = core_elec.pick_breaker(load_watt, phase, 'C')
+    cable = core_elec.pick_cable(load_watt, phase, voltage)
+    breaker_type = f"{'3P' if phase == 3 else '1P'} {curve}{rating}"
+
+    purpose_label = core_spec.PURPOSE_TYPES.get(purpose, purpose).split(' ', 1)[-1]
+    name = f"{purpose_label} {int(load_watt)}Вт"
+
+    try:
+        group_id = core_elec.create_group(
+            object_id=object_id,
+            room_id=None,
+            name=name,
+            phase=phase,
+            purpose=purpose,
+            cable_type=cable,
+            load_watt=load_watt,
+            breaker_type=breaker_type,
+            breaker_curve=curve,
+            floor_id=floor_id,
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка создания группы: {e}")
+        context.user_data['waiting_for'] = None
+        return
+
+    for k in ['group_room_id', 'group_floor_id', 'group_purpose', 'group_phase']:
+        context.user_data[k] = None
+    context.user_data['waiting_for'] = None
+
+    text = (
+        f"✅ *Группа создана*\n\n"
+        f"⚡ *{name}*\n"
+        f"Фаза: {phase}ф ({voltage}В)\n"
+        f"Мощность: {int(load_watt)} Вт\n"
+        f"Ток: {current} А\n"
+        f"Автомат: *{breaker_type}*\n"
+        f"Кабель: *{core_spec.get_cable_label(cable)}*"
+    )
+
+    # Кнопки — ведём к группам этажа
+    kb_btns = []
+    if floor_id:
+        kb_btns.append([InlineKeyboardButton("➕ Ещё группу", callback_data=f"floor_group_new_{floor_id}")])
+        kb_btns.append([InlineKeyboardButton("⚡ К группам этажа", callback_data=f"floor_groups_{floor_id}")])
+    if room_id:
+        kb_btns.append([InlineKeyboardButton("⚡ К группам комнаты", callback_data=f"room_groups_{room_id}")])
+
+    await update.message.reply_text(
+        text, parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(kb_btns) if kb_btns else None
+    )
+
+
 async def handle_measure_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Роутер текстового ввода по waiting_for."""
     step = context.user_data.get('waiting_for')
     if not step:
+        return
+
+    if step == 'group_load_watt':
+        await _handle_group_load_input(update, context)
         return
 
     # --- ЭОМ: ввод мощности группы ---
