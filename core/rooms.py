@@ -21,6 +21,20 @@ def create_room(object_id, name, is_default=False, order_num=0, tenant_id=1,
     )
     if existing:
         return existing['id']
+    if floor_id is None:
+        # Автопривязка к первому помещению объекта (или создание «Этаж 1»)
+        try:
+            _row = fetchone(
+                "SELECT id FROM floors WHERE object_id = ? ORDER BY floor_number, id LIMIT 1",
+                (object_id,)
+            )
+            if _row:
+                floor_id = _row['id']
+            else:
+                from core.floors import create_floor
+                floor_id = create_floor(object_id, floor_number=1, floor_name="Этаж 1")
+        except Exception as e:
+            print(f"⚠️ create_room auto-floor: {e}", flush=True)
     return commit(
         """INSERT INTO rooms
            (object_id, name, is_default, order_num, tenant_id,

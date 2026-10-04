@@ -1047,7 +1047,6 @@ def objects_keyboard():
 def object_detail_keyboard(object_id):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🏠 Помещения", callback_data=f"obj_floors_{object_id}")],
-        [InlineKeyboardButton("📦 Комнаты", callback_data=f"rooms_list_obj_{object_id}")],
         [InlineKeyboardButton("⚡ ЭОМ объекта", callback_data=f"obj_elec_{object_id}")],
         [InlineKeyboardButton("📋 Задачи объекта", callback_data=f"objtasks_{object_id}")],
         [InlineKeyboardButton("💰 Финансы", callback_data=f"objfin_{object_id}")],

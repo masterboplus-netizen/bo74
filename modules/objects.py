@@ -12,6 +12,14 @@ def create_object(name: str, address: str = None, budget: int = 0, user_id: int 
         (code, name, address, budget, user_id)
     )
     object_id = c.lastrowid
+    # Автосоздание «Этаж 1» для нового объекта
+    try:
+        c.execute(
+            "INSERT INTO floors (object_id, floor_number, floor_name) VALUES (?, 1, 'Этаж 1')",
+            (object_id,)
+        )
+    except Exception as e:
+        print(f"⚠️ create_object auto-floor: {e}", flush=True)
     conn.commit()
     conn.close()
     return object_id
