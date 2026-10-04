@@ -561,3 +561,67 @@ def create_kitchen_group(object_id, floor_id, equip_code):
         breaker_curve=curve,
         floor_id=floor_id,
     )
+
+# ============================================================
+# КАБЕЛЬНЫЙ ЖУРНАЛ
+# ============================================================
+
+def add_cable(object_id, group_id=None, from_point=None, to_point=None,
+              cable_type=None, length_m=None, route_type=None, note=None):
+    """Добавляет кабель в журнал. Возвращает cable_id."""
+    return commit(
+        """INSERT INTO elec_cables
+           (object_id, group_id, from_point, to_point,
+            cable_type, length_m, route_type, note)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (object_id, group_id, from_point, to_point,
+         cable_type, length_m, route_type, note)
+    )
+
+def get_cable(cable_id):
+    row = fetchone("SELECT * FROM elec_cables WHERE id = ?", (cable_id,))
+    return dict(row) if row else None
+
+def get_cables_by_object(object_id):
+    rows = fetchall(
+        "SELECT * FROM elec_cables WHERE object_id = ? ORDER BY id",
+        (object_id,)
+    )
+    return [dict(r) for r in rows]
+
+def get_cables_by_group(group_id):
+    rows = fetchall(
+        "SELECT * FROM elec_cables WHERE group_id = ? ORDER BY id",
+        (group_id,)
+    )
+    return [dict(r) for r in rows]
+
+def delete_cable(cable_id):
+    commit("DELETE FROM elec_cables WHERE id = ?", (cable_id,))
+    return True
+
+def get_cable_summary(object_id):
+    """Суммарная длина по типам кабеля."""
+    cables = get_cables_by_object(object_id)
+    summary = {}
+    total = 0
+    for c in cables:
+        ctype = c.get('cable_type') or 'no_type'
+        length = c.get('length_m') or 0
+        summary[ctype] = summary.get(ctype, 0) + length
+        total += length
+    return {
+        'by_type': summary,
+        'total_m': round(total, 2),
+        'count': len(cables),
+    }
+
+def format_cable(c):
+    """Форматирует кабель в строку."""
+    ctype = c.get('cable_type') or '-'
+    length = c.get('length_m') or 0
+    frm = c.get('from_point') or '?'
+    to = c.get('to_point') or '?'
+    route = c.get('route_type') or ''
+    route_str = ' / ' + route if route else ''
+    return str(ctype) + ': ' + str(frm) + ' -> ' + str(to) + ' / ' + str(length) + ' m' + route_str

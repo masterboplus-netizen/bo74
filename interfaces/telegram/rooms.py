@@ -76,6 +76,11 @@ try:
 except Exception:
     core_elec = None
 
+try:
+    from core import elec_panels as core_elec_panels
+except Exception:
+    core_elec_panels = None
+
 # --- Помещения (этажи / зоны) ---
 try:
     from core import floors as core_floors
@@ -3032,6 +3037,7 @@ async def _show_obj_elec(query, object_id):
 
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton(supply_btn, callback_data=f"obj_elec_setup_{object_id}")],
+        [InlineKeyboardButton("📋 Кабельный журнал", callback_data=f"cables_list_{object_id}")],
         [InlineKeyboardButton("⬅️ К объекту", callback_data=f"obj_{object_id}")],
     ])
 
@@ -3791,6 +3797,18 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     # --- План комнаты (PNG) ---    # --- Помещения ---
+    # --- ЩИТЫ ЭОМ ---
+    if data.startswith("panels_") or data.startswith("panel_"):
+        handled = await handle_panels_callback(query, context, data)
+        if handled:
+            return
+
+    # --- КАБЕЛЬНЫЙ ЖУРНАЛ ---
+    if data.startswith("cables_"):
+        handled = await handle_cables_callback(query, context, data)
+        if handled:
+            return
+
     # --- КУХОННЫЕ ШАБЛОНЫ (кафе/рестораны) ---
     if data.startswith("floor_kitchen_"):
         handled = await handle_kitchen_callback(query, context, data)
@@ -4307,6 +4325,71 @@ async def handle_measure_input(update: Update, context: ContextTypes.DEFAULT_TYP
     if not step:
         return
 
+    # --- КАБЕЛЬНЫЙ ЖУРНАЛ ---
+    if step == 'cable_from_point':
+        val = (update.message.text or '').strip()
+        if not val:
+            await update.message.reply_text("Введи текст")
+            return
+        context.user_data['cable_from_point'] = val
+        context.user_data['waiting_for'] = 'cable_to_point'
+        await update.message.reply_text("Куда кабель (к точке)?")
+        return
+
+    if step == 'cable_to_point':
+        val = (update.message.text or '').strip()
+        if not val:
+            await update.message.reply_text("Введи текст")
+            return
+        context.user_data['cable_to_point'] = val
+        context.user_data['waiting_for'] = 'cable_length'
+        await update.message.reply_text("Длина кабеля (метры)?")
+        return
+
+    if step == 'cable_length':
+        val = (update.message.text or '').strip().replace(',', '.')
+        try:
+            length_m = float(val)
+        except ValueError:
+            await update.message.reply_text("Нужно число")
+            return
+        if length_m <= 0 or length_m > 1000:
+            await update.message.reply_text("Длина от 0.1 до 1000 м")
+            return
+        object_id = context.user_data.get('cable_object_id')
+        group_id = context.user_data.get('cable_group_id')
+        frm = context.user_data.get('cable_from_point')
+        to = context.user_data.get('cable_to_point')
+        cable_type = None
+        try:
+            if group_id:
+                _g = core_elec.get_group(group_id)
+                cable_type = _g.get('cable_type') if _g else None
+        except Exception:
+            pass
+        try:
+            core_elec.add_cable(
+                object_id=object_id,
+                group_id=group_id,
+                from_point=frm,
+                to_point=to,
+                cable_type=cable_type,
+                length_m=length_m,
+                route_type=None,
+                note=None,
+            )
+        except Exception as e:
+            print(f"add_cable: {e}", flush=True)
+        for k in ['cable_object_id', 'cable_group_id', 'cable_from_point', 'cable_to_point', 'waiting_for']:
+            context.user_data[k] = None
+        await update.message.reply_text(
+            "Кабель добавлен!",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("К журналу", callback_data="cables_list_" + str(object_id))],
+            ])
+        )
+        return
+
     if step == 'group_load_watt':
         await _handle_group_load_input(update, context)
         return
@@ -4737,6 +4820,284 @@ async def handle_kitchen_callback(query, context, data):
             )
         except Exception:
             pass
+        return True
+
+    return False
+
+# ============================================================
+# КАБЕЛЬНЫЙ ЖУРНАЛ — UI
+# ============================================================
+
+async def handle_cables_callback(query, context, data):
+    """Обработчик кабельного журнала."""
+    if not core_elec:
+        return False
+
+    if data.startswith("cables_list_"):
+        object_id = int(data.replace("cables_list_", ""))
+        try:
+            cables = core_elec.get_cables_by_object(object_id)
+            summary = core_elec.get_cable_summary(object_id)
+        except Exception as e:
+            print(f"cables list: {e}", flush=True)
+            cables = []
+            summary = {}
+        lines = ["📋 *Кабельный журнал*"]
+        if not cables:
+            lines.append("")
+            lines.append("_Пока кабелей нет._")
+        else:
+            lines.append("")
+            lines.append("Записей: " + str(summary.get('count', 0)) + " / Всего: " + str(summary.get('total_m', 0)) + " м")
+            lines.append("")
+            for c in cables[:20]:
+                lines.append(core_elec.format_cable(c))
+        kb_rows = [
+            [InlineKeyboardButton("➕ Добавить кабель", callback_data="cables_add_" + str(object_id))],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="obj_elec_" + str(object_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print(f"cables list show: {e}", flush=True)
+        return True
+
+    if data.startswith("cables_add_"):
+        object_id = int(data.replace("cables_add_", ""))
+        try:
+            groups = core_elec.get_groups_by_object(object_id)
+        except Exception as e:
+            print(f"cables add groups: {e}", flush=True)
+            groups = []
+        if not groups:
+            try:
+                await query.edit_message_text(
+                    "⚠️ Сначала создай хотя бы одну группу ЭОМ.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ Назад", callback_data="cables_list_" + str(object_id))],
+                    ])
+                )
+            except Exception:
+                pass
+            return True
+        buttons = []
+        for g in groups[:20]:
+            gname = (g.get('name') or ('Группа #' + str(g['id'])))[:35]
+            buttons.append([InlineKeyboardButton(
+                "⚡ " + gname,
+                callback_data="cables_group_" + str(object_id) + "_" + str(g['id'])
+            )])
+        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="cables_list_" + str(object_id))])
+        try:
+            await query.edit_message_text(
+                "📋 *Выбери группу* для кабеля:",
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("cables_group_"):
+        parts = data.replace("cables_group_", "").rsplit("_", 1)
+        object_id = int(parts[0])
+        group_id = int(parts[1])
+        context.user_data['cable_object_id'] = object_id
+        context.user_data['cable_group_id'] = group_id
+        context.user_data['waiting_for'] = 'cable_from_point'
+        try:
+            await query.edit_message_text(
+                "📋 *Кабель*\n\nОткуда (от щита)?\n\n_Например: Щит этажа_",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data="cables_list_" + str(object_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("cables_del_"):
+        cable_id = int(data.replace("cables_del_", ""))
+        try:
+            c = core_elec.get_cable(cable_id)
+            object_id = c.get('object_id') if c else None
+            core_elec.delete_cable(cable_id)
+        except Exception as e:
+            print(f"cables del: {e}", flush=True)
+            object_id = None
+        if object_id:
+            try:
+                await query.edit_message_text(
+                    "✅ Удалено",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К журналу", callback_data="cables_list_" + str(object_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
+    return False
+
+# ============================================================
+# ЩИТЫ ЭОМ — UI
+# ============================================================
+
+async def handle_panels_callback(query, context, data):
+    """Обработчик щитов ЭОМ. Возвращает True если обработано."""
+    if not core_elec_panels:
+        try:
+            await query.edit_message_text("Модуль щитов не загружен")
+        except Exception:
+            pass
+        return True
+
+    # --- СПИСОК ЩИТОВ ОБЪЕКТА ---
+    if data.startswith("panels_list_"):
+        object_id = int(data.replace("panels_list_", ""))
+        try:
+            panels = core_elec_panels.get_panels(object_id)
+        except Exception as e:
+            print("panels list: " + str(e), flush=True)
+            panels = []
+        from modules.objects import get_object as _get_obj
+        _obj = _get_obj(object_id)
+        _obj_name = _obj['name'] if _obj else ('Объект ' + str(object_id))
+        lines = ["⚡ *Щиты объекта «" + str(_obj_name) + "»*", ""]
+        if not panels:
+            lines.append("_Пока щитов нет._")
+        else:
+            total = 0
+            for p in panels:
+                try:
+                    load = core_elec_panels.calc_panel_load(p['id'])
+                except Exception:
+                    load = 0
+                total += load
+            lines.append("Щитов: " + str(len(panels)) + " / Общая нагрузка: " + str(total) + " Вт")
+            lines.append("")
+            for p in panels:
+                ptype = core_elec_panels.get_panel_type_label(p.get('panel_type'))
+                lines.append("⚡ *" + str(p.get('name') or '?') + "*")
+                lines.append("   " + str(ptype))
+        kb_rows = []
+        for p in panels:
+            pname = (p.get('name') or '?')[:35]
+            kb_rows.append([InlineKeyboardButton(
+                "⚡ " + pname,
+                callback_data="panel_" + str(p['id'])
+            )])
+        kb_rows.append([InlineKeyboardButton("➕ Добавить щит", callback_data="panel_add_" + str(object_id))])
+        kb_rows.append([InlineKeyboardButton("⬅️ К объекту", callback_data="obj_" + str(object_id))])
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("panels list show: " + str(e), flush=True)
+        return True
+
+    # --- КАРТОЧКА ЩИТА ---
+    if data.startswith("panel_groups_"):
+        panel_id = int(data.replace("panel_groups_", ""))
+        try:
+            groups = core_elec_panels.get_groups_by_panel(panel_id)
+            p = core_elec_panels.get_panel(panel_id)
+        except Exception as e:
+            print("panel groups: " + str(e), flush=True)
+            groups = []
+            p = None
+        pname = (p.get('name') if p else '?')
+        lines = ["⚡ *Группы щита «" + str(pname) + "»*", ""]
+        if not groups:
+            lines.append("_Пока групп нет._")
+        else:
+            total = 0
+            for g in groups:
+                total += int(g.get('load_watt') or 0)
+                lines.append(core_elec.format_group(g) if core_elec else str(g.get('name')))
+            lines.append("")
+            lines.append("📊 Групп: " + str(len(groups)) + " / " + str(total) + " Вт")
+        kb_rows = [
+            [InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("panel groups show: " + str(e), flush=True)
+        return True
+
+    if data.startswith("panel_del_"):
+        panel_id = int(data.replace("panel_del_", ""))
+        try:
+            p = core_elec_panels.get_panel(panel_id)
+            object_id = p.get('object_id') if p else None
+            core_elec_panels.delete_panel(panel_id)
+        except Exception as e:
+            print("panel del: " + str(e), flush=True)
+            object_id = None
+        if object_id:
+            try:
+                await query.edit_message_text(
+                    "✅ Щит удалён",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К щитам", callback_data="panels_list_" + str(object_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
+    if data.startswith("panel_"):
+        panel_id = int(data.replace("panel_", ""))
+        try:
+            summary = core_elec_panels.get_panel_summary(panel_id)
+        except Exception as e:
+            print("panel card: " + str(e), flush=True)
+            summary = None
+        if not summary:
+            try:
+                await query.edit_message_text("Щит не найден")
+            except Exception:
+                pass
+            return True
+        p = summary['panel']
+        ptype = core_elec_panels.get_panel_type_label(p.get('panel_type'))
+        mount = core_elec_panels.get_mount_type_label(p.get('mount_type'))
+        lines = ["⚡ *" + str(p.get('name') or '?') + "*", ""]
+        lines.append("Тип: " + str(ptype))
+        lines.append("Монтаж: " + str(mount))
+        if p.get('input_breaker'):
+            lines.append("Вводной: " + str(p['input_breaker']))
+        if p.get('meter_type'):
+            lines.append("Счётчик: " + str(p['meter_type']))
+        lines.append("")
+        lines.append("📋 Групп: " + str(summary['groups_count']))
+        lines.append("📊 Нагрузка: " + str(summary['total_load_watt']) + " Вт")
+        parent = summary.get('parent')
+        if parent:
+            lines.append("⬆️ Питается от: " + str(parent.get('name')))
+        children = summary.get('children') or []
+        if children:
+            lines.append("⬇️ Питает: " + ", ".join(c.get('name') or '?' for c in children))
+        kb_rows = [
+            [InlineKeyboardButton("📋 Группы щита", callback_data="panel_groups_" + str(panel_id))],
+            [InlineKeyboardButton("🗑 Удалить щит", callback_data="panel_del_" + str(panel_id))],
+            [InlineKeyboardButton("⬅️ К щитам", callback_data="panels_list_" + str(p.get('object_id')))],
+        ]
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("panel card show: " + str(e), flush=True)
         return True
 
     return False
