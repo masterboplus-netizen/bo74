@@ -280,3 +280,378 @@ def get_panel_summary(panel_id):
         'parent': get_parent_panel(panel_id),
         'children': get_child_panels(panel_id),
     }
+
+
+# ============================================================
+# ВВОДНОЙ АВТОМАТ
+# ============================================================
+
+def set_input_breaker(panel_id, breaker_type=None, rating=None,
+                     curve=None, poles=None, rcd_ma=None):
+    """Устанавливает вводной автомат щита.
+
+    breaker_type: auto / uzo / dif / switch
+    rating: номинал (А)
+    curve: B / C / D
+    poles: 1 / 2 / 3 / 4
+    rcd_ma: 10 / 30 / 100 / 300 (для uzo/dif)
+    """
+    fields, params = [], []
+    for k, v in [
+        ("input_breaker_type", breaker_type),
+        ("input_breaker_rating", rating),
+        ("input_breaker_curve", curve),
+        ("input_breaker_poles", poles),
+        ("input_breaker_rcd_ma", rcd_ma),
+    ]:
+        if v is not None:
+            fields.append(k + " = ?")
+            params.append(v)
+    if not fields:
+        return False
+    params.append(panel_id)
+    commit("UPDATE elec_panels SET " + ", ".join(fields) + " WHERE id = ?", params)
+    return True
+
+
+def get_input_breaker(panel_id):
+    """Возвращает dict с полями вводного автомата или None."""
+    p = get_panel(panel_id)
+    if not p:
+        return None
+    return {
+        'type': p.get('input_breaker_type'),
+        'rating': p.get('input_breaker_rating'),
+        'curve': p.get('input_breaker_curve'),
+        'poles': p.get('input_breaker_poles'),
+        'rcd_ma': p.get('input_breaker_rcd_ma'),
+        'raw': p.get('input_breaker'),
+    }
+
+
+def format_input_breaker(panel_id):
+    """Текстовая строка вводного автомата."""
+    b = get_input_breaker(panel_id)
+    if not b or not b.get('type'):
+        return "не задан"
+    parts = []
+    type_labels = {
+        'auto': 'Автомат',
+        'uzo': 'УЗО',
+        'dif': 'Дифавтомат',
+        'switch': 'Рубильник',
+    }
+    parts.append(type_labels.get(b['type'], b['type']))
+    if b.get('poles'):
+        parts.append(str(b['poles']) + "P")
+    if b.get('rating'):
+        parts.append(str(b['rating']) + "А")
+    if b.get('curve'):
+        parts.append(b['curve'])
+    if b.get('rcd_ma'):
+        parts.append(str(b['rcd_ma']) + "мА")
+    return " ".join(parts)
+
+
+# ============================================================
+# КОМПОНЕНТЫ ЩИТА
+# ============================================================
+
+def add_component(panel_id, component_type, component_model=None,
+                  rating=None, curve=None, poles=None, rcd_ma=None,
+                  quantity=1, linked_group_id=None, order_num=None,
+                  is_manual=0, note=None):
+    """Добавляет компонент в щит. Возвращает component_id."""
+    return commit(
+        """INSERT INTO elec_panel_components
+           (panel_id, component_type, component_model, rating, curve,
+            poles, rcd_ma, quantity, linked_group_id, order_num, is_manual, note)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (panel_id, component_type, component_model, rating, curve,
+         poles, rcd_ma, quantity, linked_group_id, order_num, is_manual, note)
+    )
+
+
+def get_component(component_id):
+    row = fetchone("SELECT * FROM elec_panel_components WHERE id = ?", (component_id,))
+    return dict(row) if row else None
+
+
+def get_components(panel_id):
+    """Все компоненты щита."""
+    rows = fetchall(
+        "SELECT * FROM elec_panel_components WHERE panel_id = ? ORDER BY order_num, id",
+        (panel_id,)
+    )
+    return [dict(r) for r in rows]
+
+
+def get_components_by_group(group_id):
+    rows = fetchall(
+        "SELECT * FROM elec_panel_components WHERE linked_group_id = ? ORDER BY id",
+        (group_id,)
+    )
+    return [dict(r) for r in rows]
+
+
+def delete_component(component_id):
+    commit("DELETE FROM elec_panel_components WHERE id = ?", (component_id,))
+    return True
+
+
+def clear_auto_components(panel_id):
+    """Удаляет только автоматические компоненты (is_manual=0)."""
+    commit("DELETE FROM elec_panel_components WHERE panel_id = ? AND is_manual = 0", (panel_id,))
+    return True
+
+
+def format_component(c):
+    """Строка описания компонента."""
+    type_labels = {
+        'auto': '🔌 Автомат',
+        'uzo': '🛡 УЗО',
+        'dif': '🛡 Дифавтомат',
+        'switch': '⚙️ Рубильник',
+        'busbar': '📏 Шина',
+        'clamp': '🔗 Клемма',
+        'counter': '📊 Счётчик',
+    }
+    label = type_labels.get(c.get('component_type'), c.get('component_type') or '?')
+    parts = [label]
+    model = c.get('component_model')
+    if model:
+        parts.append(str(model))
+    if c.get('poles'):
+        parts.append(str(c['poles']) + "P")
+    if c.get('rating'):
+        parts.append(str(c['rating']) + "А")
+    if c.get('curve'):
+        parts.append(c['curve'])
+    if c.get('rcd_ma'):
+        parts.append(str(c['rcd_ma']) + "мА")
+    q = c.get('quantity') or 1
+    if q > 1:
+        parts.append("x" + str(q))
+    return " ".join(parts)
+
+
+# ============================================================
+# АВТОКОМПЛЕКТАЦИЯ ЩИТА
+# ============================================================
+
+def autocomplete_panel(panel_id, rules=None):
+    """Автокомплектация щита.
+
+    1. Удаляет старые АВТО компоненты (is_manual=0)
+    2. Создаёт: вводной автомат, автоматы на группы, УЗО, шины, клеммы
+    3. Сохраняет РУЧНЫЕ компоненты (is_manual=1)
+
+    Возвращает dict: {'created': N, 'skipped': M, 'manual': K}
+    """
+    from core import elec_rules as rules_mod
+    from core import elec as elec_mod
+
+    p = get_panel(panel_id)
+    if not p:
+        return None
+
+    object_id = p.get('object_id')
+    if rules is None:
+        rules = rules_mod.get_rules(object_id)
+
+    # 1. Удаляем старые авто-компоненты
+    clear_auto_components(panel_id)
+
+    # 2. Считаем нагрузку
+    groups = get_groups_by_panel(panel_id)
+    total_watt = 0
+    for g in groups:
+        total_watt += int(g.get('load_watt') or 0)
+
+    # Применяем одновременность
+    total_watt_calc = total_watt * rules.get('simultaneity_factor', 0.8)
+
+    created = 0
+    order = 1
+
+    # 3. Вводной автомат — только если НЕ задан вручную
+    input_b = get_input_breaker(panel_id)
+    if not input_b or not input_b.get('type'):
+        phase_count = 1
+        try:
+            supply = elec_mod.get_supply(object_id) or {}
+            phase_count = supply.get('phase_count') or 1
+        except Exception:
+            pass
+        voltage = 380 if phase_count == 3 else 220
+
+        if total_watt_calc > 0:
+            current = elec_mod.calc_current(total_watt_calc, phase_count, voltage)
+            rating = elec_mod.pick_breaker(total_watt_calc, phase_count,
+                                            rules.get('default_curve', 'C'))[0]
+            poles = 3 if phase_count == 3 else 1
+
+            # Ограничение: 1-фазный максимум 63А
+            max_1p = rules.get('max_breaker_1p', 63)
+            if phase_count == 1 and rating > max_1p:
+                rating = max_1p
+
+            add_component(
+                panel_id, 'auto',
+                component_model=rules.get('auto_model'),
+                rating=rating, curve=rules.get('default_curve', 'C'),
+                poles=poles, quantity=1, order_num=order
+            )
+            created += 1
+            order += 1
+
+            # УЗО на ввод (противопожарное)
+            add_component(
+                panel_id, 'uzo',
+                component_model=rules.get('uzo_model'),
+                rating=rating,
+                poles=poles,
+                rcd_ma=rules.get('rcd_input_ma', 100),
+                quantity=1, order_num=order
+            )
+            created += 1
+            order += 1
+
+    # 4. Автоматы на группы
+    for g in groups:
+        group_load = int(g.get('load_watt') or 0)
+        if group_load <= 0:
+            continue
+        phase = int(g.get('phase') or 1)
+        voltage = 380 if phase == 3 else 220
+
+        try:
+            rating = elec_mod.pick_breaker(group_load, phase,
+                                           rules.get('default_curve', 'C'))[0]
+        except Exception:
+            rating = 16
+
+        # Минимальный номинал по назначению
+        min_by_purpose = rules.get('min_rating_by_purpose') or {}
+        purpose_key = g.get('purpose') or 'socket'
+        min_rating = min_by_purpose.get(purpose_key, 6)
+        if rating < min_rating:
+            rating = min_rating
+
+        poles = 3 if phase == 3 else 1
+
+        # Автомат группы
+        add_component(
+            panel_id, 'auto',
+            component_model=rules.get('auto_model'),
+            rating=rating, curve=rules.get('default_curve', 'C'),
+            poles=poles, quantity=1, linked_group_id=g['id'],
+            order_num=order
+        )
+        created += 1
+        order += 1
+
+        # УЗО на группу — по назначению
+        purpose = g.get('purpose') or 'socket'
+        need_uzo = False
+        if purpose == 'socket' and rules.get('uzo_sockets'):
+            need_uzo = True
+        elif purpose == 'kitchen' and rules.get('uzo_kitchen'):
+            need_uzo = True
+        elif purpose == 'light' and rules.get('uzo_lighting'):
+            need_uzo = True
+        elif purpose in ('bathroom', 'wet') and rules.get('uzo_bathroom'):
+            need_uzo = True
+        elif purpose == 'outdoor' and rules.get('uzo_outdoor'):
+            need_uzo = True
+
+        if need_uzo:
+            add_component(
+                panel_id, 'uzo',
+                component_model=rules.get('uzo_model'),
+                rating=rating,
+                poles=poles,
+                rcd_ma=rules.get('rcd_sockets_ma', 30),
+                quantity=1, linked_group_id=g['id'],
+                order_num=order
+            )
+            created += 1
+            order += 1
+
+    # 5. Шина N/PE (если не задана)
+    existing_busbar = [c for c in get_components(panel_id)
+                       if c.get('component_type') == 'busbar']
+    if not existing_busbar:
+        add_component(panel_id, 'busbar', component_model='Шина N/PE',
+                      quantity=2, order_num=order)
+        created += 1
+        order += 1
+
+    # 6. Клеммы на ввод
+    add_component(panel_id, 'clamp', component_model='Клемма вводная',
+                  quantity=4, order_num=order)
+
+    manual_count = len([c for c in get_components(panel_id) if c.get('is_manual')])
+
+    return {
+        'created': created,
+        'manual': manual_count,
+        'total_watt': total_watt,
+        'calc_watt': round(total_watt_calc, 1),
+        'groups': len(groups),
+    }
+
+
+def recalc_panel(panel_id, rules=None):
+    """Пересчёт щита (алиас autocomplete_panel)."""
+    return autocomplete_panel(panel_id, rules=rules)
+
+
+def format_panel_components(panel_id):
+    """Полный текст комплектации щита."""
+    p = get_panel(panel_id)
+    if not p:
+        return "Щит не найден"
+    comps = get_components(panel_id)
+    lines = ["🔧 Комплектация щита «" + str(p.get('name')) + "»", ""]
+
+    # Группировка по типу
+    by_type = {}
+    for c in comps:
+        t = c.get('component_type') or 'other'
+        by_type.setdefault(t, []).append(c)
+
+    type_order = ['auto', 'uzo', 'dif', 'switch', 'counter', 'busbar', 'clamp']
+    for t in type_order:
+        items = by_type.get(t)
+        if not items:
+            continue
+        lines.append("── " + t.upper() + " ──")
+        for c in items:
+            mark = " [ручной]" if c.get('is_manual') else ""
+            lines.append("  " + format_component(c) + mark)
+        lines.append("")
+
+    return chr(10).join(lines)
+
+
+def get_panel_stats(panel_id):
+    """Статистика щита: модули, компоненты, нагрузка."""
+    comps = get_components(panel_id)
+    modules = 0
+    for c in comps:
+        t = c.get('component_type')
+        if t in ('auto', 'uzo', 'dif', 'switch'):
+            poles = c.get('poles') or 1
+            q = c.get('quantity') or 1
+            modules += poles * q
+
+    load = calc_panel_load(panel_id)
+    groups = get_groups_by_panel(panel_id)
+
+    return {
+        'components_total': len(comps),
+        'modules_used': modules,
+        'groups_count': len(groups),
+        'total_load_watt': load,
+    }
