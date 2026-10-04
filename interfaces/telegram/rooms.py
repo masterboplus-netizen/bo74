@@ -5139,6 +5139,78 @@ async def handle_panels_callback(query, context, data):
             pass
         return True
 
+    if data.startswith("panel_children_"):
+        panel_id = int(data.replace("panel_children_", ""))
+        try:
+            children = core_elec_panels.get_child_panels(panel_id)
+        except Exception as e:
+            print("panel children: " + str(e), flush=True)
+            children = []
+        lines = ["⬇️ Дочерние щиты:", ""]
+        if not children:
+            lines.append("_Пока нет._")
+        else:
+            for c in children:
+                ctype = core_elec_panels.get_panel_type_label(c.get('panel_type'))
+                lines.append("└ " + str(c.get('name')) + " (" + str(ctype) + ")")
+        kb_rows = []
+        for c in children:
+            kb_rows.append([InlineKeyboardButton(
+                "⚡ " + str(c.get('name'))[:35],
+                callback_data="panel_" + str(c['id'])
+            )])
+        kb_rows.append([InlineKeyboardButton("➕ Добавить дочерний", callback_data="panel_child_add_" + str(panel_id))])
+        kb_rows.append([InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))])
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("panel children show: " + str(e), flush=True)
+        return True
+
+    if data.startswith("panel_child_type_"):
+        parts = data.replace("panel_child_type_", "").rsplit("_", 1)
+        panel_id = int(parts[0])
+        ptype = parts[1]
+        context.user_data['child_parent_id'] = panel_id
+        context.user_data['child_panel_type'] = ptype
+        context.user_data['waiting_for'] = 'child_panel_name'
+        type_labels = {
+            'floor': 'Щит этажа', 'apartment': 'Щит квартиры',
+            'outdoor': 'Уличный щит', 'subpanel': 'Подщиток',
+        }
+        tlabel = type_labels.get(ptype, ptype)
+        try:
+            await query.edit_message_text(
+                "⬇️ Новый дочерний: " + tlabel + chr(10) + chr(10) + "Напиши название:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data="panel_" + str(panel_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("panel_child_add_"):
+        panel_id = int(data.replace("panel_child_add_", ""))
+        kb_rows = [
+            [InlineKeyboardButton("⚡ Щит этажа", callback_data="panel_child_type_" + str(panel_id) + "_floor")],
+            [InlineKeyboardButton("🏢 Щит квартиры", callback_data="panel_child_type_" + str(panel_id) + "_apartment")],
+            [InlineKeyboardButton("📦 Подщиток", callback_data="panel_child_type_" + str(panel_id) + "_subpanel")],
+            [InlineKeyboardButton("🌳 Уличный щит", callback_data="panel_child_type_" + str(panel_id) + "_outdoor")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data="panel_children_" + str(panel_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                "⬇️ Новый дочерний щит" + chr(10) + chr(10) + "Выбери тип:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
+        return True
+
     if data.startswith("panel_auto_"):
         panel_id = int(data.replace("panel_auto_", ""))
         try:
@@ -5328,7 +5400,14 @@ async def handle_panels_callback(query, context, data):
         children = summary.get('children') or []
         if children:
             lines.append("⬇️ Питает: " + ", ".join(c.get('name') or '?' for c in children))
-        kb_rows = [
+        kb_rows = []
+        try:
+            _children_count = len(core_elec_panels.get_child_panels(panel_id))
+        except Exception:
+            _children_count = 0
+        if _children_count > 0:
+            kb_rows.append([InlineKeyboardButton("⬇️ Дочерние щиты (" + str(_children_count) + ")", callback_data="panel_children_" + str(panel_id))])
+        kb_rows.extend([
             [InlineKeyboardButton("🔌 Вводной автомат", callback_data="panel_input_" + str(panel_id))],
             [InlineKeyboardButton("🪄 Автокомплектация", callback_data="panel_auto_" + str(panel_id))],
             [InlineKeyboardButton("📋 Комплектация", callback_data="panel_comp_" + str(panel_id))],
@@ -5336,7 +5415,7 @@ async def handle_panels_callback(query, context, data):
             [InlineKeyboardButton("📋 Группы щита", callback_data="panel_groups_" + str(panel_id))],
             [InlineKeyboardButton("🗑 Удалить щит", callback_data="panel_del_" + str(panel_id))],
             [InlineKeyboardButton("⬅️ К щитам", callback_data="panels_list_" + str(p.get('object_id')))],
-        ]
+        ])
         try:
             await query.edit_message_text(
                 chr(10).join(lines),
