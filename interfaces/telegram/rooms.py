@@ -2580,6 +2580,7 @@ async def handle_openings_callback(query, context, data):
 
 async def handle_floors_callback(query, context, data):
     """Помещения объекта (этажи / зоны)."""
+    print(f"🟠 handle_floors_callback: data={data!r}, core_floors={core_floors is not None}", flush=True)
     if not core_floors:
         try:
             await query.edit_message_text("❌ Модуль помещений не загружен")
@@ -2594,8 +2595,8 @@ async def handle_floors_callback(query, context, data):
         return True
 
     # --- СОЗДАТЬ ПОМЕЩЕНИЕ ---
-    if data.startswith("floor_add_"):
-        object_id = int(data.replace("floor_add_", ""))
+    if data.startswith("obj_floor_add_"):
+        object_id = int(data.replace("obj_floor_add_", ""))
         context.user_data['waiting_for'] = 'floor_new_name'
         context.user_data['floor_obj_id'] = object_id
         try:
@@ -2627,6 +2628,7 @@ async def handle_floors_callback(query, context, data):
 
 async def _show_floors_list(query, object_id):
     """Список помещений объекта."""
+    print(f"🟠 _show_floors_list: object_id={object_id}", flush=True)
     from modules.objects import get_object
     obj = get_object(object_id)
     obj_name = obj['name'] if obj else f'Объект {object_id}'
@@ -2642,7 +2644,7 @@ async def _show_floors_list(query, object_id):
             f"🏠 {name} ({rooms} комн.)",
             callback_data=f"floor_{f['id']}"
         )])
-    buttons.append([InlineKeyboardButton("➕ Добавить помещение", callback_data=f"floor_add_{object_id}")])
+    buttons.append([InlineKeyboardButton("➕ Добавить помещение", callback_data=f"obj_floor_add_{object_id}")])
     buttons.append([InlineKeyboardButton("⬅️ К объекту", callback_data=f"obj_{object_id}")])
 
     try:
@@ -2703,6 +2705,7 @@ async def _do_delete_floor(query, floor_id):
 
 async def handle_obj_elec_callback(query, context, data):
     """ЭОМ объекта — основной экран."""
+    print(f"🟠 handle_obj_elec_callback: data={data!r}, core_elec={core_elec is not None}", flush=True)
     if not core_elec:
         try:
             await query.edit_message_text("❌ Модуль ЭОМ не загружен")
@@ -3342,7 +3345,19 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
             return
 
     # --- obj_<id> — карточка объекта ---
-    if data.startswith("obj_") and not data.startswith(("obj_del_", "obj_delok_", "obj_rename_")):
+    # --- Помещения ---
+    if data.startswith("obj_floors_"):
+        handled = await handle_floors_callback(query, context, data)
+        if handled:
+            return
+
+    # --- ЭОМ объекта ---
+    if data.startswith("obj_elec_"):
+        handled = await handle_obj_elec_callback(query, context, data)
+        if handled:
+            return
+
+    if data.startswith("obj_") and not data.startswith(("obj_del_", "obj_delok_", "obj_rename_", "obj_floor_", "obj_floors_", "obj_elec_")):
         try:
             object_id = int(data.replace("obj_", ""))
         except ValueError:
@@ -3504,7 +3519,7 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     # --- План комнаты (PNG) ---    # --- Помещения ---
-    if data.startswith("obj_floors_") or data.startswith("floor_"):
+    if data.startswith("obj_floors_") or data.startswith("obj_floor_") or data.startswith("floor_"):
         handled = await handle_floors_callback(query, context, data)
         if handled:
             return
