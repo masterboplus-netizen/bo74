@@ -234,3 +234,31 @@ bo_ecosystem/
 ---
 
 *Конец ARCHITECTURE.md*
+## 10. ЯДРО ЭОМ (расширение, сессия 2)
+
+### core/elec.py (базовый)
+- Питание объекта (legacy) — set_supply, get_supply
+- Группы — create_group, get_groups, get_groups_by_floor, get_groups_by_room
+- Привязка точек — assign_comm_to_group, unassign_point_from_group
+- Расчёты — calc_current, pick_breaker, pick_cable, auto_fill_group
+- Фазы L1/L2/L3 — calc_balance, auto_pick_phase, assign_phases_by_load
+- Формат — format_group, format_elec_full, format_phase_distribution
+- Кухня — get_kitchen_equipment, create_kitchen_group
+- Кабели — add_cable, get_cables_by_object, get_cables_by_group, get_cable_summary
+
+### core/elec_panels.py (новый)
+- Щиты — create_panel, get_panel, get_panels, update_panel, delete_panel
+- Связи щит-щит — link_panels, get_parent_panel, get_child_panels, get_panel_links
+- Дерево щитов — get_panel_tree(object_id)
+- Связь группа-щит — assign_group_to_panel, unassign_group_from_panel, get_groups_by_panel
+- Нагрузка — calc_panel_load, calc_object_total_load
+- Формат — format_panel, format_panel_short, get_panel_summary
+
+### Паттерн callback (bot.py)
+^(rooms_list_|room_|wall_|openings_|opening_|comm_|obj_|floor_|group_|cables_|panels_|panel_)
+
+### Миграции
+- 034 — базовый ЭОМ (elec_supply, elec_groups, elec_cables)
+- 035 — floor_id, phase_l1/l2/l3
+- 036 — привязка групп к этажу (legacy)
+- 037 — Щиты ЭОМ (elec_panels, elec_panel_links, elec_groups.panel_id)
