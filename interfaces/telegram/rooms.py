@@ -5065,6 +5065,80 @@ async def handle_panels_callback(query, context, data):
             print("panel groups show: " + str(e), flush=True)
         return True
 
+    if data.startswith("panel_input_type_"):
+        parts = data.replace("panel_input_type_", "").rsplit("_", 1)
+        panel_id = int(parts[0])
+        btype = parts[1]
+        kb_rows = []
+        for r in [6, 10, 16, 20, 25, 32, 40, 50, 63, 80, 100]:
+            kb_rows.append([InlineKeyboardButton(
+                str(r) + "А",
+                callback_data="panel_input_set_" + str(panel_id) + "_" + btype + "_" + str(r)
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="panel_input_" + str(panel_id))])
+        try:
+            await query.edit_message_text(
+                "Номинал (" + btype + "):",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("panel_input_set_"):
+        parts = data.replace("panel_input_set_", "").split("_")
+        panel_id = int(parts[0])
+        btype = parts[1]
+        rating = int(parts[2])
+        poles = 3 if btype == 'auto3' else 1
+        try:
+            core_elec_panels.set_input_breaker(panel_id, breaker_type=btype.replace('auto3', 'auto'),
+                                                rating=rating, curve='C', poles=poles)
+        except Exception as e:
+            print("panel input set: " + str(e), flush=True)
+        try:
+            s = core_elec_panels.format_selectivity(panel_id)
+        except Exception:
+            s = ""
+        try:
+            await query.edit_message_text(
+                "Вводной установлен: " + btype + " " + str(rating) + "А" + chr(10) + chr(10) + s,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("К щиту", callback_data="panel_" + str(panel_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("panel_input_"):
+        panel_id = int(data.replace("panel_input_", ""))
+        cur = core_elec_panels.get_input_breaker(panel_id) or {}
+        cur_type = cur.get('type') or 'не задан'
+        cur_rating = cur.get('rating') or '-'
+        cur_fmt = core_elec_panels.format_input_breaker(panel_id)
+        s = core_elec_panels.format_selectivity(panel_id)
+        text = (
+            "🔌 Вводной автомат" + chr(10) + chr(10) +
+            "Сейчас: " + cur_fmt + chr(10) + chr(10) +
+            s + chr(10) + chr(10) +
+            "Выбери тип:"
+        )
+        kb_rows = [
+            [InlineKeyboardButton("Автомат 1ф", callback_data="panel_input_type_" + str(panel_id) + "_auto")],
+            [InlineKeyboardButton("Автомат 3ф", callback_data="panel_input_type_" + str(panel_id) + "_auto3")],
+            [InlineKeyboardButton("УЗО", callback_data="panel_input_type_" + str(panel_id) + "_uzo")],
+            [InlineKeyboardButton("Дифавтомат", callback_data="panel_input_type_" + str(panel_id) + "_dif")],
+            [InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                text, reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
+        return True
+
     if data.startswith("panel_auto_"):
         panel_id = int(data.replace("panel_auto_", ""))
         try:
@@ -5255,6 +5329,7 @@ async def handle_panels_callback(query, context, data):
         if children:
             lines.append("⬇️ Питает: " + ", ".join(c.get('name') or '?' for c in children))
         kb_rows = [
+            [InlineKeyboardButton("🔌 Вводной автомат", callback_data="panel_input_" + str(panel_id))],
             [InlineKeyboardButton("🪄 Автокомплектация", callback_data="panel_auto_" + str(panel_id))],
             [InlineKeyboardButton("📋 Комплектация", callback_data="panel_comp_" + str(panel_id))],
             [InlineKeyboardButton("📊 Статистика", callback_data="panel_stats_" + str(panel_id))],

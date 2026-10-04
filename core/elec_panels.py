@@ -502,6 +502,9 @@ def autocomplete_panel(panel_id, rules=None):
                 rating=rating, curve=rules.get('default_curve', 'C'),
                 poles=poles, quantity=1, order_num=order
             )
+            # Дублируем вводной в поля щита (для селективности)
+            set_input_breaker(panel_id, breaker_type='auto', rating=rating,
+                              curve=rules.get('default_curve', 'C'), poles=poles)
             created += 1
             order += 1
 
@@ -655,3 +658,211 @@ def get_panel_stats(panel_id):
         'groups_count': len(groups),
         'total_load_watt': load,
     }
+
+
+# ============================================================
+# СЕЛЕКТИВНОСТЬ
+# ============================================================
+
+def check_selectivity(panel_id, rules=None):
+    """Проверяет селективность щита.
+
+    Сравнивает вводной автомат с групповыми:
+    вводной >= групповой * selectivity_factor.
+
+    Возвращает dict:
+    {
+      'ok': bool,
+      'issues': [{'group_id': N, 'group_rating': X, 'input_rating': Y, 'msg': '...'}],
+      'input_rating': X,
+      'min_input_required': Y
+    }
+    """
+    from core import elec_rules as rules_mod
+
+    p = get_panel(panel_id)
+    if not p:
+        return None
+
+    if rules is None:
+        rules = rules_mod.get_rules(p.get('object_id'))
+
+    factor = rules.get('selectivity_factor', 1.6)
+
+    input_b = get_input_breaker(panel_id)
+    input_rating = (input_b.get('rating') if input_b else None) or 0
+
+    # Групповые автоматы
+    comps = get_components(panel_id)
+    group_autos = [c for c in comps
+                   if c.get('component_type') == 'auto' and c.get('linked_group_id')]
+
+    issues = []
+    max_group_rating = 0
+    for c in group_autos:
+        r = c.get('rating') or 0
+        if r > max_group_rating:
+            max_group_rating = r
+        required = round(r * factor)
+        if input_rating < required:
+            issues.append({
+                'group_id': c.get('linked_group_id'),
+                'group_rating': r,
+                'input_rating': input_rating,
+                'required': required,
+                'msg': 'Групповой ' + str(r) + 'А требует вводной >= ' + str(required) + 'А',
+            })
+
+    return {
+        'ok': len(issues) == 0,
+        'issues': issues,
+        'input_rating': input_rating,
+        'min_input_required': round(max_group_rating * factor),
+    }
+
+
+def format_selectivity(panel_id, rules=None):
+    """Текстовая строка о селективности."""
+    s = check_selectivity(panel_id, rules=rules)
+    if not s:
+        return "Селективность: неизвестно"
+    if s['ok']:
+        return "✅ Селективность OK (вводной " + str(s['input_rating']) + "А)"
+    lines = ["⚠️ Селективность нарушена:"]
+    for i in s['issues'][:5]:
+        lines.append("   • " + i['msg'])
+    lines.append("   Требуется вводной >= " + str(s['min_input_required']) + "А")
+    return chr(10).join(lines)
+
+
+# ============================================================
+# ИЕРАРХИЯ ЩИТОВ (parent -> child)
+# ============================================================
+
+def add_child_panel(parent_panel_id, name, panel_type='floor',
+                   mount_type='wall', breaker_rating=None,
+                   breaker_poles=None, breaker_curve='C',
+                   floor_id=None, room_id=None, note=None):
+    """Создаёт дочерний щит + связывает с родителем.
+
+    1. Создаёт новый щит
+    2. Устанавливает parent_panel_id
+    3. Создаёт в родителе компонент 'auto' (питание дочернего)
+    4. Создаёт в дочернем компонент 'input' (вводной)
+    5. Создаёт запись в elec_panel_links
+
+    Возвращает child_panel_id или None.
+    """
+    parent = get_panel(parent_panel_id)
+    if not parent:
+        return None
+
+    object_id = parent.get('object_id')
+    if not object_id:
+        return None
+
+    # 1. Создаём дочерний щит
+    child_id = create_panel(
+        object_id=object_id,
+        name=name,
+        panel_type=panel_type,
+        floor_id=floor_id,
+        room_id=room_id,
+        parent_panel_id=parent_panel_id,
+        mount_type=mount_type,
+        note=note,
+    )
+    if not child_id:
+        return None
+
+    # 2. Компоненты создаются после назначения номинала (шаг 3)
+    if breaker_rating:
+        _create_panel_link_with_components(
+            parent_panel_id, child_id,
+            breaker_rating=breaker_rating,
+            breaker_poles=breaker_poles,
+            breaker_curve=breaker_curve or 'C',
+        )
+
+    return child_id
+
+
+def _create_panel_link_with_components(parent_panel_id, child_id,
+                                      breaker_rating, breaker_poles=None,
+                                      breaker_curve='C', cable_type=None,
+                                      length_m=None, route_type=None):
+    """Создаёт связь и оба компонента (в родителе и дочернем)."""
+    poles = breaker_poles or 1
+
+    # Компонент в родителе — групповой на дочерний щит
+    add_component(
+        parent_panel_id, 'auto',
+        rating=breaker_rating, curve=breaker_curve, poles=poles,
+        linked_group_id=None, order_num=999,
+        note='Питание дочернего щита #' + str(child_id)
+    )
+
+    # Компонент в дочернем — вводной
+    add_component(
+        child_id, 'input',
+        rating=breaker_rating, curve=breaker_curve, poles=poles,
+        order_num=1,
+        note='От родительского щита #' + str(parent_panel_id)
+    )
+
+    # Связь в elec_panel_links
+    try:
+        return commit(
+            """INSERT INTO elec_panel_links
+               (parent_panel_id, child_panel_id, cable_type, length_m, route_type,
+                parent_breaker_rating, parent_breaker_poles, parent_breaker_curve,
+                child_input_rating, is_primary)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)""",
+            (parent_panel_id, child_id, cable_type, length_m, route_type,
+             breaker_rating, poles, breaker_curve, breaker_rating)
+        )
+    except Exception as e:
+        print("panel link: " + str(e), flush=True)
+        return None
+
+
+def set_panel_link_breaker(parent_panel_id, child_id, breaker_rating,
+                          breaker_poles=None, breaker_curve='C',
+                          cable_type=None, length_m=None, route_type=None):
+    """Устанавливает номинал автомата между щитами (создаёт оба компонента)."""
+    # Удаляем старые компоненты связи (только авто, не ручные)
+    commit("DELETE FROM elec_panel_components WHERE panel_id = ? AND is_manual = 0 AND component_type IN ('input','auto') AND linked_group_id IS NULL AND (note LIKE '%дочернего%' OR note LIKE '%родительского%')", (parent_panel_id,))
+    commit("DELETE FROM elec_panel_components WHERE panel_id = ? AND is_manual = 0 AND component_type = 'input'", (child_id,))
+    # Удаляем старую связь
+    commit("DELETE FROM elec_panel_links WHERE parent_panel_id = ? AND child_panel_id = ?", (parent_panel_id, child_id))
+    # Создаём заново
+    return _create_panel_link_with_components(
+        parent_panel_id, child_id,
+        breaker_rating=breaker_rating,
+        breaker_poles=breaker_poles,
+        breaker_curve=breaker_curve,
+        cable_type=cable_type, length_m=length_m, route_type=route_type
+    )
+
+
+def get_children_tree(panel_id, depth=0, max_depth=6):
+    """Возвращает дерево дочерних щитов (текстом)."""
+    if depth >= max_depth:
+        return []
+    children = get_child_panels(panel_id)
+    lines = []
+    indent = "  " * depth
+    for c in children:
+        link = _get_link(panel_id, c['id'])
+        rating = (link.get('parent_breaker_rating') if link else None) or '?'
+        lines.append(indent + "└ " + str(c.get('name')) + " [" + str(rating) + "А]")
+        lines.extend(get_children_tree(c['id'], depth + 1, max_depth))
+    return lines
+
+
+def _get_link(parent_panel_id, child_id):
+    row = fetchone(
+        "SELECT * FROM elec_panel_links WHERE parent_panel_id = ? AND child_panel_id = ? LIMIT 1",
+        (parent_panel_id, child_id)
+    )
+    return dict(row) if row else None
