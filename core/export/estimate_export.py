@@ -109,6 +109,13 @@ def export_object_estimate_csv(object_id):
     writer.writerow([])
     writer.writerow(["Итого монтаж", data['montage_total']])
     writer.writerow([])
+    writer.writerow(["Работы"])
+    if data.get('works_count'):
+        writer.writerow(["Всего", data['works_count']])
+        writer.writerow(["Итого", data['works_total']])
+    else:
+        writer.writerow(["нет", 0])
+    writer.writerow([])
     writer.writerow(["ВСЕГО ЭОМ", data['total']])
 
     return output.getvalue()

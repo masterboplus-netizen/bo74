@@ -269,9 +269,16 @@ def calc_object_montage_cost(object_id):
 
 
 def calc_object_elec_total(object_id):
-    """Общая смета ЭОМ объекта = щиты + электромонтаж."""
+    """Общая смета ЭОМ объекта = щиты + электромонтаж + работы."""
     panels = calc_object_panels_cost(object_id)
     montage = calc_object_montage_cost(object_id)
+    # Работы (если модуль доступен)
+    works = {'total': 0, 'works_count': 0, 'by_type': {}}
+    try:
+        from core import object_works as _ow
+        works = _ow.calc_object_works_cost(object_id)
+    except Exception:
+        pass
     return {
         'panels_cost': panels['total'],
         'panels_count': panels['panels_count'],
@@ -282,7 +289,10 @@ def calc_object_elec_total(object_id):
         'montage_meters': montage['total_m'],
         'montage_by_cable': montage['by_cable'],
         'montage_by_route': montage['by_route'],
-        'total': round(panels['total'] + montage['total'], 2),
+        'works_total': works['total'],
+        'works_count': works['works_count'],
+        'works_by_type': works['by_type'],
+        'total': round(panels['total'] + montage['total'] + works['total'], 2),
     }
 
 
@@ -324,6 +334,15 @@ def format_object_elec_total(object_id):
     lines.append("Кабель: " + str(data['montage_cable_cost']) + " ₽")
     lines.append("Расходники: " + str(data['montage_consumable_cost']) + " ₽")
     lines.append("Итого монтаж: " + str(data['montage_total']) + " ₽")
+    lines.append("")
+
+    # Работы
+    lines.append("Работы:")
+    if data.get('works_count'):
+        lines.append("Всего работ: " + str(data['works_count']))
+        lines.append("Итого работы: " + str(data['works_total']) + " ₽")
+    else:
+        lines.append("нет")
     lines.append("")
 
     # Итого

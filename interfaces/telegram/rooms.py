@@ -4812,6 +4812,36 @@ async def handle_measure_input(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text("Не удалось создать трассу")
         return
 
+    if step == 'work_edit_value':
+        work_id = context.user_data.get('work_edit_id')
+        field = context.user_data.get('work_edit_field')
+        if not work_id or not field:
+            await update.message.reply_text("Потерялись данные")
+            context.user_data['waiting_for'] = None
+            return
+        val = (update.message.text or '').strip().replace(',', '.')
+        try:
+            num = float(val)
+        except ValueError:
+            await update.message.reply_text("Нужно число")
+            return
+        if num <= 0 or num > 1000000:
+            await update.message.reply_text("Значение от 0.1 до 1 000 000")
+            return
+        try:
+            core_works.update_work(work_id, **{field: num, 'is_manual': 1})
+        except Exception as e:
+            print("work edit: " + str(e), flush=True)
+        for k in ['work_edit_id', 'work_edit_field', 'waiting_for']:
+            context.user_data[k] = None
+        await update.message.reply_text(
+            "Сохранено",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔨 К работе", callback_data="works_" + str(work_id))],
+            ])
+        )
+        return
+
     if step == 'work_new_qty':
         object_id = context.user_data.get('work_new_object_id')
         wtype = context.user_data.get('work_new_type')
@@ -6119,7 +6149,41 @@ async def handle_panels_callback(query, context, data):
                 pass
         return True
 
-    if data.startswith("works_") and not data.startswith(("works_list_", "works_add_", "works_del_")):
+    if data.startswith("works_edit_qty_"):
+        work_id = int(data.replace("works_edit_qty_", ""))
+        context.user_data['work_edit_id'] = work_id
+        context.user_data['work_edit_field'] = 'qty'
+        context.user_data['waiting_for'] = 'work_edit_value'
+        w = core_works.get_work(work_id) if core_works else None
+        unit = w.get('unit') if w else ''
+        try:
+            await query.edit_message_text(
+                "Новое количество (" + str(unit) + "):" + chr(10) + chr(10) + "_Например: 15_",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data="works_" + str(work_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("works_edit_price_"):
+        work_id = int(data.replace("works_edit_price_", ""))
+        context.user_data['work_edit_id'] = work_id
+        context.user_data['work_edit_field'] = 'price_unit'
+        context.user_data['waiting_for'] = 'work_edit_value'
+        try:
+            await query.edit_message_text(
+                "Новая цена за единицу (₽):" + chr(10) + chr(10) + "_Например: 350_",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data="works_" + str(work_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("works_") and not data.startswith(("works_list_", "works_add_", "works_del_", "works_edit_")):
         try:
             work_id = int(data.replace("works_", ""))
         except ValueError:
@@ -6135,7 +6199,12 @@ async def handle_panels_callback(query, context, data):
         lines.append("Количество: " + str(w.get('qty') or 0) + " " + str(w.get('unit') or ''))
         lines.append("Цена за ед.: " + str(w.get('price_unit') or 0) + " ₽")
         lines.append("Итого: " + str(w.get('total') or 0) + " ₽")
+        mark = " [ручная]" if w.get('is_manual') else ""
+        if mark:
+            lines.append("Тип: [ручная]")
         kb_rows = [
+            [InlineKeyboardButton("✏️ Кол-во", callback_data="works_edit_qty_" + str(work_id)),
+             InlineKeyboardButton("✏️ Цена", callback_data="works_edit_price_" + str(work_id))],
             [InlineKeyboardButton("🗑 Удалить", callback_data="works_del_" + str(work_id))],
             [InlineKeyboardButton("⬅️ К работам", callback_data="works_list_" + str(w.get('object_id')))],
         ]
