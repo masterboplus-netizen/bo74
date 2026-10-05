@@ -91,6 +91,11 @@ try:
 except Exception:
     core_elec_prices = None
 
+try:
+    from core.export.spec_export import save_panel_spec, export_panel_spec
+except Exception:
+    save_panel_spec = export_panel_spec = None
+
 # --- Помещения (этажи / зоны) ---
 try:
     from core import floors as core_floors
@@ -5726,6 +5731,49 @@ async def handle_panels_callback(query, context, data):
         ]))
         return True
 
+    if data.startswith("panel_spec_"):
+        panel_id = int(data.replace("panel_spec_", ""))
+        print("panel_spec handler: panel_id=" + str(panel_id), flush=True)
+        if save_panel_spec is None:
+            try:
+                await query.edit_message_text("Модуль экспорта не загружен")
+            except Exception:
+                pass
+            return True
+        try:
+            import tempfile, os
+            tmp_dir = tempfile.gettempdir()
+            target = os.path.join(tmp_dir, "panel_spec_" + str(panel_id) + ".txt")
+            path = save_panel_spec(panel_id, path=target)
+            if not path or not os.path.exists(path):
+                raise Exception("Файл не создан")
+            try:
+                p = core_elec_panels.get_panel(panel_id)
+                name = (p.get('name') if p else 'panel') or 'panel'
+            except Exception:
+                name = 'panel'
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=name + "_spec.txt",
+                    caption="📄 Спецификация щита «" + str(name) + "»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))],
+                    ])
+                )
+        except Exception as e:
+            print("panel spec export: " + str(e), flush=True)
+            try:
+                await query.edit_message_text(
+                    "Ошибка экспорта: " + str(e),
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
     if data.startswith("panel_auto_"):
         panel_id = int(data.replace("panel_auto_", ""))
         try:
@@ -6025,6 +6073,7 @@ async def handle_panels_callback(query, context, data):
             [InlineKeyboardButton("🪄 Трассировать все группы", callback_data="panel_routes_auto_" + str(panel_id))],
             [InlineKeyboardButton("🔧 Смета монтажа", callback_data="panel_montage_" + str(panel_id))],
             [InlineKeyboardButton("💰 Общая смета щита", callback_data="panel_total_" + str(panel_id))],
+            [InlineKeyboardButton("📄 Спецификация (TXT)", callback_data="panel_spec_" + str(panel_id))],
             [InlineKeyboardButton("📋 Комплектация", callback_data="panel_comp_" + str(panel_id))],
             [InlineKeyboardButton("📊 Статистика", callback_data="panel_stats_" + str(panel_id))],
             [InlineKeyboardButton("📋 Группы щита", callback_data="panel_groups_" + str(panel_id))],
