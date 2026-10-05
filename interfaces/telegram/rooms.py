@@ -6658,6 +6658,49 @@ async def handle_panels_callback(query, context, data):
         ]))
         return True
 
+    if data.startswith("plumb_point_add_"):
+        panel_id = int(data.replace("plumb_point_add_", ""))
+        p = core_plumbing.get_panel(panel_id)
+        object_id = p.get("object_id") if p else None
+        all_points = core_plumbing.get_available_plumb_points(object_id) if object_id else []
+        used_ids = {pt["id"] for pt in core_plumbing.get_points_of_panel(panel_id)}
+        free = [pt for pt in all_points if pt["id"] not in used_ids]
+        if not free:
+            text = "Свободных plumb-точек нет. Добавь точки в комнатах."
+        else:
+            text = "Выбери точку для привязки к коллектору:"
+        kb_rows = []
+        for pt in free[:15]:
+            label = str(pt.get("room_name") or "?") + " · " + str(pt.get("comm_type") or "?")
+            kb_rows.append([InlineKeyboardButton(label[:60], callback_data="plumb_point_set_" + str(panel_id) + "_" + str(pt["id"]))])
+        kb_rows.append([InlineKeyboardButton("⬅️ К точкам", callback_data="plumb_points_" + str(panel_id))])
+        await _safe_edit(query, text, InlineKeyboardMarkup(kb_rows))
+        return True
+
+    if data.startswith("plumb_point_set_"):
+        rest = data.replace("plumb_point_set_", "")
+        parts = rest.split("_", 1)
+        panel_id = int(parts[0])
+        point_id = int(parts[1])
+        try:
+            core_plumbing.assign_point_to_panel(point_id, panel_id)
+        except Exception as e:
+            print("plumb_point_set: " + str(e), flush=True)
+        await handle_panels_callback(query, context, "plumb_points_" + str(panel_id))
+        return True
+
+    if data.startswith("plumb_point_unset_"):
+        rest = data.replace("plumb_point_unset_", "")
+        parts = rest.split("_", 1)
+        panel_id = int(parts[0])
+        point_id = int(parts[1])
+        try:
+            core_plumbing.unassign_point_from_panel(point_id, panel_id)
+        except Exception as e:
+            print("plumb_point_unset: " + str(e), flush=True)
+        await handle_panels_callback(query, context, "plumb_points_" + str(panel_id))
+        return True
+
     if data.startswith("plumb_water_"):
         object_id = int(data.replace("plumb_water_", ""))
         try:

@@ -1,5 +1,7 @@
 # DEVLOG — журнал сессий (append-only)
 
+2026-10-05 20:25 — UI привязки точки к коллектору — 3 обработчика добавлены (abc19c8)
+
 2026-10-05 20:23 — plumb_points_: добавлена кнопка Привязать точку (7b1eb64)
 
 2026-10-05 20:11 — plumbing: assign_point_to_panel / unassign / get_panels_of_point — рабочие, через plumbing_panel_points (f9ca3ed)
