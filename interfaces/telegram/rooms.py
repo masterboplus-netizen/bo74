@@ -5360,6 +5360,75 @@ async def handle_panels_callback(query, context, data):
             pass
         return True
 
+    if data.startswith("panel_routes_auto_"):
+        panel_id = int(data.replace("panel_routes_auto_", ""))
+        print("panel_routes_auto handler: panel_id=" + str(panel_id), flush=True)
+        try:
+            res = core_elec_routes.auto_routes_for_panel(panel_id, route_type="shtroba") if core_elec_routes else None
+        except Exception as e:
+            print("panel auto routes: " + str(e), flush=True)
+            res = None
+        if not res:
+            try:
+                await query.edit_message_text("Ошибка автотрассировки")
+            except Exception:
+                pass
+            return True
+        text = (
+            "🪄 Авто-трассировка щита" + chr(10) + chr(10) +
+            "Групп обработано: " + str(res.get('groups', 0)) + chr(10) +
+            "Создано трасс: " + str(res.get('created', 0)) + chr(10) +
+            "Суммарно: " + str(res.get('total_m', 0)) + " м"
+        )
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📏 Трассы щита", callback_data="panel_routes_" + str(panel_id))],
+                    [InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))],
+                ])
+            )
+        except Exception as e:
+            print("panel auto routes show: " + str(e), flush=True)
+        return True
+
+    if data.startswith("panel_routes_"):
+        panel_id = int(data.replace("panel_routes_", ""))
+        print("panel_routes handler: panel_id=" + str(panel_id), flush=True)
+        try:
+            text = core_elec_routes.format_routes_summary(panel_id=panel_id) if core_elec_routes else "Модуль не загружен"
+        except Exception as e:
+            print("panel routes show: " + str(e), flush=True)
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        kb_r = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🪄 Трассировать все", callback_data="panel_routes_auto_" + str(panel_id))],
+            [InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))],
+        ])
+        try:
+            _is_photo = bool(getattr(query.message, "photo", None))
+            if _is_photo:
+                await query.edit_message_caption(caption=text, reply_markup=kb_r)
+            else:
+                await query.edit_message_text(text, reply_markup=kb_r)
+            print("panel_routes show: OK", flush=True)
+        except Exception as e:
+            print("panel_routes edit failed: " + str(e), flush=True)
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            try:
+                await query.get_bot().send_message(
+                    chat_id=query.message.chat_id,
+                    text=text,
+                    reply_markup=kb_r
+                )
+            except Exception as e2:
+                print("panel_routes send failed: " + str(e2), flush=True)
+        return True
+
     if data.startswith("panel_auto_"):
         panel_id = int(data.replace("panel_auto_", ""))
         try:
@@ -5559,6 +5628,8 @@ async def handle_panels_callback(query, context, data):
         kb_rows.extend([
             [InlineKeyboardButton("🔌 Вводной автомат", callback_data="panel_input_" + str(panel_id))],
             [InlineKeyboardButton("🪄 Автокомплектация", callback_data="panel_auto_" + str(panel_id))],
+            [InlineKeyboardButton("📏 Трассы щита", callback_data="panel_routes_" + str(panel_id))],
+            [InlineKeyboardButton("🪄 Трассировать все группы", callback_data="panel_routes_auto_" + str(panel_id))],
             [InlineKeyboardButton("📋 Комплектация", callback_data="panel_comp_" + str(panel_id))],
             [InlineKeyboardButton("📊 Статистика", callback_data="panel_stats_" + str(panel_id))],
             [InlineKeyboardButton("📋 Группы щита", callback_data="panel_groups_" + str(panel_id))],
