@@ -5976,6 +5976,7 @@ async def handle_panels_callback(query, context, data):
                 str(idx) + ". " + str(p.get('name'))[:35],
                 callback_data="plumb_" + str(p['id'])
             )])
+        kb_rows.append([InlineKeyboardButton("💰 Смета сантехники", callback_data="plumb_cost_obj_" + str(object_id))])
         kb_rows.append([InlineKeyboardButton("➕ Добавить коллектор", callback_data="plumb_add_" + str(object_id))])
         kb_rows.append([InlineKeyboardButton("⬅️ К объекту", callback_data="obj_" + str(object_id))])
         await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
@@ -6075,10 +6076,39 @@ async def handle_panels_callback(query, context, data):
         except Exception:
             pass
         kb_rows = [
+            [InlineKeyboardButton("💰 Смета коллектора", callback_data="plumb_cost_" + str(panel_id))],
             [InlineKeyboardButton("⬅️ К сантехнике", callback_data="plumb_list_" + str(p.get('object_id')))],
             [InlineKeyboardButton("🗑 Удалить", callback_data="plumb_del_" + str(panel_id))],
         ]
         await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
+        return True
+
+    if data.startswith("plumb_cost_obj_"):
+        object_id = int(data.replace("plumb_cost_obj_", ""))
+        try:
+            text = core_plumbing.format_object_cost(object_id)
+        except Exception as e:
+            print("plumb cost obj: " + str(e), flush=True)
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        await _safe_edit(query, text, InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ К сантехнике", callback_data="plumb_list_" + str(object_id))],
+        ]))
+        return True
+
+    if data.startswith("plumb_cost_"):
+        panel_id = int(data.replace("plumb_cost_", ""))
+        try:
+            text = core_plumbing.format_panel_cost(panel_id)
+        except Exception as e:
+            print("plumb cost: " + str(e), flush=True)
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        await _safe_edit(query, text, InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ К коллектору", callback_data="plumb_" + str(panel_id))],
+        ]))
         return True
 
     if data.startswith("panel_auto_"):

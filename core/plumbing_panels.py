@@ -132,3 +132,198 @@ def get_summary(object_id):
     panels = get_panels(object_id)
     total_panels = len(panels)
     return {'panels_count': total_panels}
+
+
+# ============================================================
+# ТРАССЫ + СМЕТА САНТЕХНИКИ
+# ============================================================
+
+PIPE_PRICES_DEFAULT = {
+    'ppr20': 120,      # полипропилен 20 мм
+    'ppr25': 180,      # полипропилен 25 мм
+    'ppr32': 250,      # полипропилен 32 мм
+    'pex16': 150,      # PEX 16 мм
+    'pex20': 200,      # PEX 20 мм
+    'copper15': 450,   # медь 15 мм
+    'copper22': 650,   # медь 22 мм
+    'sewer50': 250,    # канализация 50 мм
+    'sewer110': 450,   # канализация 110 мм
+}
+
+PIPE_LABELS = {
+    'ppr20': 'PPR 20 мм',
+    'ppr25': 'PPR 25 мм',
+    'ppr32': 'PPR 32 мм',
+    'pex16': 'PEX 16 мм',
+    'pex20': 'PEX 20 мм',
+    'copper15': 'Медь 15 мм',
+    'copper22': 'Медь 22 мм',
+    'sewer50': 'Канализация 50 мм',
+    'sewer110': 'Канализация 110 мм',
+}
+
+PLUMB_CONSUMABLE_PRICES = {
+    'shtroba': 200,     # штробление
+    'gofra': 30,        # гофра
+    'klipsa': 15,       # клипсы
+    'otkryto': 50,      # открыто
+    'styazhka': 100,    # в стяжке
+}
+
+
+def get_pipe_price(pipe_type):
+    return PIPE_PRICES_DEFAULT.get(pipe_type, 0)
+
+
+def get_plumb_consumable_price(route_type):
+    return PLUMB_CONSUMABLE_PRICES.get(route_type, 0)
+
+
+def get_pipe_label(pipe_type):
+    return PIPE_LABELS.get(pipe_type, pipe_type or '—')
+
+
+def calc_route_cost(route_id, with_consumables=True):
+    """Стоимость одной трассы сантехники (труба + расходники)."""
+    import json
+    row = fetchone("SELECT * FROM plumbing_routes WHERE id = ?", (route_id,))
+    if not row:
+        return None
+    r = dict(row)
+    length = r.get('length_m') or 0
+    pipe = r.get('pipe_type')
+    rtype = r.get('route_type')
+
+    pipe_price = get_pipe_price(pipe)
+    pipe_cost = round(length * pipe_price, 2)
+
+    cons = 0.0
+    if with_consumables and rtype:
+        cons = round(length * get_plumb_consumable_price(rtype), 2)
+
+    return {
+        'length_m': length,
+        'pipe_type': pipe,
+        'route_type': rtype,
+        'pipe_price_per_m': pipe_price,
+        'pipe_cost': pipe_cost,
+        'consumable_cost': cons,
+        'total': round(pipe_cost + cons, 2),
+    }
+
+
+def calc_montage_cost_by_panel(panel_id, with_consumables=True):
+    """Смета монтажа по коллектору."""
+    routes = get_routes_by_panel(panel_id)
+    total_pipe = 0.0
+    total_cons = 0.0
+    total_m = 0.0
+    by_pipe = {}
+    by_route = {}
+    for r in routes:
+        c = calc_route_cost(r['id'], with_consumables=with_consumables)
+        if not c:
+            continue
+        total_pipe += c['pipe_cost']
+        total_cons += c['consumable_cost']
+        total_m += c['length_m']
+        ptype = c['pipe_type'] or 'без типа'
+        by_pipe[ptype] = by_pipe.get(ptype, 0) + c['pipe_cost']
+        rtype = c['route_type'] or 'без типа'
+        by_route[rtype] = by_route.get(rtype, 0) + c['consumable_cost']
+    return {
+        'routes_count': len(routes),
+        'total_m': round(total_m, 2),
+        'total_pipe_cost': round(total_pipe, 2),
+        'total_consumable_cost': round(total_cons, 2),
+        'total': round(total_pipe + total_cons, 2),
+        'by_pipe': {k: round(v, 2) for k, v in by_pipe.items()},
+        'by_route': {k: round(v, 2) for k, v in by_route.items()},
+    }
+
+
+def calc_object_cost(object_id):
+    """Смета сантехники по объекту."""
+    panels = get_panels(object_id)
+    total_pipe = 0.0
+    total_cons = 0.0
+    total_m = 0.0
+    total_routes = 0
+    by_pipe = {}
+    by_route = {}
+    for p in panels:
+        s = calc_montage_cost_by_panel(p['id'])
+        total_pipe += s['total_pipe_cost']
+        total_cons += s['total_consumable_cost']
+        total_m += s['total_m']
+        total_routes += s['routes_count']
+        for k, v in s['by_pipe'].items():
+            by_pipe[k] = by_pipe.get(k, 0) + v
+        for k, v in s['by_route'].items():
+            by_route[k] = by_route.get(k, 0) + v
+    return {
+        'panels_count': len(panels),
+        'routes_count': total_routes,
+        'total_m': round(total_m, 2),
+        'total_pipe_cost': round(total_pipe, 2),
+        'total_consumable_cost': round(total_cons, 2),
+        'total': round(total_pipe + total_cons, 2),
+        'by_pipe': {k: round(v, 2) for k, v in by_pipe.items()},
+        'by_route': {k: round(v, 2) for k, v in by_route.items()},
+    }
+
+
+def format_object_cost(object_id):
+    """Текстовая смета сантехники объекта."""
+    from modules.objects import get_object
+    obj = get_object(object_id)
+    obj_name = obj['name'] if obj else ('Объект #' + str(object_id))
+    data = calc_object_cost(object_id)
+
+    lines = ["🔧 Смета сантехники «" + str(obj_name) + "»", ""]
+    lines.append("Коллекторов: " + str(data['panels_count']))
+    lines.append("Трасс: " + str(data['routes_count']))
+    lines.append("Метраж: " + str(data['total_m']) + " м")
+    lines.append("")
+    lines.append("По типам труб:")
+    if data['by_pipe']:
+        for ptype, cost in sorted(data['by_pipe'].items(), key=lambda x: -x[1]):
+            lines.append("  " + get_pipe_label(ptype) + ": " + str(cost) + " ₽")
+    else:
+        lines.append("  нет данных")
+    lines.append("")
+    lines.append("По типам прокладки:")
+    if data['by_route']:
+        for rtype, cost in sorted(data['by_route'].items(), key=lambda x: -x[1]):
+            lines.append("  " + str(rtype) + ": " + str(cost) + " ₽")
+    else:
+        lines.append("  нет данных")
+    lines.append("")
+    lines.append("Трубы: " + str(data['total_pipe_cost']) + " ₽")
+    lines.append("Расходники: " + str(data['total_consumable_cost']) + " ₽")
+    lines.append("")
+    lines.append("💰 ИТОГО: " + str(data['total']) + " ₽")
+    return chr(10).join(lines)
+
+
+def format_panel_cost(panel_id):
+    """Смета монтажа по одному коллектору."""
+    p = get_panel(panel_id)
+    if not p:
+        return "Коллектор не найден"
+    data = calc_montage_cost_by_panel(panel_id)
+    lines = ["🔧 Смета сантехники «" + str(p.get('name')) + "»", ""]
+    lines.append("Трасс: " + str(data['routes_count']) + " · Метраж: " + str(data['total_m']) + " м")
+    lines.append("")
+    lines.append("По типам труб:")
+    if data['by_pipe']:
+        for ptype, cost in sorted(data['by_pipe'].items(), key=lambda x: -x[1]):
+            lines.append("  " + get_pipe_label(ptype) + ": " + str(cost) + " ₽")
+    else:
+        lines.append("  нет данных")
+    lines.append("")
+    lines.append("Трубы: " + str(data['total_pipe_cost']) + " ₽")
+    lines.append("Расходники: " + str(data['total_consumable_cost']) + " ₽")
+    lines.append("")
+    lines.append("💰 ИТОГО: " + str(data['total']) + " ₽")
+    return chr(10).join(lines)
