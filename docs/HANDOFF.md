@@ -32,3 +32,12 @@
 - Если 30 минут не сдвинулись — стоп, откат, читаем STATE.md.
 
 Погнали.
+
+## ФОРМАТ ОТВЕТОВ AI
+
+**ДОБАВЬ:** команда, в конце **ПРИШЛИ СКРИН**.
+
+## РИТУАЛ ЗАДАЧИ
+В начале: ./bundle.sh ; head -100 bundle.txt
+В конце: py_compile ; ./state.sh 'описание' ; git add -A && git commit -m '...' && git push
+ЗАПРЕТ: cat heredoc, многострочные python heredoc, printf с \n. ТОЛЬКО: echo >> file (по строке), sed -i, python3 -c '...' одной строкой.
