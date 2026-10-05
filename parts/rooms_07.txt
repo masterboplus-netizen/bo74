@@ -1,0 +1,713 @@
+                pass
+            return True
+        panels = core_plumbing.get_panels(object_id)
+        lines = ["🔧 Сантехника объекта", ""]
+        if not panels:
+            lines.append("Пока коллекторов нет.")
+        else:
+            for idx, p in enumerate(panels, start=1):
+                ptype = core_plumbing.get_panel_type_label(p.get('panel_type'))
+                lines.append(str(idx) + ". " + str(p.get('name')) + " (" + str(ptype) + ")")
+        kb_rows = []
+        for idx, p in enumerate(panels, start=1):
+            kb_rows.append([InlineKeyboardButton(
+                str(idx) + ". " + str(p.get('name'))[:35],
+                callback_data="plumb_" + str(p['id'])
+            )])
+        kb_rows.append([InlineKeyboardButton("🚰 Вода", callback_data="plumb_water_" + str(object_id))])
+        kb_rows.append([InlineKeyboardButton("💰 Смета сантехники", callback_data="plumb_cost_obj_" + str(object_id))])
+        kb_rows.append([InlineKeyboardButton("📊 Смета (CSV)", callback_data="plumb_csv_obj_" + str(object_id))])
+        kb_rows.append([InlineKeyboardButton("➕ Добавить коллектор", callback_data="plumb_add_" + str(object_id))])
+        kb_rows.append([InlineKeyboardButton("⬅️ К объекту", callback_data="obj_" + str(object_id))])
+        await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
+        return True
+
+    if data.startswith("plumb_add_type_"):
+        parts = data.replace("plumb_add_type_", "").rsplit("_", 1)
+        object_id = int(parts[0])
+        ptype = parts[1]
+        context.user_data['plumb_new_object_id'] = object_id
+        context.user_data['plumb_new_type'] = ptype
+        context.user_data['waiting_for'] = 'plumb_new_name'
+        type_labels = {
+            'collector': 'Коллектор', 'riser': 'Стояк',
+            'boiler': 'Котёл', 'pump': 'Насосная группа', 'filter': 'Фильтр',
+        }
+        try:
+            await query.edit_message_text(
+                "🔧 Новый элемент: " + type_labels.get(ptype, ptype) + chr(10) + chr(10) +
+                "Напиши название (например «Коллектор ХВС»):",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data="plumb_list_" + str(object_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("plumb_add_"):
+        object_id = int(data.replace("plumb_add_", ""))
+        kb_rows = [
+            [InlineKeyboardButton("Коллектор", callback_data="plumb_add_type_" + str(object_id) + "_collector")],
+            [InlineKeyboardButton("Стояк", callback_data="plumb_add_type_" + str(object_id) + "_riser")],
+            [InlineKeyboardButton("Котёл", callback_data="plumb_add_type_" + str(object_id) + "_boiler")],
+            [InlineKeyboardButton("Насосная группа", callback_data="plumb_add_type_" + str(object_id) + "_pump")],
+            [InlineKeyboardButton("Фильтр", callback_data="plumb_add_type_" + str(object_id) + "_filter")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data="plumb_list_" + str(object_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                "🔧 Новый элемент сантехники" + chr(10) + chr(10) + "Тип:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("plumb_del_"):
+        panel_id = int(data.replace("plumb_del_", ""))
+        try:
+            p = core_plumbing.get_panel(panel_id)
+            object_id = p.get('object_id') if p else None
+            core_plumbing.delete_panel(panel_id)
+        except Exception as e:
+            print("plumb del: " + str(e), flush=True)
+            object_id = None
+        if object_id:
+            try:
+                await query.edit_message_text(
+                    "Удалено",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К сантехнике", callback_data="plumb_list_" + str(object_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
+    if data.startswith("plumb_") and not data.startswith(("plumb_list_", "plumb_add_", "plumb_del_", "plumb_spec_", "plumb_csv_obj_", "plumb_cost_", "plumb_cost_obj_", "plumb_routes_", "plumb_route_")):
+        try:
+            panel_id = int(data.replace("plumb_", ""))
+        except ValueError:
+            return False
+        try:
+            p = core_plumbing.get_panel(panel_id)
+        except Exception:
+            p = None
+        if not p:
+            try:
+                await query.edit_message_text("Не найдено")
+            except Exception:
+                pass
+            return True
+        ptype = core_plumbing.get_panel_type_label(p.get('panel_type'))
+        mount = core_plumbing.get_mount_type_label(p.get('mount_type'))
+        lines = ["🔧 " + str(p.get('name')) + " (" + str(ptype) + ")", ""]
+        lines.append("Монтаж: " + str(mount))
+        if p.get('note'):
+            lines.append("Заметка: " + str(p['note']))
+        # Трассы
+        try:
+            routes = core_plumbing.get_routes_by_panel(panel_id)
+            lines.append("")
+            lines.append("Трассы: " + str(len(routes)))
+            for idx, r in enumerate(routes, start=1):
+                lines.append("  " + str(idx) + ". " + core_plumbing.format_route(r))
+        except Exception:
+            pass
+        kb_rows = [
+            [InlineKeyboardButton("📏 Трассы", callback_data="plumb_routes_" + str(panel_id))],
+            [InlineKeyboardButton("➕ Добавить трассу", callback_data="plumb_route_new_" + str(panel_id))],
+            [InlineKeyboardButton("💰 Смета коллектора", callback_data="plumb_cost_" + str(panel_id))],
+            [InlineKeyboardButton("📍 Точки коллектора", callback_data="plumb_points_" + str(panel_id))],
+            [InlineKeyboardButton("📄 Спецификация (TXT)", callback_data="plumb_spec_" + str(panel_id))],
+            [InlineKeyboardButton("🔨 Работы сантехники", callback_data="works_list_" + str(p.get('object_id')))],
+            [InlineKeyboardButton("⬅️ К сантехнике", callback_data="plumb_list_" + str(p.get('object_id')))],
+            [InlineKeyboardButton("🗑 Удалить", callback_data="plumb_del_" + str(panel_id))],
+        ]
+        await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
+        return True
+
+    # --- ТРАССЫ САНТЕХНИКИ ---
+    if data.startswith("plumb_routes_"):
+        panel_id = int(data.replace("plumb_routes_", ""))
+        try:
+            routes = core_plumbing.get_routes_by_panel(panel_id)
+            p = core_plumbing.get_panel(panel_id)
+            pname = p.get('name') if p else '?'
+        except Exception as e:
+            print("plumb routes: " + str(e), flush=True)
+            routes = []
+            pname = '?'
+        lines = ["📏 Трассы коллектора «" + str(pname) + "»", ""]
+        if not routes:
+            lines.append("Трасс пока нет.")
+        else:
+            for idx, r in enumerate(routes, start=1):
+                lines.append(str(idx) + ". " + core_plumbing.format_route(r))
+        kb_rows = []
+        for idx, r in enumerate(routes, start=1):
+            label = core_plumbing.format_route(r)[:40]
+            kb_rows.append([InlineKeyboardButton(
+                str(idx) + ". " + label,
+                callback_data="plumb_route_" + str(r['id'])
+            )])
+        kb_rows.append([InlineKeyboardButton("➕ Добавить", callback_data="plumb_route_new_" + str(panel_id))])
+        kb_rows.append([InlineKeyboardButton("⬅️ К коллектору", callback_data="plumb_" + str(panel_id))])
+        await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
+        return True
+
+    if data.startswith("plumb_route_new_"):
+        panel_id = int(data.replace("plumb_route_new_", ""))
+        context.user_data['plumb_route_panel_id'] = panel_id
+        # Шаг 1 — тип трубы
+        kb_rows = [
+            [InlineKeyboardButton("PPR 20 мм", callback_data="plumb_route_pipe_" + str(panel_id) + "_ppr20")],
+            [InlineKeyboardButton("PPR 25 мм", callback_data="plumb_route_pipe_" + str(panel_id) + "_ppr25")],
+            [InlineKeyboardButton("PPR 32 мм", callback_data="plumb_route_pipe_" + str(panel_id) + "_ppr32")],
+            [InlineKeyboardButton("PEX 16 мм", callback_data="plumb_route_pipe_" + str(panel_id) + "_pex16")],
+            [InlineKeyboardButton("Медь 15 мм", callback_data="plumb_route_pipe_" + str(panel_id) + "_copper15")],
+            [InlineKeyboardButton("Канализация 50 мм", callback_data="plumb_route_pipe_" + str(panel_id) + "_sewer50")],
+            [InlineKeyboardButton("Канализация 110 мм", callback_data="plumb_route_pipe_" + str(panel_id) + "_sewer110")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data="plumb_routes_" + str(panel_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                "📏 Новая трасса" + chr(10) + chr(10) + "Тип трубы:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("plumb_route_pipe_"):
+        parts = data.replace("plumb_route_pipe_", "").rsplit("_", 1)
+        panel_id = int(parts[0])
+        pipe_type = parts[1]
+        context.user_data['plumb_route_pipe'] = pipe_type
+        context.user_data['waiting_for'] = 'plumb_route_length'
+        try:
+            await query.edit_message_text(
+                "📏 Длина трассы (метры):" + chr(10) + chr(10) + "_Например: 8.5_",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data="plumb_routes_" + str(panel_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("plumb_route_del_"):
+        route_id = int(data.replace("plumb_route_del_", ""))
+        try:
+            import sqlite3
+            from core.db import fetchone
+            row = fetchone("SELECT panel_id FROM plumbing_routes WHERE id = ?", (route_id,))
+            panel_id = row['panel_id'] if row else None
+            core_plumbing.delete_route(route_id)
+        except Exception as e:
+            print("plumb route del: " + str(e), flush=True)
+            panel_id = None
+        if panel_id:
+            try:
+                await query.edit_message_text(
+                    "Удалено",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К трассам", callback_data="plumb_routes_" + str(panel_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
+    if data.startswith("plumb_route_") and not data.startswith(("plumb_route_new_", "plumb_route_pipe_", "plumb_route_del_")):
+        try:
+            route_id = int(data.replace("plumb_route_", ""))
+        except ValueError:
+            return False
+        try:
+            from core.db import fetchone
+            row = fetchone("SELECT * FROM plumbing_routes WHERE id = ?", (route_id,))
+            r = dict(row) if row else None
+        except Exception:
+            r = None
+        if not r:
+            try:
+                await query.edit_message_text("Трасса не найдена")
+            except Exception:
+                pass
+            return True
+        lines = ["📏 Трасса #" + str(route_id), ""]
+        lines.append("Труба: " + core_plumbing.get_pipe_label(r.get('pipe_type')))
+        lines.append("Длина: " + str(r.get('length_m') or 0) + " м")
+        lines.append("Прокладка: " + str(r.get('route_type') or '—'))
+        try:
+            cost = core_plumbing.calc_route_cost(route_id)
+            if cost:
+                lines.append("")
+                lines.append("Труба: " + str(cost.get('pipe_cost', 0)) + " ₽")
+                lines.append("Расходники: " + str(cost.get('consumable_cost', 0)) + " ₽")
+                lines.append("💰 Итого: " + str(cost.get('total', 0)) + " ₽")
+        except Exception:
+            pass
+        kb_rows = [
+            [InlineKeyboardButton("🗑 Удалить", callback_data="plumb_route_del_" + str(route_id))],
+            [InlineKeyboardButton("⬅️ К трассам", callback_data="plumb_routes_" + str(r.get('panel_id')))],
+        ]
+        await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
+        return True
+
+    if data.startswith("plumb_points_"):
+        panel_id = int(data.replace("plumb_points_", ""))
+        try:
+            text = core_plumbing.format_points_of_panel(panel_id)
+        except Exception as e:
+            print("plumb points: " + str(e), flush=True)
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        await _safe_edit(query, text, InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ К коллектору", callback_data="plumb_" + str(panel_id))],
+        ]))
+        return True
+
+    if data.startswith("plumb_water_"):
+        object_id = int(data.replace("plumb_water_", ""))
+        try:
+            text = core_plumbing.format_water_summary(object_id)
+        except Exception as e:
+            print("plumb water: " + str(e), flush=True)
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        await _safe_edit(query, text, InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Стояк", callback_data="plumb_add_type_" + str(object_id) + "_riser")],
+            [InlineKeyboardButton("⬅️ К сантехнике", callback_data="plumb_list_" + str(object_id))],
+        ]))
+        return True
+
+    if data.startswith("plumb_spec_"):
+        panel_id = int(data.replace("plumb_spec_", ""))
+        if export_plumbing_panel_spec is None:
+            try:
+                await query.edit_message_text("Модуль экспорта не загружен")
+            except Exception:
+                pass
+            return True
+        try:
+            import tempfile, os
+            content = export_plumbing_panel_spec(panel_id)
+            if not content:
+                raise Exception("Пустая спецификация")
+            target = os.path.join(tempfile.gettempdir(), "plumb_spec_" + str(panel_id) + ".txt")
+            with open(target, "w", encoding="utf-8") as f:
+                f.write(content)
+            p = core_plumbing.get_panel(panel_id)
+            name = (p.get('name') if p else 'panel') or 'panel'
+            with open(target, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=name + "_spec.txt",
+                    caption="📄 Спецификация сантехники «" + str(name) + "»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К коллектору", callback_data="plumb_" + str(panel_id))],
+                    ])
+                )
+        except Exception as e:
+            print("plumb spec: " + str(e), flush=True)
+            try:
+                await query.edit_message_text(
+                    "Ошибка: " + str(e),
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К коллектору", callback_data="plumb_" + str(panel_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
+    if data.startswith("plumb_csv_obj_"):
+        object_id = int(data.replace("plumb_csv_obj_", ""))
+        if export_plumbing_object_csv is None or save_estimate_csv is None:
+            try:
+                await query.edit_message_text("Модуль экспорта не загружен")
+            except Exception:
+                pass
+            return True
+        try:
+            import tempfile, os
+            content = export_plumbing_object_csv(object_id)
+            if not content:
+                raise Exception("Пустая смета")
+            target = os.path.join(tempfile.gettempdir(), "plumb_obj_" + str(object_id) + ".csv")
+            path = save_estimate_csv(content, path=target, prefix="plumb_obj")
+            from modules.objects import get_object
+            o = get_object(object_id)
+            name = o['name'] if o else ('obj_' + str(object_id))
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=str(name) + "_plumb.csv",
+                    caption="📊 Смета сантехники «" + str(name) + "»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К сантехнике", callback_data="plumb_list_" + str(object_id))],
+                    ])
+                )
+        except Exception as e:
+            print("plumb csv obj: " + str(e), flush=True)
+            try:
+                await query.edit_message_text(
+                    "Ошибка: " + str(e),
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К сантехнике", callback_data="plumb_list_" + str(object_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
+    if data.startswith("plumb_cost_obj_"):
+        object_id = int(data.replace("plumb_cost_obj_", ""))
+        try:
+            text = core_plumbing.format_object_cost(object_id)
+        except Exception as e:
+            print("plumb cost obj: " + str(e), flush=True)
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        await _safe_edit(query, text, InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ К сантехнике", callback_data="plumb_list_" + str(object_id))],
+        ]))
+        return True
+
+    if data.startswith("plumb_cost_"):
+        panel_id = int(data.replace("plumb_cost_", ""))
+        try:
+            text = core_plumbing.format_panel_cost(panel_id)
+        except Exception as e:
+            print("plumb cost: " + str(e), flush=True)
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        await _safe_edit(query, text, InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ К коллектору", callback_data="plumb_" + str(panel_id))],
+        ]))
+        return True
+
+    if data.startswith("panel_auto_"):
+        panel_id = int(data.replace("panel_auto_", ""))
+        try:
+            result = core_elec_panels.autocomplete_panel(panel_id)
+        except Exception as e:
+            print("panel auto: " + str(e), flush=True)
+            result = None
+        if not result:
+            try:
+                await query.edit_message_text(
+                    "Не удалось автокомплектовать",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("К щиту", callback_data="panel_" + str(panel_id))],
+                    ])
+                )
+            except Exception:
+                pass
+            return True
+        text = (
+            "Автокомплектация выполнена" + chr(10) + chr(10) +
+            "Создано компонентов: " + str(result.get('created', 0)) + chr(10) +
+            "Ручных (сохранено): " + str(result.get('manual', 0)) + chr(10) +
+            "Групп: " + str(result.get('groups', 0)) + chr(10) +
+            "Нагрузка: " + str(result.get('total_watt', 0)) + " Вт" + chr(10) +
+            "С K_одновр: " + str(result.get('calc_watt', 0)) + " Вт"
+        )
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Комплектация", callback_data="panel_comp_" + str(panel_id))],
+                    [InlineKeyboardButton("К щиту", callback_data="panel_" + str(panel_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("panel_comp_price_"):
+        comp_id = int(data.replace("panel_comp_price_", ""))
+        context.user_data['component_price_id'] = comp_id
+        context.user_data['waiting_for'] = 'component_price'
+        try:
+            await query.edit_message_text(
+                "💰 Введи новую цену (₽):" + chr(10) + chr(10) + "_Например: 350_",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data="panel_comp_item_" + str(comp_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("panel_comp_del_"):
+        comp_id = int(data.replace("panel_comp_del_", ""))
+        try:
+            c = core_elec_panels.get_component(comp_id)
+            panel_id = c.get('panel_id') if c else None
+            if c:
+                core_elec_panels.delete_component(comp_id)
+        except Exception as e:
+            print("panel comp del: " + str(e), flush=True)
+            panel_id = None
+        if panel_id:
+            try:
+                await query.edit_message_text(
+                    "✅ Компонент удалён",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К комплектации", callback_data="panel_comp_" + str(panel_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
+    if data.startswith("panel_comp_item_"):
+        comp_id = int(data.replace("panel_comp_item_", ""))
+        try:
+            c = core_elec_panels.get_component(comp_id)
+        except Exception as e:
+            print("panel comp item: " + str(e), flush=True)
+            c = None
+        if not c:
+            try:
+                await query.edit_message_text("Компонент не найден")
+            except Exception:
+                pass
+            return True
+        panel_id = c.get('panel_id')
+        # Найти порядковый номер компонента среди всех компонентов щита
+        try:
+            all_comps = core_elec_panels.get_components(panel_id)
+            idx = next((i for i, x in enumerate(all_comps, start=1) if x['id'] == comp_id), 0)
+            total = len(all_comps)
+        except Exception:
+            idx = 0
+            total = 0
+        lines = ["🔧 Компонент " + str(idx) + " из " + str(total), ""]
+        lines.append("Тип: " + str(c.get('component_type') or '?'))
+        if c.get('component_model'):
+            lines.append("Модель: " + str(c['component_model']))
+        if c.get('rating'):
+            lines.append("Номинал: " + str(c['rating']) + "А")
+        if c.get('poles'):
+            lines.append("Полюса: " + str(c['poles']) + "P")
+        if c.get('curve'):
+            lines.append("Кривая: " + str(c['curve']))
+        if c.get('rcd_ma'):
+            lines.append("УЗО: " + str(c['rcd_ma']) + "мА")
+        if c.get('quantity'):
+            lines.append("Количество: " + str(c['quantity']))
+        if c.get('is_manual'):
+            lines.append("Тип: [ручной]")
+        lines.append("")
+        try:
+            price = core_elec_panels.calc_component_price(c)
+        except Exception:
+            price = 0
+        unit_price = c.get('price_unit')
+        if unit_price:
+            lines.append("💰 Цена за шт: " + str(unit_price) + " ₽ [ручная]")
+        lines.append("💰 Итого: " + str(price) + " ₽")
+        kb_rows = [
+            [InlineKeyboardButton("💰 Изменить цену", callback_data="panel_comp_price_" + str(comp_id))],
+            [InlineKeyboardButton("🗑 Удалить", callback_data="panel_comp_del_" + str(comp_id))],
+            [InlineKeyboardButton("⬅️ К комплектации", callback_data="panel_comp_" + str(panel_id))],
+        ]
+        await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
+        return True
+
+    if data.startswith("panel_comp_"):
+        panel_id = int(data.replace("panel_comp_", ""))
+        try:
+            comps = core_elec_panels.get_components(panel_id)
+            text = core_elec_panels.format_panel_components(panel_id)
+        except Exception as e:
+            print("panel comp: " + str(e), flush=True)
+            comps = []
+            text = "Ошибка"
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "... (обрезано)"
+        kb_rows = []
+        for idx, c in enumerate(comps, start=1):
+            label = core_elec_panels.format_component(c)[:40]
+            mark = " [ручной]" if c.get('is_manual') else ""
+            num = str(idx) + ". "
+            kb_rows.append([InlineKeyboardButton(
+                num + label + mark,
+                callback_data="panel_comp_item_" + str(c['id'])
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))])
+        await _safe_edit(query, text, InlineKeyboardMarkup(kb_rows))
+        return True
+
+    if data.startswith("panel_stats_"):
+        panel_id = int(data.replace("panel_stats_", ""))
+        try:
+            stats = core_elec_panels.get_panel_stats(panel_id)
+        except Exception as e:
+            print("panel stats: " + str(e), flush=True)
+            stats = None
+        if not stats:
+            try:
+                await query.edit_message_text("Ошибка статистики")
+            except Exception:
+                pass
+            return True
+        text = (
+            "Статистика щита" + chr(10) + chr(10) +
+            "Компонентов: " + str(stats.get('components_total', 0)) + chr(10) +
+            "Модулей занято: " + str(stats.get('modules_used', 0)) + chr(10) +
+            "Групп: " + str(stats.get('groups_count', 0)) + chr(10) +
+            "Нагрузка: " + str(stats.get('total_load_watt', 0)) + " Вт"
+        )
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("К щиту", callback_data="panel_" + str(panel_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("panel_del_"):
+        panel_id = int(data.replace("panel_del_", ""))
+        try:
+            p = core_elec_panels.get_panel(panel_id)
+            object_id = p.get('object_id') if p else None
+            core_elec_panels.delete_panel(panel_id)
+        except Exception as e:
+            print("panel del: " + str(e), flush=True)
+            object_id = None
+        if object_id:
+            try:
+                await query.edit_message_text(
+                    "✅ Щит удалён",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К щитам", callback_data="panels_list_" + str(object_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
+    # --- СОЗДАНИЕ ЩИТА: ШАГ 1 (тип) ---
+    if data.startswith("panel_add_type_"):
+        parts = data.replace("panel_add_type_", "").rsplit("_", 1)
+        object_id = int(parts[0])
+        ptype = parts[1]
+        context.user_data['panel_new_object_id'] = object_id
+        context.user_data['panel_new_type'] = ptype
+        context.user_data['waiting_for'] = 'panel_new_name'
+        type_labels = {
+            'vru': 'ВРУ (вводно-распределительное)',
+            'floor': 'Щит этажа',
+            'apartment': 'Щит квартиры',
+            'outdoor': 'Уличный щит',
+        }
+        tlabel = type_labels.get(ptype, ptype)
+        kb_rows = [
+            [InlineKeyboardButton("⬅️ Отмена", callback_data="panels_list_" + str(object_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                "⚡ Новый щит: " + tlabel + chr(10) + chr(10) +
+                "Напиши название (например «Щит 1 этажа», «ВРУ на столбе»):",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("panel_add_"):
+        object_id = int(data.replace("panel_add_", ""))
+        context.user_data['panel_new_object_id'] = object_id
+        kb_rows = [
+            [InlineKeyboardButton("🔌 ВРУ (ввод)", callback_data="panel_add_type_" + str(object_id) + "_vru")],
+            [InlineKeyboardButton("⚡ Щит этажа", callback_data="panel_add_type_" + str(object_id) + "_floor")],
+            [InlineKeyboardButton("🏢 Щит квартиры", callback_data="panel_add_type_" + str(object_id) + "_apartment")],
+            [InlineKeyboardButton("🌳 Уличный щит", callback_data="panel_add_type_" + str(object_id) + "_outdoor")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data="panels_list_" + str(object_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                "⚡ Новый щит" + chr(10) + chr(10) + "Выбери тип:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("panel_"):
+        panel_id = int(data.replace("panel_", ""))
+        try:
+            summary = core_elec_panels.get_panel_summary(panel_id)
+        except Exception as e:
+            print("panel card: " + str(e), flush=True)
+            summary = None
+        if not summary:
+            try:
+                await query.edit_message_text("Щит не найден")
+            except Exception:
+                pass
+            return True
+        p = summary['panel']
+        ptype = core_elec_panels.get_panel_type_label(p.get('panel_type'))
+        mount = core_elec_panels.get_mount_type_label(p.get('mount_type'))
+        lines = ["⚡ *" + str(p.get('name') or '?') + "*", ""]
+        lines.append("Тип: " + str(ptype))
+        lines.append("Монтаж: " + str(mount))
+        if p.get('input_breaker'):
+            lines.append("Вводной: " + str(p['input_breaker']))
+        if p.get('meter_type'):
+            lines.append("Счётчик: " + str(p['meter_type']))
+        lines.append("")
+        lines.append("📋 Групп: " + str(summary['groups_count']))
+        lines.append("📊 Нагрузка: " + str(summary['total_load_watt']) + " Вт")
+        parent = summary.get('parent')
+        if parent:
+            lines.append("⬆️ Питается от: " + str(parent.get('name')))
+        children = summary.get('children') or []
+        if children:
+            lines.append("⬇️ Питает: " + ", ".join(c.get('name') or '?' for c in children))
+        kb_rows = []
+        try:
+            _children_count = len(core_elec_panels.get_child_panels(panel_id))
+        except Exception:
+            _children_count = 0
+        if _children_count > 0:
+            kb_rows.append([InlineKeyboardButton("⬇️ Дочерние щиты (" + str(_children_count) + ")", callback_data="panel_children_" + str(panel_id))])
+        kb_rows.extend([
+            [InlineKeyboardButton("🔌 Вводной автомат", callback_data="panel_input_" + str(panel_id))],
+            [InlineKeyboardButton("🪄 Автокомплектация", callback_data="panel_auto_" + str(panel_id))],
+            [InlineKeyboardButton("📏 Трассы щита", callback_data="panel_routes_" + str(panel_id))],
+            [InlineKeyboardButton("🪄 Трассировать все группы", callback_data="panel_routes_auto_" + str(panel_id))],
+            [InlineKeyboardButton("🔧 Смета монтажа", callback_data="panel_montage_" + str(panel_id))],
+            [InlineKeyboardButton("💰 Общая смета щита", callback_data="panel_total_" + str(panel_id))],
+            [InlineKeyboardButton("📄 Спецификация (TXT)", callback_data="panel_spec_" + str(panel_id))],
+            [InlineKeyboardButton("📊 Смета (CSV)", callback_data="panel_est_csv_" + str(panel_id))],
+            [InlineKeyboardButton("📋 Комплектация", callback_data="panel_comp_" + str(panel_id))],
+            [InlineKeyboardButton("📊 Статистика", callback_data="panel_stats_" + str(panel_id))],
+            [InlineKeyboardButton("📋 Группы щита", callback_data="panel_groups_" + str(panel_id))],
+            [InlineKeyboardButton("🗑 Удалить щит", callback_data="panel_del_" + str(panel_id))],
+            [InlineKeyboardButton("⬅️ К щитам", callback_data="panels_list_" + str(p.get('object_id')))],
+        ])
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("panel card show: " + str(e), flush=True)
+        return True
+
+    return False

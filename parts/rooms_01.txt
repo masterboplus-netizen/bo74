@@ -1,0 +1,900 @@
+            await query.get_bot().send_message(
+                chat_id=chat_id, text=caption,
+                parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+            print(f"🟢 _show_wall_angle: fallback send_message OK", flush=True)
+        except Exception as e3:
+            print(f"⚠️ _show_wall_angle send_message fallback: {e3}", flush=True)
+
+
+# ============================================================
+# НИШИ — ПОКАЗ ЭКРАНОВ
+# ============================================================
+
+async def _show_niche_count(query, context, room_id):
+    """Сколько нишей на стене?"""
+    state = _get_wall_state(context)
+    state['step_name'] = 'niche_count'
+    _save_wall_draft(context, room_id)
+    context.user_data['waiting_for'] = None
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("1", callback_data=f"wall_niche_count_1_{room_id}")],
+        [InlineKeyboardButton("2", callback_data=f"wall_niche_count_2_{room_id}")],
+        [InlineKeyboardButton("3", callback_data=f"wall_niche_count_3_{room_id}")],
+        [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+    ])
+    caption = "🕳 *Сколько нишей на этой стене?*"
+    print(f"🟠 _show_niche_count вызван, room_id={room_id}", flush=True)
+
+    # Правильный выбор: если текущее сообщение — фото, edit_caption; иначе edit_text
+    msg = query.message
+    is_photo = bool(getattr(msg, "photo", None))
+
+    try:
+        if is_photo:
+            await query.edit_message_caption(
+                caption=caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        else:
+            await query.edit_message_text(
+                caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        print(f"🟢 _show_niche_count OK (photo={is_photo})", flush=True)
+    except Exception as e:
+        err = str(e).lower()
+        print(f"⚠️ _show_niche_count edit failed: {e}", flush=True)
+        # Удаляем старое и шлём новое
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        try:
+            await query.get_bot().send_message(
+                chat_id=query.message.chat_id, text=caption,
+                parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+            print(f"🟢 _show_niche_count fallback send OK", flush=True)
+        except Exception as e2:
+            print(f"⚠️ _show_niche_count fallback failed: {e2}", flush=True)
+
+
+async def _show_niche_width(query, context, room_id):
+    """Ширина ниши."""
+    state = _get_wall_state(context)
+    state['step_name'] = 'niche_width'
+    _save_wall_draft(context, room_id)
+
+    count = state.get('niche_count') or 1
+    current = state.get('niche_current') or 1
+    context.user_data['waiting_for'] = 'wall_niche_width'
+
+    spec_step = spec.get_niche_step('width', i=current, count=count)
+    if spec_step:
+        caption = (
+            f"🕳 *Ниша {current} из {count}*\n\n"
+            f"{spec_step.get('subtitle', '📏 Ширина ниши (СМ):')}\n\n"
+            f"_Например: {spec_step.get('example', '80')}_"
+        )
+        image = spec_step.get('image')
+    else:
+        caption = f"🕳 *Ниша {current} из {count}*\n\n📏 *Ширина ниши* (СМ):\n\n_Например: 80_"
+        image = "niche_width.png"
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, image)
+
+
+async def _show_niche_depth(query, context, room_id):
+    """Глубина ниши."""
+    state = _get_wall_state(context)
+    state['step_name'] = 'niche_depth'
+    _save_wall_draft(context, room_id)
+    context.user_data['waiting_for'] = 'wall_niche_depth'
+
+    spec_step = spec.get_niche_step('depth')
+    caption = spec_step.get('title', '🕳 *Ниша — ГЛУБИНА* (СМ):')
+    hint = spec_step.get('hint')
+    if hint:
+        caption += f"\n\n{hint}"
+    image = spec_step.get('image', 'niche_depth.png')
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, image)
+
+
+async def _show_niche_height(query, context, room_id):
+    """Высота ниши."""
+    state = _get_wall_state(context)
+    state['step_name'] = 'niche_height'
+    _save_wall_draft(context, room_id)
+    context.user_data['waiting_for'] = 'wall_niche_height'
+
+    spec_step = spec.get_niche_step('height')
+    caption = spec_step.get('title', '🕳 *Ниша — ВЫСОТА* (СМ):')
+    example = spec_step.get('example')
+    if example:
+        caption += f"\n\n_Например: {example}_"
+    image = spec_step.get('image', 'niche_height.png')
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, image)
+
+
+async def _show_niche_plane(query, context, room_id):
+    """Ниша ровная или неровная?"""
+    state = _get_wall_state(context)
+    state['step_name'] = 'niche_plane'
+    _save_wall_draft(context, room_id)
+    context.user_data['waiting_for'] = None
+
+    spec_step = spec.get_niche_step('plane')
+    caption = spec_step.get('title', '🕳 *Ниша ровная или неровная по высоте?*')
+    hint = spec_step.get('hint')
+    if hint:
+        caption += f"\n\n{hint}"
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Ровная", callback_data=f"wall_niche_plane_rect_{room_id}")],
+        [InlineKeyboardButton("📏 Неровная", callback_data=f"wall_niche_plane_irr_{room_id}")],
+        [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, None)
+
+
+async def _show_niche_top_width(query, context, room_id):
+    """Ширина ниши СВЕРХУ (для неровной)."""
+    state = _get_wall_state(context)
+    state['step_name'] = 'niche_top_width'
+    _save_wall_draft(context, room_id)
+    context.user_data['waiting_for'] = 'wall_niche_top_width'
+
+    spec_step = spec.get_niche_step('top_width')
+    caption = spec_step.get('title', '🕳 *Ширина СВЕРХУ* (СМ):')
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, None)
+
+
+async def _show_niche_top_depth(query, context, room_id):
+    """Глубина ниши СВЕРХУ (для неровной)."""
+    state = _get_wall_state(context)
+    state['step_name'] = 'niche_top_depth'
+    _save_wall_draft(context, room_id)
+    context.user_data['waiting_for'] = 'wall_niche_top_depth'
+
+    spec_step = spec.get_niche_step('top_depth')
+    caption = spec_step.get('title', '🕳 *Глубина сверху* (СМ):')
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, None)
+
+
+# ============================================================
+# СОХРАНЕНИЕ СТЕНЫ
+# ============================================================
+
+
+async def _wall_save_and_next(query, context, room_id, step):
+    """Сохраняет текущую стену, чистит черновик, идёт к следующей."""
+    state = _get_wall_state(context)
+    pos = WALL_NAMES.get(step, '?')
+    length = state.get('length') or 0
+    angle = state.get('angle_value') or 90
+    angle_method = state.get('angle_method') or '90'
+    flags = state.get('flags') or {}
+
+    note_parts = []
+    if flags.get('rounded'): note_parts.append('Закругление')
+    if flags.get('wavy'): note_parts.append('Разная по высоте')
+    if flags.get('hidden'): note_parts.append('Скрытые коммуникации')
+    note = '; '.join(note_parts) if note_parts else None
+
+    try:
+        session_id = ensure_session(room_id)
+    except Exception:
+        session_id = None
+
+    start_x = start_y = end_x = end_y = None
+    try:
+        walls_existing = get_walls_ordered(room_id)
+        walls_for_calc = list(walls_existing) + [{
+            'wall_pos': pos, 'length': length, 'angle_value': angle,
+        }]
+        coords = calc_wall_coords(walls_for_calc)
+        if coords:
+            last = coords[-1]
+            start_x = last.get('start_x'); start_y = last.get('start_y')
+            end_x = last.get('end_x'); end_y = last.get('end_y')
+    except Exception as e:
+        print(f"⚠️ calc_wall_coords: {e}", flush=True)
+
+    kwargs = {
+        'label': f'Стена {pos}', 'wall_pos': pos, 'length': length,
+        'unit': 'см', 'order_num': step,
+        'angle_value': angle, 'angle_method': angle_method,
+        'session_id': session_id,
+    }
+    if flags.get('rounded'): kwargs['has_rounded'] = 1
+    if flags.get('wavy'): kwargs['is_wavy'] = 1
+    if flags.get('hidden'):
+        kwargs['has_hidden'] = 1
+        kwargs['hidden_note'] = note
+    if note: kwargs['note'] = note
+    if start_x is not None:
+        kwargs['start_x'] = start_x; kwargs['start_y'] = start_y
+        kwargs['end_x'] = end_x; kwargs['end_y'] = end_y
+
+    measure_id = add_measure(room_id, 'wall', **kwargs)
+
+    niches = state.get('niches') or []
+    if niches and measure_id:
+        for n in niches:
+            try:
+                add_niche(
+                    measure_id=measure_id, room_id=room_id,
+                    width_bottom=n.get('width'),
+                    width_top=n.get('width_top') or n.get('width'),
+                    height=n.get('height'),
+                    depth_bottom=n.get('depth'),
+                    depth_top=n.get('depth_top') or n.get('depth'),
+                    session_id=session_id,
+                )
+            except Exception as e:
+                print(f"⚠️ add_niche: {e}", flush=True)
+
+    _clear_wall_draft(room_id)
+    next_step = step + 1 if step < 4 else 1
+    _reset_wall_state(context, keep_step_num=next_step)
+
+    summary = f"✅ *Стена {step} ({pos}) сохранена!*\n\n📏 Длина: {length} см\n📐 Угол: {angle}°"
+    if niches:
+        summary += f"\n🕳 Нишей: {len(niches)}"
+
+    if step >= 4:
+        complete_walls_round(room_id)
+        await _wall_finish(query, context, room_id, summary)
+        return
+
+    state_next = _get_wall_state(context)
+    state_next['step_num'] = next_step
+    state_next['step_name'] = 'flags'
+    _save_wall_draft(context, room_id)
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"➡️ Стена {next_step}", callback_data=f"wall_round_start_{room_id}")],
+        [InlineKeyboardButton("📐 К размерам", callback_data=f"room_measures_{room_id}")],
+    ])
+    try:
+        await query.edit_message_text(summary, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+    except Exception:
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.chat.send_message(summary, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+
+
+async def _wall_finish(query, context, room_id, summary_prefix=''):
+    """Финиш обхода стен."""
+    areas = calculate_room_areas(room_id)
+    text = summary_prefix + "\n\n🎉 *Все 4 стены замерены!*\n\n"
+    if areas.get('walls_net') is not None:
+        text += f"📊 Площадь стен: {areas['walls_net']} м²\n"
+    if areas.get('floor'):
+        text += f"📊 Площадь пола: {areas['floor']} м²\n"
+
+    # Замыкание контура
+    try:
+        walls = get_walls_ordered(room_id)
+        closure = check_closure(walls)
+        if closure.get('closed'):
+            text += "✅ Контур замкнут\n"
+        else:
+            text += f"⚠️ Контур не замкнут: разрыв {closure.get('gap_cm', 0)} см ({closure.get('gap_percent', 0)}%)\n"
+    except Exception:
+        pass
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📐 К размерам", callback_data=f"room_measures_{room_id}")],
+        [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+    ])
+    try:
+        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+    except Exception:
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.chat.send_message(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+
+
+# ============================================================
+
+
+# ============================================================
+# CALLBACK'И ОБХОДА СТЕН
+# ============================================================
+
+async def handle_wall_round_callback(query, context, data):
+    """Обработчик всех callback'ов обхода стен.
+
+    Возвращает True, если обработано.
+    """
+    # --- СТАРТ / ПРОДОЛЖЕНИЕ ---
+    if data.startswith("wall_round_start_"):
+        room_id = int(data.replace("wall_round_start_", ""))
+        await _wall_round_start(query, context, room_id)
+        return True
+
+    # --- СБРОС ---
+    if data.startswith("wall_round_reset_"):
+        room_id = int(data.replace("wall_round_reset_", ""))
+        walls = get_measures(room_id, category='wall')
+        for w in walls:
+            delete_measure(w['id'])
+        try:
+            db_commit("UPDATE rooms SET walls_started_at = NULL, walls_completed_at = NULL WHERE id = ?", (room_id,))
+        except Exception:
+            pass
+        _clear_wall_draft(room_id)
+        _reset_wall_state(context)
+        state = _get_wall_state(context)
+        state['step_num'] = 1
+        state['step_name'] = 'flags'
+        await _show_wall_step(query, context, room_id, 1, phase='flags', use_photo=True)
+        return True
+
+    # --- ФЛАГИ (галочки) ---
+    if data.startswith("wall_round_flag_"):
+        parts = data.replace("wall_round_flag_", "").rsplit("_", 1)
+        flag = parts[0]
+        room_id = int(parts[1])
+        state = _get_wall_state(context)
+        flags = state.get('flags') or dict(DEFAULT_FLAGS)
+        flags[flag] = not flags.get(flag, False)
+        state['flags'] = flags
+        _save_wall_draft(context, room_id)
+        step = state.get('step_num') or 1
+        # use_photo=False — обновление галочки, без мигания
+        await _show_wall_step(query, context, room_id, step, phase='flags', use_photo=False)
+        return True
+
+    # --- ФЛАГИ → ДАЛЬШЕ ---
+    if data.startswith("wall_round_flags_done_"):
+        room_id = int(data.replace("wall_round_flags_done_", ""))
+        state = _get_wall_state(context)
+        state['step_name'] = 'plane'
+        _save_wall_draft(context, room_id)
+        await _show_wall_plane(query, context, room_id)
+        return True
+
+    # --- ПРОПУСК СТЕНЫ ---
+    if data.startswith("wall_round_skip_"):
+        room_id = int(data.replace("wall_round_skip_", ""))
+        state = _get_wall_state(context)
+        step = state.get('step_num') or 1
+        if step >= 4:
+            complete_walls_round(room_id)
+            _clear_wall_draft(room_id)
+            _reset_wall_state(context)
+            await _wall_finish(query, context, room_id, "⏭ Стена пропущена")
+            return True
+        # Сбрасываем state и идём к следующей стене
+        _reset_wall_state(context)
+        state = _get_wall_state(context)
+        state['step_num'] = step + 1
+        state['step_name'] = 'flags'
+        _save_wall_draft(context, room_id)
+        await _show_wall_step(query, context, room_id, step + 1, phase='flags')
+        return True
+
+    # --- ПЛОСКОСТЬ ---
+    if data.startswith("wall_round_plane_straight_"):
+        room_id = int(data.replace("wall_round_plane_straight_", ""))
+        context.user_data['wall_room_id'] = room_id
+        state = _get_wall_state(context)
+        state['plane'] = 'straight'
+        state['step_name'] = 'length'
+        _save_wall_draft(context, room_id)
+        await _show_wall_length(query, context, room_id, state.get('step_num') or 1)
+        return True
+
+    if data.startswith("wall_round_plane_wavy_"):
+        room_id = int(data.replace("wall_round_plane_wavy_", ""))
+        context.user_data['wall_room_id'] = room_id
+        state = _get_wall_state(context)
+        state['plane'] = 'wavy'
+        state['step_name'] = 'plane_wavy'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = 'wall_round_plane_bottom'
+        step = state.get('step_num') or 1
+        caption = (
+            f"🧱 *Стена {step}*\n\n"
+            f"📏 *Замер в 3 точках:*\n\n"
+            f"Введи НИЗ стены (СМ):"
+        )
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ В комнату", callback_data=f"room_{room_id}")],
+        ])
+        # Фото для этого шага нет (нужна специальная схема «вид на стену»)
+        # Просто текстовое сообщение — БЕЗ вводящего в заблуждение PNG
+        try:
+            await query.edit_message_text(
+                caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        except Exception:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            try:
+                await query.get_bot().send_message(
+                    chat_id=query.message.chat_id, text=caption,
+                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                )
+            except Exception as e:
+                print(f"⚠️ plane_wavy send: {e}", flush=True)
+        return True
+
+    # --- ПРОЁМЫ ПРИ ОБХОДЕ ---
+    if data.startswith("wall_round_open_win_"):
+        room_id = int(data.replace("wall_round_open_win_", ""))
+        return await _wall_round_open_start(query, context, room_id, 'window')
+
+    if data.startswith("wall_round_open_door_"):
+        room_id = int(data.replace("wall_round_open_door_", ""))
+        return await _wall_round_open_start(query, context, room_id, 'door_interior')
+
+    if data.startswith("wall_round_open_vent_"):
+        room_id = int(data.replace("wall_round_open_vent_", ""))
+        return await _wall_round_open_start(query, context, room_id, 'vent')
+
+    if data.startswith("wall_round_openings_done_"):
+        room_id = int(data.replace("wall_round_openings_done_", ""))
+        state = _get_wall_state(context)
+        state['step_name'] = 'angle'
+        _save_wall_draft(context, room_id)
+        # Первый вход на шаг угла — с фото
+        await _show_wall_angle(query, context, room_id, state.get('step_num') or 1, use_photo=True)
+        return True
+
+    # --- УГОЛ ---
+    if data.startswith("wall_round_angle_90_"):
+        room_id = int(data.replace("wall_round_angle_90_", ""))
+        state = _get_wall_state(context)
+        print(f"🔵 wall_round_angle_90_: room_id={room_id}, state['step_num']={state.get('step_num')!r}", flush=True)
+        state['angle_value'] = 90
+        state['angle_method'] = '90'
+        state['step_name'] = 'angle_done'
+        _save_wall_draft(context, room_id)
+        await _after_angle(query, context, room_id)
+        return True
+
+    if data.startswith("wall_round_angle_60_"):
+        room_id = int(data.replace("wall_round_angle_60_", ""))
+        state = _get_wall_state(context)
+        state['angle_method'] = '60'
+        state['step_name'] = 'angle'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = 'wall_round_angle_val'
+        try:
+            await query.edit_message_text(
+                "📏 *Диагональ (60-80-100)*\n_Идеал: 100 см_\n\nВведи в СМ:",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("wall_round_angle_100_"):
+        room_id = int(data.replace("wall_round_angle_100_", ""))
+        state = _get_wall_state(context)
+        state['angle_method'] = '100'
+        state['step_name'] = 'angle'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = 'wall_round_angle_val'
+        try:
+            await query.edit_message_text(
+                "📏 *Диагональ (100-100)*\n_Идеал: 141 см_\n\nВведи в СМ:",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("wall_round_angle_deg_"):
+        room_id = int(data.replace("wall_round_angle_deg_", ""))
+        state = _get_wall_state(context)
+        state['angle_method'] = 'deg'
+        state['step_name'] = 'angle'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = 'wall_round_angle_val'
+        try:
+            await query.edit_message_text(
+                "📐 *Угол в градусах*\n\nВведи (например 93):",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    # --- НИШИ ---
+    if data.startswith("wall_niche_count_"):
+        parts = data.replace("wall_niche_count_", "").rsplit("_", 1)
+        count = int(parts[0])
+        room_id = int(parts[1])
+        state = _get_wall_state(context)
+        state['niche_count'] = count
+        state['niche_current'] = 1
+        state['niches'] = []
+        state['niche_temp'] = {}
+        _save_wall_draft(context, room_id)
+        await _show_niche_width(query, context, room_id)
+        return True
+
+    if data.startswith("wall_niche_plane_rect_"):
+        room_id = int(data.replace("wall_niche_plane_rect_", ""))
+        state = _get_wall_state(context)
+        temp = state.get('niche_temp') or {}
+        temp['width_top'] = temp.get('width')
+        temp['depth_top'] = temp.get('depth')
+        niches = state.get('niches') or []
+        niches.append(temp)
+        state['niches'] = niches
+        state['niche_temp'] = {}
+        _save_wall_draft(context, room_id)
+
+        total = state.get('niche_count') or 1
+        current = state.get('niche_current') or 1
+        if current < total:
+            state['niche_current'] = current + 1
+            _save_wall_draft(context, room_id)
+            await _show_niche_width(query, context, room_id)
+            return True
+        # Все ниши обработаны — идём к следующему шагу в очереди
+        print(f"🔷 wall_niche_plane_rect: все ниши собраны ({len(niches)}), → _after_angle", flush=True)
+        await _after_angle(query, context, room_id)
+        return True
+
+    if data.startswith("wall_niche_plane_irr_"):
+        room_id = int(data.replace("wall_niche_plane_irr_", ""))
+        await _show_niche_top_width(query, context, room_id)
+        return True
+
+    return False
+
+
+# ============================================================
+# СТАРТ ОБХОДА С ВОССТАНОВЛЕНИЕМ
+# ============================================================
+
+async def _wall_round_start(query, context, room_id):
+    """Главный вход в обход стен. Восстанавливает прогресс из БД."""
+    progress = get_walls_progress(room_id)
+    if progress['walls_count'] >= 4:
+        await query.edit_message_text(
+            "✅ Все 4 стены уже замерены.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔄 Заново", callback_data=f"wall_round_reset_{room_id}")],
+                [InlineKeyboardButton("📐 К размерам", callback_data=f"room_measures_{room_id}")],
+                [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+            ])
+        )
+        return
+
+    start_walls_round(room_id)
+    next_step = progress['current_step']
+
+    # Пытаемся восстановить черновик
+    step_name = _load_wall_draft(context, room_id)
+    print(f"🔍 _wall_round_start: room_id={room_id}, next_step={next_step}, step_name={step_name!r}", flush=True)
+
+    state = _get_wall_state(context)
+    # Если черновика нет — начинаем с начала
+    if step_name is None:
+        state['step_num'] = next_step
+        state['step_name'] = 'flags'
+        _save_wall_draft(context, room_id)
+        # Первый вход — фото
+        await _show_wall_step(query, context, room_id, next_step, phase='flags', use_photo=True)
+        return
+
+    # Восстанавливаем step_num из черновика
+    step_num = state.get('step_num') or next_step
+    context.user_data['wall_room_id'] = room_id
+
+    # === ОБРАБОТКА ВСЕХ step_name ===
+    if step_name == 'flags':
+        # Восстановление — показываем фото как при первом входе
+        await _show_wall_step(query, context, room_id, step_num, phase='flags', use_photo=True)
+        return
+
+    if step_name == 'plane':
+        await _show_wall_plane(query, context, room_id)
+        return
+
+    if step_name == 'plane_wavy':
+        context.user_data['waiting_for'] = 'wall_round_plane_bottom'
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.chat.send_message(
+            f"🧱 *Стена {step_num}*\n\n"
+            f"📏 *Продолжаем замер в 3 точках:*\n\n"
+            f"Введи НИЗ стены (СМ):",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    if step_name == 'length':
+        await _show_wall_length(query, context, room_id, step_num)
+        return
+
+    if step_name == 'openings':
+        await _show_wall_openings(query, context, room_id, step_num)
+        return
+
+    if step_name == 'angle':
+        # Восстановление — edit_caption (без пересоздания)
+        await _show_wall_angle(query, context, room_id, step_num, use_photo=False)
+        return
+
+    if step_name == 'angle_done':
+        await _after_angle(query, context, room_id)
+        return
+
+    # === ВОТ ОН, ТОТ САМЫЙ БАГ — niche_width !!! ===
+    if step_name == 'niche_width':
+        await _show_niche_width(query, context, room_id)
+        return
+
+    if step_name == 'niche_depth':
+        await _show_niche_depth(query, context, room_id)
+        return
+
+    if step_name == 'niche_height':
+        await _show_niche_height(query, context, room_id)
+        return
+
+    if step_name == 'niche_plane':
+        await _show_niche_plane(query, context, room_id)
+        return
+
+    if step_name == 'niche_top_width':
+        await _show_niche_top_width(query, context, room_id)
+        return
+
+    if step_name == 'niche_top_depth':
+        await _show_niche_top_depth(query, context, room_id)
+        return
+
+    if step_name == 'niche_count':
+        await _show_niche_count(query, context, room_id)
+        return
+
+    # Fallback — галочки (первый раз заходим)
+    state['step_num'] = step_num
+    state['step_name'] = 'flags'
+    _save_wall_draft(context, room_id)
+    await _show_wall_step(query, context, room_id, step_num, phase='flags', use_photo=True)
+
+
+# ============================================================
+# ХЕЛПЕРЫ ОБХОДА
+# ============================================================
+
+async def _after_angle(query, context, room_id):
+    """После угла — обрабатываем remaining_steps (ниши/rounded/wavy/hidden).
+
+    ЧИСТАЯ ЛОГИКА:
+    - remaining_steps is None  → первый заход. Читаем флаги, чистим их, ставим очередь.
+    - remaining_steps == []    → все обработано, сохраняем стену.
+    - remaining_steps == [...] → берём [0], идём по очереди.
+    """
+    state = _get_wall_state(context)
+    remaining = state.get('remaining_steps')
+
+    # --- ФАЗА 1: первый заход после угла ---
+    if remaining is None:
+        flags_queue = _wall_flags_list(context)
+        # ВАЖНО: чистим флаги — иначе они снова попадут в очередь
+        state['flags'] = dict(DEFAULT_FLAGS)
+        state['remaining_steps'] = flags_queue
+        _save_wall_draft(context, room_id)
+        remaining = flags_queue
+        print(f"🔷 _after_angle: первый заход, очередь={remaining}", flush=True)
+
+    # --- ФАЗА 2: очередь пуста → сохраняем стену ---
+    if not remaining:
+        step_num = state.get('step_num') or 1
+        print(f"🔷 _after_angle: очередь пуста. state['step_num']={state.get('step_num')!r}, ИТОГ step_num={step_num} → _wall_save_and_next", flush=True)
+        await _wall_save_and_next(query, context, room_id, step_num)
+        return
+
+    # --- ФАЗА 3: берём первый элемент очереди ---
+    first = remaining[0]
+    state['remaining_steps'] = remaining[1:]
+    _save_wall_draft(context, room_id)
+    print(f"🔷 _after_angle: берём {first!r}, осталось {state['remaining_steps']}", flush=True)
+
+    if first == 'niche':
+        await _show_niche_count(query, context, room_id)
+        return
+
+    if first == 'rounded':
+        state['step_name'] = 'rounded'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = 'wall_rounded_radius'
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.chat.send_message(
+            "🔄 *Закругление*\n\n📏 Радиус (СМ):",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    if first == 'wavy':
+        # wavy — если УЖЕ прошли через 3 точки — пропускаем, идём дальше
+        if state.get('plane') == 'wavy':
+            state['remaining_steps'] = remaining[1:] if len(remaining) > 1 else []
+            _save_wall_draft(context, room_id)
+            await _after_angle(query, context, room_id)
+            return
+        # Иначе — первый раз, показываем 3 точки
+        state['plane'] = 'wavy'
+        state['step_name'] = 'plane_wavy'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = 'wall_round_plane_bottom'
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.chat.send_message(
+            "📐 *Разная по высоте*\n\n📏 Введи НИЗ стены (СМ):",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    if first == 'hidden':
+        state['step_name'] = 'hidden'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = 'wall_hidden_note'
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        await query.message.chat.send_message(
+            "🔧 *Скрытые коммуникации*\n\nОпиши что и где:",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # Неизвестный шаг — сохраняем
+    step_num = state.get('step_num') or 1
+    await _wall_save_and_next(query, context, room_id, step_num)
+
+
+async def _after_niches(query, context, room_id):
+    """После нишей — обрабатываем следующий remaining_step или сохраняем."""
+    # Просто делегируем в _after_angle, но remaining_steps уже обрезан
+    await _after_angle(query, context, room_id)
+
+
+async def _wall_round_open_start(query, context, room_id, opening_type):
+    """Старт добавления проёма при обходе."""
+    state = _get_wall_state(context)
+    step = state.get('step_num') or 1
+    pos = WALL_NAMES.get(step, 'напротив')
+    context.user_data['wall_round_opening_type'] = opening_type
+    context.user_data['wall_round_opening_wall'] = pos
+
+    if opening_type == 'vent':
+        # Вентиляция — сразу высота от пола
+        context.user_data['waiting_for'] = 'wall_round_opening_height'
+        try:
+            await query.edit_message_text(
+                "💨 *Вентиляция*\n\n📏 Высота от пола (СМ):",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"wall_round_openings_done_{room_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    # Окно/Дверь — сначала ширина
+    context.user_data['waiting_for'] = 'wall_round_opening_width'
+    label = '🪟 Окно' if opening_type == 'window' else '🚪 Дверь'
+    try:
+        await query.edit_message_text(
+            f"{label}\n\n📏 Ширина (СМ):",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"wall_round_openings_done_{room_id}")],
+            ])
+        )
+    except Exception:
+        pass
+    return True
+
+
+async def _handle_wall_round_input(update, context, step):
+    """Ввод при обходе стен."""
+    room_id = context.user_data.get('wall_room_id')
+    if not room_id:
+        # Страховка: восстановить из wall_drafts
+        try:
+            draft = fetchone("SELECT room_id FROM wall_drafts ORDER BY updated_at DESC LIMIT 1")
+            if draft:
+                room_id = draft["room_id"]
+                context.user_data["wall_room_id"] = room_id
+                print(f"⚠️ wall_room_id восстановлен: {room_id}", flush=True)
+        except Exception as e:
+            print(f"⚠️ restore wall_room_id: {e}", flush=True)
+    if not room_id:
+        await update.message.reply_text("❌ Потерялась комната. Начни замер заново.")
+        context.user_data["waiting_for"] = None
+        return
+    state = _get_wall_state(context)
+    text_val = (update.message.text or '').strip().replace(',', '.')
+
+    if step == 'wall_round_length':
+        try:
+            length_cm = float(text_val)
+        except ValueError:
+            await update.message.reply_text("❌ Нужно число")
+            return
+        if length_cm <= 0 or length_cm > 5000:
+            await update.message.reply_text("❌ Длина от 1 до 5000 см")
+            return
+        state['length'] = length_cm
+        state['step_name'] = 'openings'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = None
+        await _show_wall_openings_from_update(update, context, room_id)
+        return
+
+    if step == 'wall_round_plane_bottom':
+        try: val = float(text_val)
+        except ValueError:
+            await update.message.reply_text("❌ Нужно число"); return
+        state['plane_bottom'] = val
+        context.user_data['waiting_for'] = 'wall_round_plane_middle'
+        step_num = state.get('step_num') or 1
+        pos = WALL_NAMES.get(step_num, '?')
+        caption = (
+            f"🧱 *Стена {step_num} — {pos}*\n\n"
+            f"📏 *Замер в 3 точках*\n"
+            f"✅ Точка 1 (низ): *{val} см*\n\n"
+            f"📍 *Точка 2 — СЕРЕДИНА стены*\n"
+            f"Приложи дальномер на середине стены по высоте.\n\n"
+            f"Введи результат в СМ:"
+        )
+        await update.message.reply_text(caption, parse_mode=ParseMode.MARKDOWN)
+        return
+
+    if step == 'wall_round_plane_middle':
+        try: val = float(text_val)
+        except ValueError:
+            await update.message.reply_text("❌ Нужно число"); return
+        state['plane_middle'] = val

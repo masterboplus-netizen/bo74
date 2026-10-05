@@ -1,0 +1,900 @@
+"""interfaces.telegram.rooms — UI комнат в Telegram (v3, переписан с нуля).
+
+Версия: 3.0
+Дата: 2026-10-03
+Ключевое отличие от v2:
+  - Единый state wall_state вместо россыпи ключей в user_data
+  - _save_wall_draft / _load_wall_draft работают со всем state целиком
+  - wall_round_start_ обрабатывает ВСЕ step_name, включая niche_width
+  - session_id используется везде (ensure_session)
+  - Тексты из core.spec, картинки из docs/images
+"""
+import os
+import json
+import math
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+from telegram.constants import ParseMode
+
+# --- Ядро: комнаты ---
+from core.rooms import get_rooms, get_room, create_room, delete_room, update_room
+from core.rooms_ui import format_room_card, format_rooms_list
+
+# --- Ядро: замеры ---
+from core.measures import (
+    get_measures, calculate_room_areas, format_measure, get_walls_ordered,
+    add_measure, delete_measure,
+    start_walls_round, complete_walls_round, get_walls_progress,
+)
+
+# --- Ядро: проёмы ---
+from core.openings import (
+    add_opening, get_opening, get_openings, get_openings_by_wall,
+    update_opening, delete_opening, format_opening, OPENING_TYPES,
+)
+
+# --- Ядро: ниши ---
+from core.niches import (
+    add_niche, get_niches, get_niches_by_room,
+    update_niche, delete_niche, format_niche,
+)
+
+# --- Ядро: коммуникации ---
+from core.comms import (
+    get_comms, format_comm, get_comm_type_label, get_comm,
+    add_comm, update_comm, delete_comm, COMM_TYPES,
+)
+
+# --- Ядро: сессии, геометрия, БД, spec ---
+from core.sessions import ensure_session, get_active_session
+from core.geometry import calc_wall_coords, check_closure
+from core.db import fetchone, fetchall, commit as db_commit
+from core import spec
+try:
+    from core import spec as core_spec
+except Exception:
+    core_spec = spec
+
+# --- Объекты комнат ---
+from core.room_objects import get_room_objects, format_room_object
+
+# --- Экспорт ---
+try:
+    from core.export.dxf import save_dxf, export_dxf
+except Exception:
+    save_dxf = export_dxf = None
+
+# --- Визуализация ---
+try:
+    from core.visualize import render_room_plan
+except Exception:
+    render_room_plan = None
+
+# --- ЭОМ ---
+try:
+    from core import elec as core_elec
+except Exception:
+    core_elec = None
+
+try:
+    from core import elec_panels as core_elec_panels
+except Exception:
+    core_elec_panels = None
+
+try:
+    from core import elec_routes as core_elec_routes
+except Exception:
+    core_elec_routes = None
+
+try:
+    from core import elec_prices as core_elec_prices
+except Exception:
+    core_elec_prices = None
+
+try:
+    from core.export.spec_export import (
+        save_panel_spec, export_panel_spec, export_object_spec
+    )
+except Exception:
+    save_panel_spec = export_panel_spec = None
+    export_object_spec = None
+
+try:
+    from core.export.estimate_export import (
+        export_panel_estimate_csv, export_object_estimate_csv, save_estimate_csv,
+        export_plumbing_object_csv
+    )
+except Exception:
+    export_panel_estimate_csv = export_object_estimate_csv = save_estimate_csv = None
+    export_plumbing_object_csv = None
+
+try:
+    from core.export.spec_export import export_plumbing_panel_spec
+except Exception:
+    export_plumbing_panel_spec = None
+
+try:
+    from core import marketplaces as core_marketplaces
+except Exception:
+    core_marketplaces = None
+
+try:
+    from core import plumbing_panels as core_plumbing
+except Exception:
+    core_plumbing = None
+
+try:
+    from core import object_works as core_works
+except Exception:
+    core_works = None
+
+# --- Помещения (этажи / зоны) ---
+try:
+    from core import floors as core_floors
+except Exception:
+    core_floors = None
+try:
+    from core.export.json_export import save_json, export_json
+except Exception:
+    save_json = export_json = None
+try:
+    from core.export.csv_export import save_csv, export_csv
+except Exception:
+    save_csv = export_csv = None
+
+
+# ============================================================
+# БЕЗОПАСНЫЙ EDIT
+# ============================================================
+
+async def _safe_edit(query, text, kb=None):
+    """Универсальный edit: text -> caption -> delete+send.
+
+    Используется для надёжного обновления сообщения независимо от того,
+    текст это или фото."""
+    is_photo = bool(getattr(query.message, "photo", None))
+    try:
+        if is_photo:
+            await query.edit_message_caption(caption=text, parse_mode=None, reply_markup=kb)
+        else:
+            await query.edit_message_text(text, parse_mode=None, reply_markup=kb)
+        return True
+    except Exception as e1:
+        err = str(e1).lower()
+        if "message is not modified" in err:
+            return True
+        print("_safe_edit edit failed: " + str(e1), flush=True)
+    try:
+        await query.message.delete()
+    except Exception:
+        pass
+    try:
+        await query.get_bot().send_message(
+            chat_id=query.message.chat_id, text=text, reply_markup=kb
+        )
+        print("_safe_edit send_message OK", flush=True)
+        return True
+    except Exception as e2:
+        print("_safe_edit send failed: " + str(e2), flush=True)
+        return False
+
+
+
+# ============================================================
+# КОНСТАНТЫ
+# ============================================================
+
+WALL_NAMES = {1: "напротив", 2: "слева", 3: "у входа", 4: "справа"}
+WALL_NAMES_REVERSE = {v: k for k, v in WALL_NAMES.items()}
+
+DEFAULT_FLAGS = {"niche": False, "rounded": False, "wavy": False, "hidden": False}
+
+
+# ============================================================
+# ЕДИНЫЙ STATE СТЕНЫ
+# ============================================================
+
+def _get_wall_state(context):
+    """Возвращает единый state текущей стены (создаёт, если нет)."""
+    if 'wall_state' not in context.user_data or context.user_data['wall_state'] is None:
+        context.user_data['wall_state'] = {
+            'step_num': 1,
+            'step_name': 'flags',
+            'flags': dict(DEFAULT_FLAGS),
+            'length': None,
+            'plane': None,
+            'angle_value': None,
+            'angle_method': None,
+            'niches': [],
+            'niche_count': 0,
+            'niche_current': 0,
+            'niche_temp': {},
+            'remaining_steps': None,  # None — маркер «первый заход»
+        }
+    return context.user_data['wall_state']
+
+
+
+def _reset_wall_state(context, keep_step_num=None):
+    """Сбрасывает state стены.
+
+    keep_step_num — сохранить этот номер стены. По умолчанию — из старого state.
+    """
+    step_num = keep_step_num
+    if step_num is None:
+        old_state = context.user_data.get('wall_state') or {}
+        step_num = old_state.get('step_num') or 1
+    context.user_data['wall_state'] = {
+        'step_num': step_num,
+        'step_name': 'flags',
+        'flags': dict(DEFAULT_FLAGS),
+        'length': None,
+        'plane': None,
+        'angle_value': None,
+        'angle_method': None,
+        'niches': [],
+        'niche_count': 0,
+        'niche_current': 0,
+        'niche_temp': {},
+        'remaining_steps': None,
+    }
+
+def _save_wall_draft(context, room_id):
+    """Сохраняет ВЕСЬ state стены в БД (без параметра step_name)."""
+    state = _get_wall_state(context)
+    try:
+        db_commit(
+            """INSERT OR REPLACE INTO wall_drafts
+            (room_id, step_num, step_name, flags, length, plane,
+             angle_value, angle_method, niches, niche_count, niche_current,
+             niche_temp, remaining_steps, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+            (
+                room_id,
+                state.get('step_num') or 1,
+                state.get('step_name') or 'flags',
+                json.dumps(state.get('flags') or DEFAULT_FLAGS, ensure_ascii=False),
+                state.get('length'),
+                state.get('plane'),
+                state.get('angle_value'),
+                state.get('angle_method'),
+                json.dumps(state.get('niches') or [], ensure_ascii=False),
+                state.get('niche_count') or 0,
+                state.get('niche_current') or 0,
+                json.dumps(state.get('niche_temp') or {}, ensure_ascii=False),
+                json.dumps(state.get('remaining_steps'), ensure_ascii=False),
+            )
+        )
+    except Exception as e:
+        print(f"⚠️ _save_wall_draft: {e}", flush=True)
+
+
+def _load_wall_draft(context, room_id):
+    """Загружает черновик стены из БД. Возвращает step_name или None."""
+    try:
+        draft = fetchone("SELECT * FROM wall_drafts WHERE room_id = ?", (room_id,))
+    except Exception as e:
+        print(f"⚠️ _load_wall_draft: {e}", flush=True)
+        return None
+    if not draft:
+        return None
+    draft = dict(draft)
+    state = _get_wall_state(context)
+    state['step_num'] = draft.get('step_num') or 1
+    state['step_name'] = draft.get('step_name') or 'flags'
+    try:
+        flags = json.loads(draft.get('flags') or '{}')
+        state['flags'] = flags if flags else dict(DEFAULT_FLAGS)
+    except Exception:
+        state['flags'] = dict(DEFAULT_FLAGS)
+    state['length'] = draft.get('length')
+    state['plane'] = draft.get('plane')
+    state['angle_value'] = draft.get('angle_value')
+    state['angle_method'] = draft.get('angle_method')
+    try:
+        state['niches'] = json.loads(draft.get('niches') or '[]')
+    except Exception:
+        state['niches'] = []
+    state['niche_count'] = draft.get('niche_count') or 0
+    state['niche_current'] = draft.get('niche_current') or 0
+    try:
+        state['niche_temp'] = json.loads(draft.get('niche_temp') or '{}')
+    except Exception:
+        state['niche_temp'] = {}
+    try:
+        rs = json.loads(draft.get('remaining_steps') or 'null')
+        # Сохраняем None как маркер «первый заход», [] как «всё обработано»
+        state['remaining_steps'] = rs
+    except Exception:
+        state['remaining_steps'] = None
+    return state['step_name']
+
+
+def _clear_wall_draft(room_id):
+    """Удаляет черновик стены."""
+    try:
+        db_commit("DELETE FROM wall_drafts WHERE room_id = ?", (room_id,))
+    except Exception as e:
+        print(f"⚠️ _clear_wall_draft: {e}", flush=True)
+
+
+# ============================================================
+# ХЕЛПЕРЫ
+# ============================================================
+
+def _current_wall_pos(context):
+    """Текущая позиция стены (строка) из state."""
+    state = _get_wall_state(context)
+    return WALL_NAMES.get(state.get('step_num') or 1, '?')
+
+
+def _wall_flags_list(context):
+    """Возвращает список флагов, которые надо обработать после угла.
+
+    ПРАВИЛО:
+    - wavy не добавляем, если плоскость УЖЕ пройдена через 3 точки (plane='wavy').
+    - Функция НЕ очищает флаги — этим занимается _after_angle.
+    """
+    state = _get_wall_state(context)
+    flags = state.get('flags') or {}
+    steps = []
+    if flags.get('niche'):
+        steps.append('niche')
+    if flags.get('rounded'):
+        steps.append('rounded')
+    if flags.get('wavy') and state.get('plane') != 'wavy':
+        steps.append('wavy')
+    if flags.get('hidden'):
+        steps.append('hidden')
+    return steps
+
+
+def _image_path(filename):
+    """Путь к PNG-схеме."""
+    if not filename:
+        return None
+    base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.join(base, "docs", "images", filename)
+
+
+async def _send_png_or_edit(query, caption, kb, png_filename=None):
+    """Отправляет фото или редактирует сообщение.
+
+    Если png есть — удаляет старое сообщение, шлёт фото в тот же чат.
+    Если png нет — пытается edit, при неудаче — новое сообщение.
+    """
+    png = _image_path(png_filename)
+    chat_id = query.message.chat_id
+
+    if png and os.path.exists(png):
+        # Удаляем старое сообщение (в try — может быть уже удалено)
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        # Отправляем фото — ВСЕГДА в chat_id (не через query.message.chat)
+        try:
+            with open(png, "rb") as f:
+                await query.get_bot().send_photo(
+                    chat_id=chat_id,
+                    photo=f, caption=caption,
+                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                )
+            return
+        except Exception as e:
+            print(f"⚠️ send_photo: {e}", flush=True)
+        # Fallback — просто текст, тоже через bot
+        try:
+            await query.get_bot().send_message(
+                chat_id=chat_id, text=caption,
+                parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+            return
+        except Exception as e:
+            print(f"⚠️ send_message fallback: {e}", flush=True)
+        return
+
+    # PNG нет — редактируем существующее сообщение.
+    # Если это ФОТО — используем edit_message_caption, если текст — edit_message_text.
+    msg = query.message
+    is_photo = bool(getattr(msg, "photo", None))
+    print(f"🟡 _send_png_or_edit (no png): is_photo={is_photo}, caption={caption[:60]!r}", flush=True)
+
+    try:
+        if is_photo:
+            await query.edit_message_caption(
+                caption=caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        else:
+            await query.edit_message_text(
+                caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        print(f"🟢 _send_png_or_edit (no png): OK", flush=True)
+    except Exception as e:
+        err = str(e).lower()
+        print(f"⚠️ _send_png_or_edit (no png) edit failed: {e}", flush=True)
+        if "message is not modified" in err:
+            return
+        if "message to edit not found" in err or "not found" in err or "query is too old" in err:
+            try:
+                await query.get_bot().send_message(
+                    chat_id=chat_id, text=caption,
+                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                )
+                print(f"🟢 _send_png_or_edit (no png): fallback OK", flush=True)
+            except Exception as e2:
+                print(f"⚠️ send_message: {e2}", flush=True)
+
+
+async def _send_png_or_reply(message, caption, kb=None, png_filename=None):
+    """Отправляет фото или текстовое сообщение (для update.message)."""
+    png = _image_path(png_filename)
+    if png and os.path.exists(png):
+        try:
+            with open(png, "rb") as f:
+                await message.reply_photo(
+                    photo=f, caption=caption,
+                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                )
+            return
+        except Exception as e:
+            print(f"⚠️ reply_photo: {e}", flush=True)
+    await message.reply_text(caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+
+
+# ============================================================
+# КЛАВИАТУРЫ
+# ============================================================
+
+def rooms_list_keyboard(object_id):
+    """Клавиатура списка комнат объекта."""
+    rooms = get_rooms(object_id)
+    buttons = []
+    for r in rooms:
+        mark = "🏠" if r.get('is_default') else "📦"
+        buttons.append([InlineKeyboardButton(f"{mark} {r['name']}", callback_data=f"room_{r['id']}")])
+    buttons.append([InlineKeyboardButton("➕ Добавить комнату", callback_data=f"room_add_{object_id}")])
+    buttons.append([InlineKeyboardButton("⬅️ К объекту", callback_data=f"obj_{object_id}")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def room_card_keyboard(room_id):
+    """Клавиатура карточки комнаты."""
+    room = get_room(room_id)
+    object_id = room['object_id'] if room else 0
+    walls = get_walls_ordered(room_id)
+    height_ok = bool(room.get('height_bottom') and room.get('height_middle') and room.get('height_top'))
+    walls_ok = len(walls) >= 4
+
+    if not height_ok and not walls:
+        start_btn = InlineKeyboardButton("🚀 Начать замер", callback_data=f"room_start_{room_id}")
+    elif height_ok and walls_ok:
+        start_btn = InlineKeyboardButton("✅ Замер завершён", callback_data=f"room_start_{room_id}")
+    else:
+        start_btn = InlineKeyboardButton("▶️ Продолжить замер", callback_data=f"room_start_{room_id}")
+
+    return InlineKeyboardMarkup([
+        [start_btn],
+        [InlineKeyboardButton("📐 Размеры", callback_data=f"room_measures_{room_id}"),
+         InlineKeyboardButton("👁 Что замерено", callback_data=f"room_progress_{room_id}")],
+        [InlineKeyboardButton("🚪 Проёмы", callback_data=f"openings_list_{room_id}"),
+         InlineKeyboardButton("🔧 Коммуникации", callback_data=f"room_comms_{room_id}")],
+        [InlineKeyboardButton("🪑 Мебель", callback_data=f"room_objects_{room_id}")],
+        [InlineKeyboardButton("📋 Задачи", callback_data=f"room_tasks_{room_id}"),
+         InlineKeyboardButton("📸 Фото", callback_data=f"room_photos_{room_id}")],
+        [InlineKeyboardButton("📊 Отчёты", callback_data=f"room_reports_{room_id}"),
+         InlineKeyboardButton("📤 Экспорт", callback_data=f"room_export_{room_id}")],
+        [InlineKeyboardButton("⚡ Группы ЭОМ", callback_data=f"room_groups_{room_id}")],
+        [InlineKeyboardButton("✏️ Переименовать", callback_data=f"room_rename_{room_id}")],
+        [InlineKeyboardButton("🗑 Удалить", callback_data=f"room_del_{room_id}")],
+        [InlineKeyboardButton("⬅️ К комнатам", callback_data=f"rooms_list_obj_{object_id}")],
+    ])
+
+
+# ============================================================
+# ПОКАЗ КОМНАТ
+# ============================================================
+
+async def show_rooms_list(update, context, object_id):
+    """Показ списка комнат объекта."""
+    from modules.objects import get_object
+    obj = get_object(object_id)
+    obj_name = obj['name'] if obj else '—'
+    text = f"📦 *Комнаты «{obj_name}»*\n\n{format_rooms_list(object_id)}"
+    kb = rooms_list_keyboard(object_id)
+    if update.callback_query:
+        try:
+            await update.callback_query.edit_message_text(
+                text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
+            )
+        except Exception:
+            try:
+                await update.callback_query.message.delete()
+            except Exception:
+                pass
+            await update.callback_query.message.chat.send_message(
+                text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
+            )
+    else:
+        await update.message.reply_text(
+            text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
+        )
+
+
+async def show_room_card(update, context, room_id):
+    """Показ карточки комнаты."""
+    room = get_room(room_id)
+    if not room:
+        if update.callback_query:
+            await update.callback_query.edit_message_text("❌ Комната не найдена")
+        else:
+            await update.message.reply_text("❌ Комната не найдена")
+        return
+    text = format_room_card(room_id)
+    kb = room_card_keyboard(room_id)
+
+    if update.callback_query:
+        query = update.callback_query
+        has_photo = bool(getattr(query.message, "photo", None))
+        if has_photo:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            await query.message.chat.send_message(
+                text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            try:
+                await query.edit_message_text(
+                    text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
+                )
+            except Exception as e:
+                if "message is not modified" in str(e).lower():
+                    return
+                try:
+                    await query.message.delete()
+                except Exception:
+                    pass
+                await query.message.chat.send_message(
+                    text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
+                )
+    else:
+        await update.message.reply_text(
+            text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
+        )
+
+
+# ============================================================
+# МАСТЕР ВЫСОТЫ (3 точки)
+# ============================================================
+
+async def _send_height_scheme(message, context, room_id, step, caption, kb_extra=None):
+    """Отправка PNG-схемы высоты."""
+    kb_rows = list(kb_extra or [])
+    kb_rows.append([InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")])
+    kb = InlineKeyboardMarkup(kb_rows)
+    png = _image_path(f"height_scheme_step{step}.png")
+    if png and os.path.exists(png):
+        try:
+            with open(png, "rb") as f:
+                await message.reply_photo(
+                    photo=f, caption=caption,
+                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                )
+            return
+        except Exception as e:
+            print(f"⚠️ height scheme: {e}", flush=True)
+    await message.reply_text(caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+
+
+async def _show_height_step(target, context, room_id, method=None, step=1):
+    """Экран шага высоты.
+
+    target — Update или CallbackQuery. Если CallbackQuery — сначала
+    пытаемся edit, при неудаче — новое сообщение.
+    """
+    captions = {
+        1: (
+            "📏 *Высота — шаг 1*\n\n"
+            "📍 *Точка 1 — ЦЕНТР комнаты*\n\n"
+            "Встань в центре комнаты, приложи дальномер к полу, наведи на потолок.\n\n"
+            "Введи результат в СМ:\n\n_Например: 305_"
+        ),
+        2: (
+            "📏 *Высота — шаг 2*\n\n"
+            "📍 *Точка 2 — у ЛЕВОГО угла*\n\n"
+            "Введи результат в СМ:\n\n_Например: 304_"
+        ),
+        3: (
+            "📏 *Высота — шаг 3*\n\n"
+            "📍 *Точка 3 — у ПРАВОГО угла*\n\n"
+            "Введи результат в СМ:\n\n_Например: 306_"
+        ),
+    }
+    caption = captions.get(step, captions[1])
+    kb_extra = [
+        [InlineKeyboardButton("✅ Все три одинаковые", callback_data=f"room_height_same_{room_id}")],
+    ]
+    context.user_data['waiting_for'] = 'room_height_point'
+    context.user_data['height_room_id'] = room_id
+    context.user_data['height_step'] = step
+
+    # target — callback (query) или Update
+    if hasattr(target, 'message') and hasattr(target, 'edit_message_text'):
+        # Это CallbackQuery
+        try:
+            await target.message.delete()
+        except Exception:
+            pass
+        await _send_height_scheme(target.message, context, room_id, step, caption, kb_extra)
+    elif hasattr(target, 'message'):
+        # Это Update
+        await _send_height_scheme(target.message, context, room_id, step, caption, kb_extra)
+
+
+# ============================================================
+# ОБХОД СТЕН: ПОКАЗ ЭКРАНОВ
+# ============================================================
+
+async def _show_wall_step(query, context, room_id, step, phase='flags', use_photo=False):
+    """Экран галочек стены.
+
+    use_photo=True — только при первом входе на стену (отправка фото).
+    use_photo=False — при обновлении галочек (просто edit_message_text, БЕЗ мигания).
+    """
+    state = _get_wall_state(context)
+    state['step_num'] = step
+    state['step_name'] = phase
+    _save_wall_draft(context, room_id)
+
+    pos = WALL_NAMES.get(step, '?')
+    flags = state.get('flags') or DEFAULT_FLAGS
+
+    spec_step = spec.get_wall_step('flags', n=step, pos=pos)
+    if spec_step:
+        caption = f"{spec_step.get('title', '')}\n\n{spec_step.get('subtitle', '')}"
+        image = spec_step.get('image')
+    else:
+        caption = f"🧱 *Стена {step} — {pos}*\n\n👁 Осмотри стену.\nОтметь особенности:"
+        image = f"wall_scheme_s{step}_flags.png"
+
+    f_niche = '✅' if flags.get('niche') else '⬜'
+    f_rounded = '✅' if flags.get('rounded') else '⬜'
+    f_wavy = '✅' if flags.get('wavy') else '⬜'
+    f_hidden = '✅' if flags.get('hidden') else '⬜'
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"{f_niche} С нишей", callback_data=f"wall_round_flag_niche_{room_id}")],
+        [InlineKeyboardButton(f"{f_rounded} С закруглением", callback_data=f"wall_round_flag_rounded_{room_id}")],
+        [InlineKeyboardButton(f"{f_wavy} Разная по высоте", callback_data=f"wall_round_flag_wavy_{room_id}")],
+        [InlineKeyboardButton(f"{f_hidden} Скрытые коммуникации", callback_data=f"wall_round_flag_hidden_{room_id}")],
+        [InlineKeyboardButton("➡️ Дальше", callback_data=f"wall_round_flags_done_{room_id}")],
+        [InlineKeyboardButton("⏭ Пропустить стену", callback_data=f"wall_round_skip_{room_id}")],
+        [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+    ])
+    # При обновлении галочек — просто редактируем (плавно, без мигания)
+    if use_photo:
+        await _send_png_or_edit(query, caption, kb, image)
+        return
+
+    # use_photo=False — редактируем существующее сообщение.
+    # Если это фото — edit_caption; если текст — edit_text.
+    # Никогда не пересоздаём, не шлём новое сообщение.
+    msg = query.message
+    is_photo = bool(getattr(msg, "photo", None))
+
+    try:
+        if is_photo:
+            await query.edit_message_caption(
+                caption=caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        else:
+            await query.edit_message_text(
+                caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+    except Exception as e:
+        err = str(e).lower()
+        if "message is not modified" in err:
+            return
+        print(f"⚠️ _show_wall_step edit: {e}", flush=True)
+
+
+async def _show_wall_plane(query, context, room_id):
+    """Экран плоскости стены (ровная / кривая)."""
+    state = _get_wall_state(context)
+    state['step_name'] = 'plane'
+    _save_wall_draft(context, room_id)
+
+    step = state.get('step_num') or 1
+    flags = state.get('flags') or {}
+
+    # Если галочка "Разная по высоте" уже стоит — сразу ввод 3 точек (с фото)
+    if flags.get('wavy'):
+        state['plane'] = 'wavy'
+        state['step_name'] = 'plane_wavy'
+        _save_wall_draft(context, room_id)
+        context.user_data['waiting_for'] = 'wall_round_plane_bottom'
+        caption = (
+            f"🧱 *Стена {step}*\n\n"
+            f"📏 *Замер в 3 точках:*\n\n"
+            f"Введи НИЗ стены (СМ):"
+        )
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ В комнату", callback_data=f"room_{room_id}")],
+        ])
+        # Фото для этого шага нет — только текст
+        try:
+            await query.edit_message_text(
+                caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        except Exception:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            try:
+                await query.get_bot().send_message(
+                    chat_id=query.message.chat_id, text=caption,
+                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                )
+            except Exception as e:
+                print(f"⚠️ plane (wavy) send: {e}", flush=True)
+        return
+
+    spec_step = spec.get_wall_step('plane', n=step, pos=WALL_NAMES.get(step, '?'))
+    if spec_step:
+        caption = f"{spec_step.get('title', '')}\n\n{spec_step.get('subtitle', '')}"
+        if spec_step.get('hint'):
+            caption += f"\n\n{spec_step['hint']}"
+        image = spec_step.get('image')
+    else:
+        caption = (
+            f"🧱 *Стена {step}*\n\n"
+            f"📐 *Плоскость стены:*\n\n"
+            f"Стена ровная или кривая по высоте?\n\n"
+            f"_Если стена «горбатая» — нужно замерить в 3 точках._"
+        )
+        image = f"wall_scheme_s{step}_plane.png"
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Ровная", callback_data=f"wall_round_plane_straight_{room_id}")],
+        [InlineKeyboardButton("📏 Разная (3 точки)", callback_data=f"wall_round_plane_wavy_{room_id}")],
+        [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, image)
+
+
+async def _show_wall_length(query, context, room_id, step):
+    """Экран длины стены."""
+    state = _get_wall_state(context)
+    state['step_num'] = step
+    state['step_name'] = 'length'
+    _save_wall_draft(context, room_id)
+
+    context.user_data['waiting_for'] = 'wall_round_length'
+    pos = WALL_NAMES.get(step, '?')
+
+    spec_step = spec.get_wall_step('length', n=step, pos=pos)
+    if spec_step:
+        caption = f"{spec_step.get('title', '')}\n\n{spec_step.get('subtitle', '')}"
+        if spec_step.get('hint'):
+            caption += f"\n\n{spec_step['hint']}"
+        if spec_step.get('prompt'):
+            caption += f"\n\n{spec_step['prompt']}"
+        image = spec_step.get('image')
+    else:
+        caption = (
+            f"🧱 *Стена {step} — {pos}*\n\n"
+            f"📏 *Длина стены* (СМ):\n\n"
+            f"⚠️ *ВАЖНО:* дальномер в режиме «от ЗАДНЕЙ СТЕНКИ».\n\n"
+            f"Напиши число и отправь."
+        )
+        image = f"wall_scheme_s{step}_length.png"
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, image)
+
+
+async def _show_wall_openings(query, context, room_id, step):
+    """Экран проёмов стены."""
+    state = _get_wall_state(context)
+    state['step_num'] = step
+    state['step_name'] = 'openings'
+    _save_wall_draft(context, room_id)
+
+    context.user_data['waiting_for'] = None
+    pos = WALL_NAMES.get(step, '?')
+    length_cm = state.get('length') or 0
+    openings = get_openings_by_wall(room_id, pos)
+
+    text = f"🧱 *Стена {step} — {pos}*\n📏 Длина: *{length_cm} см*\n\n"
+    if openings:
+        text += f"🚪 *Проёмы ({len(openings)}):*\n"
+        for o in openings:
+            text += f"  • {format_opening(o)}\n"
+    else:
+        text += "🚪 *Есть ли на этой стене проёмы?*"
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🪟 Окно", callback_data=f"wall_round_open_win_{room_id}"),
+         InlineKeyboardButton("🚪 Дверь", callback_data=f"wall_round_open_door_{room_id}")],
+        [InlineKeyboardButton("💨 Вентиляция", callback_data=f"wall_round_open_vent_{room_id}")],
+        [InlineKeyboardButton("✅ Готово", callback_data=f"wall_round_openings_done_{room_id}")],
+    ])
+    await _send_png_or_edit(query, text, kb, None)
+
+
+async def _show_wall_angle(query, context, room_id, step, use_photo=False):
+    """Экран угла между стенами.
+
+    use_photo=True — при первом входе (пересоздать сообщение с фото).
+    use_photo=False — при восстановлении/возврате (edit_caption, без пересоздания).
+    """
+    state = _get_wall_state(context)
+    state['step_num'] = step
+    state['step_name'] = 'angle'
+    _save_wall_draft(context, room_id)
+
+    context.user_data['waiting_for'] = None
+    length_cm = state.get('length') or 0
+
+    spec_step = spec.get_wall_step('angle', n=step, pos=WALL_NAMES.get(step, '?'), length=length_cm)
+    if spec_step:
+        caption = f"{spec_step.get('title', '')}\n\n{spec_step.get('subtitle', '')}"
+        if spec_step.get('hint'):
+            caption += f"\n\n{spec_step['hint']}"
+        image = spec_step.get('image')
+    else:
+        caption = (
+            f"✅ Длина: *{length_cm} см*\n\n"
+            f"📐 *Угол между этой стеной и следующей:*\n\n"
+            f"Обычно 90° — прямой угол."
+        )
+        image = f"wall_scheme_s{step}_angle.png"
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📐 90° (прямой)", callback_data=f"wall_round_angle_90_{room_id}")],
+        [InlineKeyboardButton("📏 60-80-100", callback_data=f"wall_round_angle_60_{room_id}")],
+        [InlineKeyboardButton("📏 100-100", callback_data=f"wall_round_angle_100_{room_id}")],
+        [InlineKeyboardButton("✏️ Угол в °", callback_data=f"wall_round_angle_deg_{room_id}")],
+        [InlineKeyboardButton("⬅️ В комнату", callback_data=f"room_{room_id}")],
+    ])
+    if use_photo:
+        await _send_png_or_edit(query, caption, kb, image)
+        return
+
+    # use_photo=False — редактируем существующее, при неудаче — пересоздаём.
+    msg = query.message
+    is_photo = bool(getattr(msg, "photo", None))
+    print(f"🟠 _show_wall_angle (use_photo=False): is_photo={is_photo}, step={step}", flush=True)
+    try:
+        if is_photo:
+            await query.edit_message_caption(caption=caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        else:
+            await query.edit_message_text(caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        print(f"🟢 _show_wall_angle (use_photo=False): edit OK", flush=True)
+    except Exception as e:
+        err = str(e).lower()
+        print(f"⚠️ _show_wall_angle edit failed: {e}", flush=True)
+        if "message is not modified" in err:
+            # Ничего не поменялось — но кнопки могут быть привязаны к другому сообщению.
+            # Проверим, есть ли reply_markup
+            return
+        # Все остальные ошибки — пересоздаём сообщение
+        chat_id = query.message.chat_id
+        # Если есть фото — переслать с фото, иначе текст
+        if image and _image_path(image) and os.path.exists(_image_path(image)):
+            try:
+                with open(_image_path(image), "rb") as f:
+                    await query.get_bot().send_photo(
+                        chat_id=chat_id, photo=f, caption=caption,
+                        parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                    )
+                print(f"🟢 _show_wall_angle: fallback send_photo OK", flush=True)
+                return
+            except Exception as e2:
+                print(f"⚠️ _show_wall_angle send_photo fallback: {e2}", flush=True)
+        try:
