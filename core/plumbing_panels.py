@@ -437,10 +437,29 @@ def count_points_of_panel(panel_id):
     return len(points)
 
 
-def assign_point_to_panel(point_id, panel_id):
-    """Привязка точки к коллектору — через создание трассы (заглушка)."""
-    # TODO: реализовать когда будет UI привязки
-    return False
+def assign_point_to_panel(point_id, panel_id, note=None):
+    """Привязывает точку сантехники к коллектору. Возвращает id записи."""
+    from core.db import commit
+    try:
+        return commit(
+            "INSERT OR IGNORE INTO plumbing_panel_points (panel_id, point_id, note) VALUES (?, ?, ?)",
+            (panel_id, point_id, note)
+        )
+    except Exception as e:
+        print("assign_point_to_panel: " + str(e), flush=True)
+        return None
+
+def unassign_point_from_panel(point_id, panel_id):
+    """Отвязывает точку от коллектора."""
+    from core.db import commit
+    commit("DELETE FROM plumbing_panel_points WHERE panel_id = ? AND point_id = ?", (panel_id, point_id))
+    return True
+
+def get_panels_of_point(point_id):
+    """Все коллекторы, к которым привязана точка."""
+    from core.db import fetchall
+    rows = fetchall("SELECT * FROM plumbing_panels WHERE id IN (SELECT panel_id FROM plumbing_panel_points WHERE point_id = ?) ORDER BY id", (point_id,))
+    return [dict(r) for r in rows]
 
 
 def get_available_plumb_points(object_id):
