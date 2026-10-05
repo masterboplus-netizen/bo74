@@ -96,6 +96,13 @@ try:
 except Exception:
     save_panel_spec = export_panel_spec = None
 
+try:
+    from core.export.estimate_export import (
+        export_panel_estimate_csv, export_object_estimate_csv, save_estimate_csv
+    )
+except Exception:
+    export_panel_estimate_csv = export_object_estimate_csv = save_estimate_csv = None
+
 # --- Помещения (этажи / зоны) ---
 try:
     from core import floors as core_floors
@@ -5774,6 +5781,92 @@ async def handle_panels_callback(query, context, data):
                 pass
         return True
 
+    if data.startswith("panel_est_csv_"):
+        panel_id = int(data.replace("panel_est_csv_", ""))
+        if save_estimate_csv is None or export_panel_estimate_csv is None:
+            try:
+                await query.edit_message_text("Модуль экспорта не загружен")
+            except Exception:
+                pass
+            return True
+        try:
+            import tempfile, os
+            content = export_panel_estimate_csv(panel_id)
+            if not content:
+                raise Exception("Пустая смета")
+            target = os.path.join(tempfile.gettempdir(), "panel_est_" + str(panel_id) + ".csv")
+            path = save_estimate_csv(content, path=target, prefix="panel_est")
+            if not path or not os.path.exists(path):
+                raise Exception("Файл не создан")
+            try:
+                p = core_elec_panels.get_panel(panel_id)
+                name = (p.get('name') if p else 'panel') or 'panel'
+            except Exception:
+                name = 'panel'
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=name + "_smeta.csv",
+                    caption="📊 Смета щита «" + str(name) + "»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))],
+                    ])
+                )
+        except Exception as e:
+            print("panel est csv: " + str(e), flush=True)
+            try:
+                await query.edit_message_text(
+                    "Ошибка экспорта: " + str(e),
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
+    if data.startswith("obj_est_csv_"):
+        object_id = int(data.replace("obj_est_csv_", ""))
+        if save_estimate_csv is None or export_object_estimate_csv is None:
+            try:
+                await query.edit_message_text("Модуль экспорта не загружен")
+            except Exception:
+                pass
+            return True
+        try:
+            import tempfile, os
+            content = export_object_estimate_csv(object_id)
+            if not content:
+                raise Exception("Пустая смета")
+            target = os.path.join(tempfile.gettempdir(), "obj_est_" + str(object_id) + ".csv")
+            path = save_estimate_csv(content, path=target, prefix="obj_est")
+            if not path or not os.path.exists(path):
+                raise Exception("Файл не создан")
+            from modules.objects import get_object
+            o = get_object(object_id)
+            name = o['name'] if o else ('obj_' + str(object_id))
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=str(name) + "_smeta.csv",
+                    caption="📊 Смета ЭОМ объекта «" + str(name) + "»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К объекту", callback_data="obj_" + str(object_id))],
+                    ])
+                )
+        except Exception as e:
+            print("obj est csv: " + str(e), flush=True)
+            try:
+                await query.edit_message_text(
+                    "Ошибка экспорта: " + str(e),
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К объекту", callback_data="obj_" + str(object_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
     if data.startswith("panel_auto_"):
         panel_id = int(data.replace("panel_auto_", ""))
         try:
@@ -6074,6 +6167,7 @@ async def handle_panels_callback(query, context, data):
             [InlineKeyboardButton("🔧 Смета монтажа", callback_data="panel_montage_" + str(panel_id))],
             [InlineKeyboardButton("💰 Общая смета щита", callback_data="panel_total_" + str(panel_id))],
             [InlineKeyboardButton("📄 Спецификация (TXT)", callback_data="panel_spec_" + str(panel_id))],
+            [InlineKeyboardButton("📊 Смета (CSV)", callback_data="panel_est_csv_" + str(panel_id))],
             [InlineKeyboardButton("📋 Комплектация", callback_data="panel_comp_" + str(panel_id))],
             [InlineKeyboardButton("📊 Статистика", callback_data="panel_stats_" + str(panel_id))],
             [InlineKeyboardButton("📋 Группы щита", callback_data="panel_groups_" + str(panel_id))],
