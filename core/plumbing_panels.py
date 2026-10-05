@@ -243,7 +243,7 @@ def calc_montage_cost_by_panel(panel_id, with_consumables=True):
 
 
 def calc_object_cost(object_id):
-    """Смета сантехники по объекту."""
+    """Смета сантехники по объекту (трубы + расходники + работы)."""
     panels = get_panels(object_id)
     total_pipe = 0.0
     total_cons = 0.0
@@ -261,13 +261,27 @@ def calc_object_cost(object_id):
             by_pipe[k] = by_pipe.get(k, 0) + v
         for k, v in s['by_route'].items():
             by_route[k] = by_route.get(k, 0) + v
+    # Работы сантехники (по work_type префиксу plumb_)
+    works_total = 0.0
+    works_count = 0
+    try:
+        from core import object_works as _ow
+        works = _ow.get_works_by_object(object_id)
+        for w in works:
+            if str(w.get('work_type') or '').startswith('plumb_'):
+                works_total += w.get('total') or 0
+                works_count += 1
+    except Exception:
+        pass
     return {
         'panels_count': len(panels),
         'routes_count': total_routes,
         'total_m': round(total_m, 2),
         'total_pipe_cost': round(total_pipe, 2),
         'total_consumable_cost': round(total_cons, 2),
-        'total': round(total_pipe + total_cons, 2),
+        'works_total': round(works_total, 2),
+        'works_count': works_count,
+        'total': round(total_pipe + total_cons + works_total, 2),
         'by_pipe': {k: round(v, 2) for k, v in by_pipe.items()},
         'by_route': {k: round(v, 2) for k, v in by_route.items()},
     }
@@ -301,6 +315,13 @@ def format_object_cost(object_id):
     lines.append("")
     lines.append("Трубы: " + str(data['total_pipe_cost']) + " ₽")
     lines.append("Расходники: " + str(data['total_consumable_cost']) + " ₽")
+    lines.append("")
+    lines.append("Работы сантехники:")
+    if data.get('works_count'):
+        lines.append("Всего работ: " + str(data['works_count']))
+        lines.append("Итого работы: " + str(data['works_total']) + " ₽")
+    else:
+        lines.append("нет")
     lines.append("")
     lines.append("💰 ИТОГО: " + str(data['total']) + " ₽")
     return chr(10).join(lines)
