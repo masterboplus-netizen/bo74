@@ -1,0 +1,24 @@
+async def _show_comms_list(query, context, room_id):
+    """Список коммуникаций комнаты."""
+    comms = get_comms(room_id)
+    room = get_room(room_id)
+    room_name = room['name'] if room else '?'
+    text = f"🔧 *Коммуникации в «{room_name}»*\n\n"
+    if not comms:
+        text += "_Пока ничего не добавлено._\n\nДобавь воду, канализацию, электрику, газ, вентиляцию."
+    else:
+        text += f"Найдено: {len(comms)}\n\n"
+        for i, c in enumerate(comms, 1):
+            text += f"{i}. {format_comm(c)}\n"
+    buttons = []
+    for c in comms:
+        label = get_comm_type_label(c.get('comm_type'))
+        wall = c.get('wall') or '?'
+        buttons.append([InlineKeyboardButton(f"{label} ({wall})", callback_data=f"comm_show_{c['id']}")])
+    buttons.append([InlineKeyboardButton("➕ Добавить", callback_data=f"comm_add_{room_id}")])
+    buttons.append([InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")])
+    try:
+        await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(buttons))
+    except Exception:
+        pass
+

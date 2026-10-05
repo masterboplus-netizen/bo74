@@ -1,0 +1,27 @@
+        return True
+
+    if data.startswith("plumb_points_"):
+        panel_id = int(data.replace("plumb_points_", ""))
+        try:
+            text = core_plumbing.format_points_of_panel(panel_id)
+        except Exception as e:
+            print("plumb points: " + str(e), flush=True)
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        await _safe_edit(query, text, InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ К коллектору", callback_data="plumb_" + str(panel_id))],
+        ]))
+        return True
+
+    if data.startswith("plumb_water_"):
+        object_id = int(data.replace("plumb_water_", ""))
+        try:
+            text = core_plumbing.format_water_summary(object_id)
+        except Exception as e:
+            print("plumb water: " + str(e), flush=True)
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        await _safe_edit(query, text, InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Стояк", callback_data="plumb_add_type_" + str(object_id) + "_riser")],

@@ -1,0 +1,51 @@
+        context.user_data['waiting_for'] = None
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        return
+
+
+# ============================================================
+# КОММУНИКАЦИИ — CALLBACK'И
+# ============================================================
+
+async def handle_comm_callback(query, context, data):
+    """Обработчик callback'ов коммуникаций. Возвращает True если обработано."""
+    if data.startswith("room_comms_"):
+        room_id = int(data.replace("room_comms_", ""))
+        await _show_comms_list(query, context, room_id)
+        return True
+
+    if data.startswith("comm_add_"):
+        room_id = int(data.replace("comm_add_", ""))
+        buttons = []
+        for code, label, _ in COMM_TYPES:
+            buttons.append([InlineKeyboardButton(label, callback_data=f"comm_type_{room_id}_{code}")])
+        buttons.append([InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_comms_{room_id}")])
+        try:
+            await query.edit_message_text(
+                "🔧 *Новая коммуникация*\n\nВыбери тип:",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("comm_type_"):
+        parts = data.replace("comm_type_", "").split("_", 1)
+        room_id = int(parts[0])
+        ctype = parts[1] if len(parts) > 1 else ''
+        context.user_data['comm_room_id'] = room_id
+        context.user_data['comm_type'] = ctype
+        label = get_comm_type_label(ctype)
+        buttons = [
+            [InlineKeyboardButton("1. Напротив", callback_data=f"comm_wall_{room_id}_напротив")],
+            [InlineKeyboardButton("2. Слева", callback_data=f"comm_wall_{room_id}_слева")],
+            [InlineKeyboardButton("3. У входа", callback_data=f"comm_wall_{room_id}_у входа")],
+            [InlineKeyboardButton("4. Справа", callback_data=f"comm_wall_{room_id}_справа")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_comms_{room_id}")],
+        ]
+        try:
+            await query.edit_message_text(
+                f"🔧 *{label}*\n\nНа какой стене?",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(buttons)
