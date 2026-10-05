@@ -4729,6 +4729,15 @@ async def _handle_group_load_input(update, context):
         context.user_data[k] = None
     context.user_data['waiting_for'] = None
 
+    _object_panels = []
+    try:
+        if core_elec_panels:
+            _object_panels = core_elec_panels.get_panels(object_id)
+            if len(_object_panels) == 1:
+                core_elec_panels.assign_group_to_panel(group_id, _object_panels[0]["id"])
+    except Exception as _e:
+        print("auto assign: " + str(_e), flush=True)
+
     text = (
         f"✅ *Группа создана*\n\n"
         f"⚡ *{name}*\n"
@@ -4737,6 +4746,7 @@ async def _handle_group_load_input(update, context):
         f"Ток: {current} А\n"
         f"Автомат: *{breaker_type}*\n"
         f"Кабель: *{core_spec.get_cable_label(cable)}*"
+        f"Щит: " + (core_elec_panels.get_panel(_object_panels[0]["id"])["name"] if (_object_panels and len(_object_panels) == 1 and core_elec_panels) else "не привязан") + "\n"
     )
 
     # Кнопки — ведём к группам этажа
@@ -4746,6 +4756,9 @@ async def _handle_group_load_input(update, context):
         kb_btns.append([InlineKeyboardButton("⚡ К группам этажа", callback_data=f"floor_groups_{floor_id}")])
     if room_id:
         kb_btns.append([InlineKeyboardButton("⚡ К группам комнаты", callback_data=f"room_groups_{room_id}")])
+
+        if len(_object_panels) > 1:
+            kb_btns.append([InlineKeyboardButton("⚡ Привязать к щиту", callback_data="group_panel_pick_" + str(group_id))])
 
     await update.message.reply_text(
         text, parse_mode=ParseMode.MARKDOWN,
