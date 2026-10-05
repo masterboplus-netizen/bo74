@@ -1,5 +1,7 @@
 # DEVLOG — журнал сессий (append-only)
 
+2026-10-05 21:16 — get_points_of_panel: читает из plumbing_panel_points + fallback на plumbing_routes (7d4d378)
+
 2026-10-05 20:59 — plumb_points_ и plumb_point_ добавлены в исключения общего plumb_ — UI привязки работает (24e937c)
 
 2026-10-05 20:29 — UI привязки точки — 3 обработчика готовы (a7a5772)

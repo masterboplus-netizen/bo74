@@ -411,25 +411,34 @@ PLUMB_COMM_TYPES = [
 
 
 def get_points_of_panel(panel_id):
-    """Точки сантехники, привязанные к коллектору (через plumbing_routes)."""
+    """Точки сантехники, привязанные к коллектору.
+    1) Новая таблица plumbing_panel_points (основная связь).
+    2) Fallback: plumbing_routes.to_point_id (старая логика).
+    """
     from core.db import fetchall
-    # Пока точек в room_comms нет отдельного panel_id — связь через plumbing_routes
-    # Найдём to_point_id в трассах
-    rows = fetchall(
-        "SELECT DISTINCT to_point_id FROM plumbing_routes WHERE panel_id = ? AND to_point_id IS NOT NULL",
-        (panel_id,)
-    )
-    point_ids = [r['to_point_id'] for r in rows if r['to_point_id']]
+    point_ids = []
+    try:
+        rows_new = fetchall(
+            "SELECT point_id FROM plumbing_panel_points WHERE panel_id = ?",
+            (panel_id,)
+        )
+        point_ids = [r["point_id"] for r in rows_new if r["point_id"]]
+    except Exception:
+        point_ids = []
+    if not point_ids:
+        rows_old = fetchall(
+            "SELECT DISTINCT to_point_id FROM plumbing_routes WHERE panel_id = ? AND to_point_id IS NOT NULL",
+            (panel_id,)
+        )
+        point_ids = [r["to_point_id"] for r in rows_old if r["to_point_id"]]
     if not point_ids:
         return []
     placeholders = ",".join("?" * len(point_ids))
-    from core.db import fetchall as _fa
-    rows2 = _fa(
-        "SELECT c.*, r.name as room_name FROM room_comms c LEFT JOIN rooms r ON r.id = c.room_id WHERE c.id IN (" + placeholders + ")",
+    rows2 = fetchall(
+        "SELECT c.*, r.name as room_name FROM room_comms c LEFT JOIN rooms r ON r.id = c.room_id WHERE c.id IN (" + placeholders + ") ORDER BY c.id",
         point_ids
     )
     return [dict(r) for r in rows2]
-
 
 def count_points_of_panel(panel_id):
     """Количество точек у коллектора."""
