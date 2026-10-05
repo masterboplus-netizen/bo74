@@ -6418,6 +6418,7 @@ async def handle_panels_callback(query, context, data):
             [InlineKeyboardButton("📏 Трассы", callback_data="plumb_routes_" + str(panel_id))],
             [InlineKeyboardButton("➕ Добавить трассу", callback_data="plumb_route_new_" + str(panel_id))],
             [InlineKeyboardButton("💰 Смета коллектора", callback_data="plumb_cost_" + str(panel_id))],
+            [InlineKeyboardButton("📍 Точки коллектора", callback_data="plumb_points_" + str(panel_id))],
             [InlineKeyboardButton("📄 Спецификация (TXT)", callback_data="plumb_spec_" + str(panel_id))],
             [InlineKeyboardButton("🔨 Работы сантехники", callback_data="works_list_" + str(p.get('object_id')))],
             [InlineKeyboardButton("⬅️ К сантехнике", callback_data="plumb_list_" + str(p.get('object_id')))],
@@ -6553,6 +6554,20 @@ async def handle_panels_callback(query, context, data):
             [InlineKeyboardButton("⬅️ К трассам", callback_data="plumb_routes_" + str(r.get('panel_id')))],
         ]
         await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
+        return True
+
+    if data.startswith("plumb_points_"):
+        panel_id = int(data.replace("plumb_points_", ""))
+        try:
+            text = core_plumbing.format_points_of_panel(panel_id)
+        except Exception as e:
+            print("plumb points: " + str(e), flush=True)
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        await _safe_edit(query, text, InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ К коллектору", callback_data="plumb_" + str(panel_id))],
+        ]))
         return True
 
     if data.startswith("plumb_spec_"):

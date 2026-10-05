@@ -398,3 +398,82 @@ def format_panel_spec(panel_id):
     lines.append("ИТОГО:".ljust(45) + str(data['total']).rjust(14) + " ₽")
     lines.append("=" * 60)
     return chr(10).join(lines)
+
+# ============================================================
+# ТОЧКИ САНТЕХНИКИ (room_comms с plumb-типами)
+# ============================================================
+
+PLUMB_COMM_TYPES = [
+    'water_cold', 'water_hot', 'sewer', 'drain', 'heating', 'gas', 'vent',
+    'plumb_sink', 'plumb_toilet', 'plumb_bath', 'plumb_shower',
+    'plumb_radiator', 'plumb_boiler', 'plumb_washer', 'plumb_dishwasher',
+]
+
+
+def get_points_of_panel(panel_id):
+    """Точки сантехники, привязанные к коллектору (через plumbing_routes)."""
+    from core.db import fetchall
+    # Пока точек в room_comms нет отдельного panel_id — связь через plumbing_routes
+    # Найдём to_point_id в трассах
+    rows = fetchall(
+        "SELECT DISTINCT to_point_id FROM plumbing_routes WHERE panel_id = ? AND to_point_id IS NOT NULL",
+        (panel_id,)
+    )
+    point_ids = [r['to_point_id'] for r in rows if r['to_point_id']]
+    if not point_ids:
+        return []
+    placeholders = ",".join("?" * len(point_ids))
+    from core.db import fetchall as _fa
+    rows2 = _fa(
+        "SELECT c.*, r.name as room_name FROM room_comms c LEFT JOIN rooms r ON r.id = c.room_id WHERE c.id IN (" + placeholders + ")",
+        point_ids
+    )
+    return [dict(r) for r in rows2]
+
+
+def count_points_of_panel(panel_id):
+    """Количество точек у коллектора."""
+    points = get_points_of_panel(panel_id)
+    return len(points)
+
+
+def assign_point_to_panel(point_id, panel_id):
+    """Привязка точки к коллектору — через создание трассы (заглушка)."""
+    # TODO: реализовать когда будет UI привязки
+    return False
+
+
+def get_available_plumb_points(object_id):
+    """Все точки сантехники объекта (room_comms с plumb-типами)."""
+    from core.db import fetchall
+    placeholders = ",".join("?" * len(PLUMB_COMM_TYPES))
+    rows = fetchall(
+        """SELECT c.*, r.name as room_name FROM room_comms c
+           LEFT JOIN rooms r ON r.id = c.room_id
+           WHERE r.object_id = ? AND c.comm_type IN (""" + placeholders + """)
+           ORDER BY c.room_id, c.id""",
+        [object_id] + PLUMB_COMM_TYPES
+    )
+    return [dict(r) for r in rows]
+
+
+def format_points_of_panel(panel_id):
+    """Текстовый список точек коллектора."""
+    points = get_points_of_panel(panel_id)
+    if not points:
+        return "Точек нет."
+    lines = ["Точек: " + str(len(points)), ""]
+    for idx, c in enumerate(points, start=1):
+        room = c.get('room_name') or '?'
+        ctype = c.get('comm_type') or '?'
+        wall = c.get('wall') or '?'
+        ox = c.get('offset_x')
+        oy = c.get('offset_y')
+        parts = [str(room) + " · " + str(ctype), "стена " + str(wall)]
+        if ox is not None:
+            parts.append(str(int(ox)) + " см от угла")
+        if oy is not None:
+            parts.append(str(int(oy)) + " см от пола")
+        lines.append(str(idx) + ". " + " · ".join(parts))
+    return chr(10).join(lines)
+

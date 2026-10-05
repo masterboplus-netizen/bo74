@@ -24,6 +24,15 @@ COMM_TYPES = [
     ("net_audio",    "🔊 Аудио", "audio"),
     ("net_domofon",  "🚪 Домофон", "domofon"),
     ("net_bell",     "🔔 Звонок", "bell"),
+    # Сантехника — точки (кроме ХВС/ГВС/канализации выше)
+    ("plumb_sink",      "🚰 Смеситель", "sink"),
+    ("plumb_toilet",    "🚽 Унитаз", "toilet"),
+    ("plumb_bath",      "🛁 Ванна", "bath"),
+    ("plumb_shower",    "🚿 Душевая", "shower"),
+    ("plumb_radiator",  "♨️ Радиатор", "radiator"),
+    ("plumb_boiler",    "🔥 Бойлер", "boiler"),
+    ("plumb_washer",    "🧺 Стиральная машина", "washer"),
+    ("plumb_dishwasher","🍽 Посудомоечная", "dishwasher"),
 ]
 
 WALLS = [("A", "Стена A"), ("B", "Стена B"), ("C", "Стена C"), ("D", "Стена D")]
