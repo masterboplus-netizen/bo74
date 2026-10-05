@@ -3350,7 +3350,7 @@ async def handle_groups_callback(query, context, data):
                 core_elec_panels.assign_group_to_panel(group_id, panel_id)
         except Exception as e:
             print("group_panel_set: " + str(e), flush=True)
-        await handle_groups_callback(query, context, "group_" + str(group_id))
+        await handle_panels_callback(query, context, "panel_" + str(panel_id))
         return True
 
     if data.startswith("group_panel_unset_"):
@@ -3360,7 +3360,9 @@ async def handle_groups_callback(query, context, data):
                 core_elec_panels.unassign_group_from_panel(group_id)
         except Exception as e:
             print("group_panel_unset: " + str(e), flush=True)
-        await handle_groups_callback(query, context, "group_" + str(group_id))
+        _g = core_elec.get_group(group_id) if core_elec else None
+        _obj_id = _g.get("object_id") if _g else 0
+        await handle_panels_callback(query, context, "panels_list_" + str(_obj_id))
         return True
 
     if data.startswith("group_") and not data.startswith(("group_new_", "group_purpose_", "group_phase_", "group_routes_")):
