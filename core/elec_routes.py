@@ -420,6 +420,7 @@ def calc_montage_cost_by_panel(panel_id, with_consumables=True):
     total_cable = 0.0
     total_cons = 0.0
     total_m = 0.0
+    total_routes = 0
     by_cable = {}
     by_route = {}
     for g in groups:
@@ -427,11 +428,13 @@ def calc_montage_cost_by_panel(panel_id, with_consumables=True):
         total_cable += s['total_cable_cost']
         total_cons += s['total_consumable_cost']
         total_m += s['total_m']
+        total_routes += s.get('routes_count', 0)
         for k, v in s['by_cable'].items():
             by_cable[k] = by_cable.get(k, 0) + v
         for k, v in s['by_route'].items():
             by_route[k] = by_route.get(k, 0) + v
     return {
+        'routes_count': total_routes,
         'total_m': round(total_m, 2),
         'total_cable_cost': round(total_cable, 2),
         'total_consumable_cost': round(total_cons, 2),
