@@ -309,18 +309,18 @@ def format_routes_summary(panel_id=None, group_id=None):
 
     lines = [header + ": " + str(len(routes)) + " шт.", ""]
     total = 0
-    for r in routes[:20]:
-        lines.append("• " + format_route(r))
+    for idx, r in enumerate(routes[:20], start=1):
+        lines.append(str(idx) + ". " + format_route(r))
         total += (r.get('length_m') or 0)
     if len(routes) > 20:
         lines.append("... ещё " + str(len(routes) - 20))
     lines.append("")
-    lines.append("Суммарно: " + str(round(total, 2)) + " м")
+    lines.append("📊 Суммарно: " + str(round(total, 2)) + " м")
     lines.append("")
     lines.append("По типам кабеля:")
     by_cable = summarize_routes_by_cable(panel_id=panel_id, group_id=group_id)
     for ctype, length in sorted(by_cable.items(), key=lambda x: -x[1]):
-        lines.append("  • " + ctype + ": " + str(length) + " м")
+        lines.append("  " + ctype + ": " + str(length) + " м")
     return chr(10).join(lines)
 
 
@@ -455,25 +455,25 @@ def format_montage_cost_summary(panel_id=None, group_id=None):
     else:
         return "Не задан ни щит, ни группа"
 
-    lines = [header + ":", ""]
+    lines = [header, ""]
     lines.append("Трасс: " + str(s.get('routes_count', '-')) + " · Метраж: " + str(s['total_m']) + " м")
     lines.append("")
-    lines.append("── По типам кабеля ──")
+    lines.append("По типам кабеля:")
     if s['by_cable']:
         for ctype, cost in sorted(s['by_cable'].items(), key=lambda x: -x[1]):
-            lines.append("  • " + str(ctype) + ": " + str(cost) + " ₽")
+            lines.append("  " + str(ctype) + ": " + str(cost) + " ₽")
     else:
-        lines.append("  (нет)")
+        lines.append("  нет")
     lines.append("")
-    lines.append("── По типам прокладки ──")
+    lines.append("По типам прокладки:")
     if s['by_route']:
         for rtype, cost in sorted(s['by_route'].items(), key=lambda x: -x[1]):
-            lines.append("  • " + str(rtype) + ": " + str(cost) + " ₽")
+            lines.append("  " + str(rtype) + ": " + str(cost) + " ₽")
     else:
-        lines.append("  (нет)")
+        lines.append("  нет")
     lines.append("")
-    lines.append("💵 Кабель: " + str(s['total_cable_cost']) + " ₽")
-    lines.append("🔧 Расходники: " + str(s['total_consumable_cost']) + " ₽")
+    lines.append("Кабель: " + str(s['total_cable_cost']) + " ₽")
+    lines.append("Расходники: " + str(s['total_consumable_cost']) + " ₽")
     lines.append("")
     lines.append("💰 ИТОГО: " + str(s['total']) + " ₽")
     return chr(10).join(lines)

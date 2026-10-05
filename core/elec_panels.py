@@ -228,10 +228,10 @@ def get_mount_type_label(code):
 
 
 def format_panel(p, show_load=True):
-    """Форматирует щит в строку."""
+    """Форматирует щит в строку (без эмодзи)."""
     ptype = get_panel_type_label(p.get('panel_type'))
     name = p.get('name') or '—'
-    lines = ['⚡ ' + name + ' (' + ptype + ')']
+    lines = [name + ' (' + ptype + ')']
 
     mount = get_mount_type_label(p.get('mount_type'))
     if mount:
@@ -406,15 +406,16 @@ def clear_auto_components(panel_id):
 
 
 def format_component(c):
-    """Строка описания компонента."""
+    """Строка описания компонента (по STYLE_GUIDE, без эмодзи)."""
     type_labels = {
-        'auto': '🔌 Автомат',
-        'uzo': '🛡 УЗО',
-        'dif': '🛡 Дифавтомат',
-        'switch': '⚙️ Рубильник',
-        'busbar': '📏 Шина',
-        'clamp': '🔗 Клемма',
-        'counter': '📊 Счётчик',
+        'auto': 'Автомат',
+        'uzo': 'УЗО',
+        'dif': 'Дифавтомат',
+        'switch': 'Рубильник',
+        'busbar': 'Шина',
+        'clamp': 'Клемма',
+        'counter': 'Счётчик',
+        'input': 'Вводной',
     }
     label = type_labels.get(c.get('component_type'), c.get('component_type') or '?')
     parts = [label]
@@ -611,43 +612,41 @@ def recalc_panel(panel_id, rules=None):
 
 
 def format_panel_components(panel_id):
-    """Полный текст комплектации щита (с нумерацией)."""
+    """Полный текст комплектации щита (с нумерацией, по STYLE_GUIDE)."""
     p = get_panel(panel_id)
     if not p:
         return "Щит не найден"
     comps = get_components(panel_id)
     lines = ["🔧 Комплектация щита «" + str(p.get('name')) + "»", ""]
 
-    # Группировка по типу
+    if not comps:
+        lines.append("Компонентов нет.")
+        return chr(10).join(lines)
+
+    global_idx = 0
+    type_order = ['auto', 'uzo', 'dif', 'switch', 'counter', 'busbar', 'clamp']
     by_type = {}
     for c in comps:
         t = c.get('component_type') or 'other'
         by_type.setdefault(t, []).append(c)
 
-    # Сквозной счётчик по всем компонентам
-    global_idx = 0
-    type_order = ['auto', 'uzo', 'dif', 'switch', 'counter', 'busbar', 'clamp']
     for t in type_order:
         items = by_type.get(t)
         if not items:
             continue
-        lines.append("── " + t.upper() + " ──")
         for c in items:
             global_idx += 1
             mark = " [ручной]" if c.get('is_manual') else ""
-            lines.append("  " + str(global_idx) + ". " + format_component(c) + mark)
-        lines.append("")
+            lines.append(str(global_idx) + ". " + format_component(c) + mark)
 
-    # Прочие типы (если есть)
+    # Прочие типы
     for t, items in by_type.items():
         if t in type_order:
             continue
-        lines.append("── " + t.upper() + " ──")
         for c in items:
             global_idx += 1
             mark = " [ручной]" if c.get('is_manual') else ""
-            lines.append("  " + str(global_idx) + ". " + format_component(c) + mark)
-        lines.append("")
+            lines.append(str(global_idx) + ". " + format_component(c) + mark)
 
     return chr(10).join(lines)
 
@@ -943,26 +942,26 @@ def get_panel_cost_breakdown(panel_id):
 
 
 def format_panel_cost(panel_id):
-    """Текстовая смета щита."""
+    """Текстовая смета щита (по STYLE_GUIDE)."""
     p = get_panel(panel_id)
     if not p:
         return "Щит не найден"
     data = get_panel_cost_breakdown(panel_id)
     lines = ["💰 Смета щита «" + str(p.get('name') or '?') + "»", ""]
     if not data['lines']:
-        lines.append("_Компонентов нет._")
+        lines.append("Компонентов нет.")
         lines.append("")
-        lines.append("Запусти 🪄 Автокомплектацию сначала.")
+        lines.append("Запусти Автокомплектацию сначала.")
         return chr(10).join(lines)
 
-    for item in data['lines']:
+    for idx, item in enumerate(data['lines'], start=1):
         c = item['component']
         price = item['price']
         mark = " [ручная]" if c.get('is_manual') else ""
-        lines.append("• " + format_component(c) + mark + " — " + str(price) + " ₽")
+        lines.append(str(idx) + ". " + format_component(c) + mark + " — " + str(price) + " ₽")
 
     lines.append("")
-    lines.append("── По типам ──")
+    lines.append("По типам:")
     for t, s in sorted(data['by_type'].items(), key=lambda x: -x[1]):
         lines.append("  " + str(t) + ": " + str(s) + " ₽")
 

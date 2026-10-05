@@ -296,38 +296,38 @@ def format_object_elec_total(object_id):
     lines = ["💰 Смета ЭОМ объекта «" + str(obj_name) + "»", ""]
 
     # Щиты
-    lines.append("── ЩИТЫ ──")
-    lines.append("Щитов: " + str(data['panels_count']))
+    lines.append("Щиты:")
+    lines.append("Всего щитов: " + str(data['panels_count']))
     for pid, info in data['panels_breakdown'].items():
-        lines.append("  • " + str(info['name']) + ": " + str(info['cost']) + " ₽")
-    lines.append("  Итого щиты: " + str(data['panels_cost']) + " ₽")
+        lines.append("  " + str(info['name']) + ": " + str(info['cost']) + " ₽")
+    lines.append("Итого щиты: " + str(data['panels_cost']) + " ₽")
     lines.append("")
 
     # Электромонтаж
-    lines.append("── ЭЛЕКТРОМОНТАЖ ──")
+    lines.append("Электромонтаж:")
     lines.append("Метраж: " + str(data['montage_meters']) + " м")
     lines.append("")
-    lines.append("Кабель по типам:")
+    lines.append("Кабель:")
     if data['montage_by_cable']:
         for ctype, cost in sorted(data['montage_by_cable'].items(), key=lambda x: -x[1]):
-            lines.append("  • " + str(ctype) + ": " + str(cost) + " ₽")
+            lines.append("  " + str(ctype) + ": " + str(cost) + " ₽")
     else:
-        lines.append("  (нет)")
+        lines.append("  нет")
     lines.append("")
-    lines.append("Расходники по типам прокладки:")
+    lines.append("Расходники:")
     if data['montage_by_route']:
         for rtype, cost in sorted(data['montage_by_route'].items(), key=lambda x: -x[1]):
-            lines.append("  • " + str(rtype) + ": " + str(cost) + " ₽")
+            lines.append("  " + str(rtype) + ": " + str(cost) + " ₽")
     else:
-        lines.append("  (нет)")
+        lines.append("  нет")
     lines.append("")
-    lines.append("  Кабель: " + str(data['montage_cable_cost']) + " ₽")
-    lines.append("  Расходники: " + str(data['montage_consumable_cost']) + " ₽")
-    lines.append("  Итого монтаж: " + str(data['montage_total']) + " ₽")
+    lines.append("Кабель: " + str(data['montage_cable_cost']) + " ₽")
+    lines.append("Расходники: " + str(data['montage_consumable_cost']) + " ₽")
+    lines.append("Итого монтаж: " + str(data['montage_total']) + " ₽")
     lines.append("")
 
     # Итого
-    lines.append("───────────────────────")
+    lines.append("───")
     lines.append("💰 ВСЕГО ЭОМ: " + str(data['total']) + " ₽")
 
     return chr(10).join(lines)
