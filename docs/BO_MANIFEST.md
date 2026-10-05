@@ -1293,3 +1293,19 @@ https://github.com/masterboplus-netizen/bo74
 - Поля: `price_source`, `price_updated_at`, `market_url`, `market_sku`, `brand`
 - Заглушки: `fetch_marketplace_prices`, `import_prices_from_csv`
 - Планируется: Ozon, WB, Леруа, Петрович
+
+## 31. WORKPLAN.md (план работ)
+
+📎 **Документ:** docs/WORKPLAN.md
+
+**Обновляем в конце каждой сессии.**
+
+Структура:
+- 🔴 В РАБОТЕ (сейчас)
+- 🟡 СДЕЛАНО СЕГОДНЯ
+- 🟢 БЭКЛОГ
+- ⚪ ИДЕИ
+- 📌 ПРАВИЛА
+- 📊 МЕТРИКИ
+
+**Правило:** при каждой сессии — обновить WORKPLAN (что сделали, что дальше).
