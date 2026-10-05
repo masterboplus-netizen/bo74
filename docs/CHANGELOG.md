@@ -309,3 +309,43 @@
 - Удаление отдельной трассы — не реализовано
 - Визуализация трасс на плане — не реализована
 - Автотрассировка (граф комнат) — отложена
+
+## [8.4] — 2026-10-05 (сессия 3, часть 3)
+
+### Добавлено — Цены и Сметы ЭОМ
+- **Миграция 041** — поля цены в `elec_panel_components` + таблица `component_prices`
+- **`core/spec.py`** — добавлены:
+  - `COMPONENT_PRICES_DEFAULT` (автоматы, УЗО, дифы, счётчики, шины, клеммы)
+  - `CABLE_PRICES_DEFAULT` (3x1.5 — 5x10)
+  - `CONSUMABLE_PRICES_DEFAULT` (гофра, штроба, лоток, стяжка, открыто)
+  - `get_default_price`, `get_cable_price`, `get_consumable_price`
+- **`core/elec_prices.py`** — новый модуль:
+  - `get_component_price`, `get_price_info`, `set_component_price`, `list_component_prices`
+  - `calc_object_panels_cost`, `calc_object_montage_cost`, `calc_object_elec_total`
+  - `format_object_elec_total`
+  - Заглушки: `fetch_marketplace_prices`, `import_prices_from_csv`
+- **`core/elec_routes.py`** — добавлены:
+  - `calc_route_cost`, `calc_montage_cost_by_group`, `calc_montage_cost_by_panel`
+  - `format_montage_cost_summary`
+- **`core/elec_panels.py`** — добавлены:
+  - `calc_component_price`, `calc_panel_cost`, `get_panel_cost_breakdown`, `format_panel_cost`
+- **`_safe_edit`** — универсальный edit (photo/text fallback) в `rooms.py`, вынесен в начало файла
+
+### UI
+- В карточке щита: `🔧 Смета монтажа`, `💰 Общая смета щита`
+- В карточке объекта: `💰 Смета ЭОМ`
+- Роутер `obj_elec_cost_` — исключён из `obj_elec_`
+
+### Три уровня смет
+1. **Смета щита** — только компоненты щита
+2. **Смета электромонтажа** — кабель + расходники
+3. **Общая смета ЭОМ объекта** — щиты + монтаж
+
+### Известные проблемы
+- `routes_count` в смете монтажа щита показывает `-` (не критично)
+- Маркетплейсы — только заглушки
+
+### Будущее
+- Подключение маркетплейсов (Ozon/WB/Леруа/Петрович)
+- Обновление цен по API
+- Расчёт работ (прокладка, штробление, монтаж точек)

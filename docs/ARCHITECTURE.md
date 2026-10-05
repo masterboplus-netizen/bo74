@@ -335,3 +335,34 @@ bo_ecosystem/
 ### Иерархия трасс
 Объект → Щит → Группа → Трасса → Точка
 Метраж = от щита к точке (по прямой, на этом этапе)
+
+## 13. ЦЕНЫ И СМЕТЫ ЭОМ (сессия 3, часть 3)
+
+### core/elec_prices.py
+- `get_component_price`, `get_price_info`, `set_component_price`, `list_component_prices`
+- `calc_object_panels_cost`, `calc_object_montage_cost`, `calc_object_elec_total`
+- `format_object_elec_total`
+- Заглушки: `fetch_marketplace_prices`, `import_prices_from_csv`
+
+### core/elec_routes.py (смета монтажа)
+- `calc_route_cost(route_id)` — кабель + расходники
+- `calc_montage_cost_by_group`, `calc_montage_cost_by_panel`
+- `format_montage_cost_summary`
+
+### core/elec_panels.py (смета щита)
+- `calc_component_price(c)`, `calc_panel_cost(panel_id)`
+- `get_panel_cost_breakdown(panel_id)`, `format_panel_cost(panel_id)`
+
+### Миграция 041
+- `elec_panel_components`: `price_unit`, `price_source`, `price_updated_at`, `market_url`, `market_sku`, `brand`
+- `component_prices`: `component_type`, `rating`, `poles`, `brand`, `price`, `currency`, `source`, `market_url`, `market_sku`
+
+### UI (rooms.py / commands.py)
+- Щит: `panel_montage_`, `panel_total_` → смета монтажа / общая
+- Объект: `obj_elec_cost_` → общая смета ЭОМ
+- `_safe_edit` — универсальный edit
+
+### Логика цены
+1. `elec_panel_components.price_unit` (ручная)
+2. `component_prices` (справочник по типу/номиналу/полюсам/бренду)
+3. `spec.COMPONENT_PRICES_DEFAULT` (дефолт)
