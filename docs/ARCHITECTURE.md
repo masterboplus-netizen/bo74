@@ -262,3 +262,49 @@ bo_ecosystem/
 - 035 — floor_id, phase_l1/l2/l3
 - 036 — привязка групп к этажу (legacy)
 - 037 — Щиты ЭОМ (elec_panels, elec_panel_links, elec_groups.panel_id)
+
+## 11. ЯДРО ЭОМ: ИЕРАРХИЯ ЩИТОВ (сессия 3)
+
+### core/elec_rules.py (новый)
+- DEFAULT_RULES — правила по умолчанию
+- get_rules(object_id) — правила с переопределениями
+- set_rule(object_id, key, value) — переопределить
+- reset_rules(object_id) — сбросить
+- list_overrides(object_id) — список изменений
+- format_rules(object_id) — текст
+
+### core/elec_panels.py (расширение сессии 3)
+- Вводной автомат: set_input_breaker, get_input_breaker, format_input_breaker
+- Компоненты: add_component, get_component, get_components, get_components_by_group, delete_component, clear_auto_components, format_component
+- Автокомплектация: autocomplete_panel, recalc_panel, format_panel_components, get_panel_stats
+- Селективность: check_selectivity, format_selectivity
+- Иерархия: add_child_panel, set_panel_link_breaker, get_children_tree, _get_link
+
+### Миграции (дополнение)
+- 034 — базовый ЭОМ (elec_supply, elec_groups, elec_cables)
+- 035 — floor_id, phase_l1/l2/l3
+- 036 — привязка групп к этажу (legacy)
+- 037 — Щиты ЭОМ (elec_panels, elec_panel_links, elec_groups.panel_id)
+- 038 — elec_panel_components + поля вводного автомата
+- 039 — расширение elec_panel_links (номиналы, полюса, кривые)
+
+### Иерархия (правильная)
+Объект → Щиты (N) → Группы (M) → Точки (K)
+Связь щит-щит: автомат на родителе + вводной на дочернем
+Связь щит-группа: elec_groups.panel_id
+Связь группа-точка: room_comms.group_id
+
+### UI (rooms.py)
+- handle_panels_callback — роутер
+- panels_list_{object_id} — список щитов
+- panel_{panel_id} — карточка
+- panel_input_* — вводной
+- panel_auto_{panel_id} — автокомплектация
+- panel_comp_{panel_id} — комплектация
+- panel_stats_{panel_id} — статистика
+- panel_children_* — дочерние
+- panel_add_* — создание щита
+- panel_child_* — создание дочернего
+
+### Паттерн callback (bot.py)
+^(rooms_list_|room_|wall_|openings_|opening_|comm_|obj_|floor_|group_|cables_|panels_|panel_)

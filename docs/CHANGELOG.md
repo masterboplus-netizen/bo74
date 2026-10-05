@@ -245,3 +245,40 @@
 - Связь щит↔щит — ядро есть, UI нет
 - Трассы (routes) — не начаты
 - Сантехника — по аналогии с ЭОМ, не начата
+
+## [8.2] — 2026-10-05 (сессия 3)
+
+### Добавлено — Щиты ЭОМ (иерархия + автокомплектация)
+- **Миграция 038** — `elec_panel_components` + поля вводного автомата в `elec_panels`
+- **Миграция 039** — расширение `elec_panel_links` (номиналы, полюса, кривые)
+- **`core/elec_rules.py`** — правила автокомплектации (cosφ, запас, УЗО, номиналы)
+- **`core/elec_panels.py`** — расширен:
+  - Вводной автомат: `set_input_breaker`, `get_input_breaker`, `format_input_breaker`
+  - Компоненты: `add_component`, `get_components`, `delete_component`, `clear_auto_components`, `format_component`
+  - **Автокомплектация:** `autocomplete_panel`, `recalc_panel`, `format_panel_components`, `get_panel_stats`
+  - **Селективность:** `check_selectivity`, `format_selectivity`
+  - **Иерархия:** `add_child_panel`, `set_panel_link_breaker`, `get_children_tree`, `_get_link`
+
+### UI
+- **Карточка щита:** кнопки 🔌 Вводной / 🪄 Автокомплектация / 📋 Комплектация / 📊 Статистика
+- **Вводной автомат:** выбор типа (Авто/УЗО/Диф/Рубильник) + номинал
+- **Дочерние щиты:** кнопка «⬇️ Дочерние щиты (N)» + добавление
+- **Создание щита:** `panel_add_type_` (vru/floor/apartment/outdoor)
+- **Создание дочернего:** `panel_child_type_` (floor/apartment/subpanel/outdoor)
+
+### Правила
+- `min_rating_by_purpose` — минимальные номиналы (розетки 16А, свет 6А и т.д.)
+- `max_breaker_1p` = 63А — ограничение 1ф
+- `selectivity_factor` = 1.6
+- `cos_phi` = 0.9, `safety_factor` = 1.2, `simultaneity_factor` = 0.8
+
+### Исправлено
+- Паттерн `bot.py` — добавлены `panels_`, `panel_` (иначе кнопки не нажимались)
+- `~/.netrc` — автопересоздание при push
+- `input_breaker` — пишется и в компоненты, и в поля щита (для селективности)
+
+### Известные проблемы
+- Триггеры пересчёта — не автоматические (только по кнопке)
+- Ручные компоненты (`is_manual=1`) — ядро есть, UI нет
+- Смета щита — цены не заданы
+- Экспорт спецификации — не реализован
