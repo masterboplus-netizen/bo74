@@ -114,6 +114,11 @@ except Exception:
     export_plumbing_panel_spec = None
 
 try:
+    from core import marketplaces as core_marketplaces
+except Exception:
+    core_marketplaces = None
+
+try:
     from core import plumbing_panels as core_plumbing
 except Exception:
     core_plumbing = None
@@ -4149,6 +4154,12 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         if handled:
             return
 
+    # --- ЦЕНЫ / МАРКЕТПЛЕЙСЫ ---
+    if data.startswith("prices_"):
+        handled = await handle_panels_callback(query, context, data)
+        if handled:
+            return
+
     # --- САНТЕХНИКА ---
     if data.startswith("plumb_"):
         handled = await handle_panels_callback(query, context, data)
@@ -6068,6 +6079,61 @@ async def handle_panels_callback(query, context, data):
                 )
             except Exception:
                 pass
+        return True
+
+    # ============ ЦЕНЫ ============
+    if data.startswith("prices_import_"):
+        object_id = int(data.replace("prices_import_", ""))
+        if core_marketplaces is None:
+            try:
+                await query.edit_message_text("Модуль цен не загружен")
+            except Exception:
+                pass
+            return True
+        # Сгенерировать шаблон
+        try:
+            import tempfile, os
+            tpl_path = os.path.join(tempfile.gettempdir(), 'prices_template.csv')
+            core_marketplaces.generate_csv_template(tpl_path)
+            with open(tpl_path, 'rb') as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename='prices_template.csv',
+                    caption=(
+                        "💱 Шаблон прайса (CSV)" + chr(10) + chr(10) +
+                        "Заполни и пришли обратно файл — я импортирую цены." + chr(10) + chr(10) +
+                        "Формат: component_type;rating;poles;brand;price;currency;market_url;market_sku"
+                    ),
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("📋 История импортов", callback_data="prices_history_" + str(object_id))],
+                        [InlineKeyboardButton("⬅️ К объекту", callback_data="obj_" + str(object_id))],
+                    ])
+                )
+        except Exception as e:
+            print("prices_import: " + str(e), flush=True)
+            try:
+                await query.edit_message_text(
+                    "Ошибка: " + str(e),
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К объекту", callback_data="obj_" + str(object_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
+    if data.startswith("prices_history_"):
+        object_id = int(data.replace("prices_history_", ""))
+        try:
+            text = core_marketplaces.format_imports(object_id) if core_marketplaces else "Модуль не загружен"
+        except Exception as e:
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        await _safe_edit(query, text, InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ К ценам", callback_data="prices_import_" + str(object_id))],
+            [InlineKeyboardButton("⬅️ К объекту", callback_data="obj_" + str(object_id))],
+        ]))
         return True
 
     # ============ РАБОТЫ ============
