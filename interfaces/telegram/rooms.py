@@ -86,6 +86,11 @@ try:
 except Exception:
     core_elec_routes = None
 
+try:
+    from core import elec_prices as core_elec_prices
+except Exception:
+    core_elec_prices = None
+
 # --- Помещения (этажи / зоны) ---
 try:
     from core import floors as core_floors
@@ -5126,6 +5131,78 @@ async def handle_cables_callback(query, context, data):
 # ЩИТЫ ЭОМ — UI
 # ============================================================
 
+def _build_panel_total_text(panel_id):
+    """Текст общей сметы щита: компоненты + монтаж."""
+    from core.elec_panels import get_panel, calc_panel_cost, get_groups_by_panel
+    from core import elec_routes as er
+
+    p = get_panel(panel_id)
+    if not p:
+        return "Щит не найден"
+
+    # Компоненты
+    panels_cost = calc_panel_cost(panel_id)
+
+    # Монтаж
+    montage_cost = 0.0
+    montage_m = 0.0
+    try:
+        montage = er.calc_montage_cost_by_panel(panel_id)
+        montage_cost = montage['total']
+        montage_m = montage['total_m']
+    except Exception as e:
+        print("montage cost: " + str(e), flush=True)
+
+    total = panels_cost + montage_cost
+
+    lines = [
+        "💰 Общая смета щита «" + str(p.get('name') or '?') + "»",
+        "",
+        "── ЩИТ ──",
+        "Компоненты щита: " + str(panels_cost) + " ₽",
+        "",
+        "── ЭЛЕКТРОМОНТАЖ ──",
+        "Метраж: " + str(montage_m) + " м",
+        "Кабель + расходники: " + str(montage_cost) + " ₽",
+        "",
+        "───────────────────────",
+        "💰 ВСЕГО: " + str(round(total, 2)) + " ₽",
+    ]
+    return chr(10).join(lines)
+
+
+async def _safe_edit(query, text, kb=None):
+    """Универсальный edit: text -> caption -> delete+send.
+
+    Используется для надёжного обновления сообщения независимо от того,
+    текст это или фото."""
+    is_photo = bool(getattr(query.message, "photo", None))
+    try:
+        if is_photo:
+            await query.edit_message_caption(caption=text, parse_mode=None, reply_markup=kb)
+        else:
+            await query.edit_message_text(text, parse_mode=None, reply_markup=kb)
+        return True
+    except Exception as e1:
+        err = str(e1).lower()
+        if "message is not modified" in err:
+            return True
+        print("_safe_edit edit failed: " + str(e1), flush=True)
+    try:
+        await query.message.delete()
+    except Exception:
+        pass
+    try:
+        await query.get_bot().send_message(
+            chat_id=query.message.chat_id, text=text, reply_markup=kb
+        )
+        print("_safe_edit send_message OK", flush=True)
+        return True
+    except Exception as e2:
+        print("_safe_edit send failed: " + str(e2), flush=True)
+        return False
+
+
 async def handle_panels_callback(query, context, data):
     """Обработчик щитов ЭОМ. Возвращает True если обработано."""
     if not core_elec_panels:
@@ -5429,6 +5506,38 @@ async def handle_panels_callback(query, context, data):
                 print("panel_routes send failed: " + str(e2), flush=True)
         return True
 
+    if data.startswith("panel_montage_"):
+        panel_id = int(data.replace("panel_montage_", ""))
+        try:
+            if core_elec_routes:
+                text = core_elec_routes.format_montage_cost_summary(panel_id=panel_id)
+            else:
+                text = "Модуль маршрутов не загружен"
+        except Exception as e:
+            print("panel montage: " + str(e), flush=True)
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        await _safe_edit(query, text, InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))],
+        ]))
+        return True
+
+    if data.startswith("panel_total_"):
+        panel_id = int(data.replace("panel_total_", ""))
+        print("panel_total handler: panel_id=" + str(panel_id), flush=True)
+        try:
+            text = _build_panel_total_text(panel_id)
+        except Exception as e:
+            print("panel total: " + str(e), flush=True)
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        await _safe_edit(query, text, InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))],
+        ]))
+        return True
+
     if data.startswith("panel_auto_"):
         panel_id = int(data.replace("panel_auto_", ""))
         try:
@@ -5630,6 +5739,8 @@ async def handle_panels_callback(query, context, data):
             [InlineKeyboardButton("🪄 Автокомплектация", callback_data="panel_auto_" + str(panel_id))],
             [InlineKeyboardButton("📏 Трассы щита", callback_data="panel_routes_" + str(panel_id))],
             [InlineKeyboardButton("🪄 Трассировать все группы", callback_data="panel_routes_auto_" + str(panel_id))],
+            [InlineKeyboardButton("🔧 Смета монтажа", callback_data="panel_montage_" + str(panel_id))],
+            [InlineKeyboardButton("💰 Общая смета щита", callback_data="panel_total_" + str(panel_id))],
             [InlineKeyboardButton("📋 Комплектация", callback_data="panel_comp_" + str(panel_id))],
             [InlineKeyboardButton("📊 Статистика", callback_data="panel_stats_" + str(panel_id))],
             [InlineKeyboardButton("📋 Группы щита", callback_data="panel_groups_" + str(panel_id))],
