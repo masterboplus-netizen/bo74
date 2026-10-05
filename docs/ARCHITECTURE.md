@@ -308,3 +308,30 @@ bo_ecosystem/
 
 ### Паттерн callback (bot.py)
 ^(rooms_list_|room_|wall_|openings_|opening_|comm_|obj_|floor_|group_|cables_|panels_|panel_)
+
+## 12. ТРАССЫ ЭОМ (сессия 3, часть 2)
+
+### core/elec_routes.py
+- CRUD: `create_route`, `get_route`, `get_routes_by_object`, `get_routes_by_panel`, `get_routes_by_group`, `delete_route`, `delete_routes_by_group`, `update_route`
+- Расчёт: `calc_distance_m(x1,y1,z1,x2,y2,z2)`, `calc_route_length_from_panel(panel_id, point_id)`
+- Авто: `auto_routes_for_group(group_id, cable_type, route_type)`, `auto_routes_for_panel(panel_id, route_type)`
+- Формат: `format_route`, `summarize_routes_by_cable`, `format_routes_summary`
+
+### Логика расчёта
+1. Координаты щита: `elec_panels.lat/lon` (или 0)
+2. Координаты точки: `room_comms.world_x/y/z`
+3. **Fallback:** если world NULL → `wall_offset_to_world(offset_x, offset_y, wall)` из `core.geometry`
+4. Метраж: `√((x2-x1)² + (y2-y1)² + (z2-z1)²) / 100`
+
+### Миграция 040 — `elec_routes`
+- Связи: `panel_id`, `group_id`, `from_point_id`, `to_point_id`
+- Параметры: `cable_type`, `length_m`, `route_type`, `waypoints` (JSON), `is_manual`
+
+### UI (rooms.py)
+- `handle_groups_callback` → `group_routes_*` (список/авто/очистка)
+- `handle_panels_callback` → `panel_routes_*`, `panel_routes_auto_*`
+- `_safe_edit(query, text, kb)` — универсальный edit (photo → caption, text → text, fallback → delete+send)
+
+### Иерархия трасс
+Объект → Щит → Группа → Трасса → Точка
+Метраж = от щита к точке (по прямой, на этом этапе)

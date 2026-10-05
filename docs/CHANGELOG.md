@@ -282,3 +282,30 @@
 - Ручные компоненты (`is_manual=1`) — ядро есть, UI нет
 - Смета щита — цены не заданы
 - Экспорт спецификации — не реализован
+
+## [8.3] — 2026-10-05 (сессия 3, часть 2)
+
+### Добавлено — Трассы ЭОМ
+- **Миграция 040** — таблица `elec_routes` (panel_id, group_id, to_point_id, cable_type, length_m, route_type, waypoints, is_manual)
+- **`core/elec_routes.py`** — новый модуль:
+  - CRUD: `create_route`, `get_route`, `get_routes_by_object`, `get_routes_by_panel`, `get_routes_by_group`, `delete_route`, `delete_routes_by_group`, `update_route`
+  - Расчёт: `calc_distance_m`, `calc_route_length_from_panel` (с fallback на `wall_offset_to_world`)
+  - Авто: `auto_routes_for_group`, `auto_routes_for_panel`
+  - Формат: `format_route`, `summarize_routes_by_cable`, `format_routes_summary`
+- **UI группы:** карточка группы + трассы + авто + очистка
+- **UI щита:** «📏 Трассы щита» + «🪄 Трассировать все группы»
+- **`_safe_edit`** — универсальный edit (photo/text fallback в `rooms.py`)
+- Кнопки групп в `room_groups_` — кликабельные
+
+### Исправлено
+- Паттерн `bot.py` — добавлены `panels_`, `panel_` (кнопки не нажимались)
+- `~/.netrc` — автопересоздание при push
+- `input_breaker` — пишется в компоненты и в поля щита
+- Группа с `room_id=NULL` — карточка не падала (возврат к щиту)
+- `group_routes_` — безопасный edit (photo/text)
+
+### Известные проблемы
+- Ручная правка длины трассы — не реализована
+- Удаление отдельной трассы — не реализовано
+- Визуализация трасс на плане — не реализована
+- Автотрассировка (граф комнат) — отложена
