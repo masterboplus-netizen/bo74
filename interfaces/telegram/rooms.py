@@ -107,6 +107,43 @@ except Exception:
 
 
 # ============================================================
+# БЕЗОПАСНЫЙ EDIT
+# ============================================================
+
+async def _safe_edit(query, text, kb=None):
+    """Универсальный edit: text -> caption -> delete+send.
+
+    Используется для надёжного обновления сообщения независимо от того,
+    текст это или фото."""
+    is_photo = bool(getattr(query.message, "photo", None))
+    try:
+        if is_photo:
+            await query.edit_message_caption(caption=text, parse_mode=None, reply_markup=kb)
+        else:
+            await query.edit_message_text(text, parse_mode=None, reply_markup=kb)
+        return True
+    except Exception as e1:
+        err = str(e1).lower()
+        if "message is not modified" in err:
+            return True
+        print("_safe_edit edit failed: " + str(e1), flush=True)
+    try:
+        await query.message.delete()
+    except Exception:
+        pass
+    try:
+        await query.get_bot().send_message(
+            chat_id=query.message.chat_id, text=text, reply_markup=kb
+        )
+        print("_safe_edit send_message OK", flush=True)
+        return True
+    except Exception as e2:
+        print("_safe_edit send failed: " + str(e2), flush=True)
+        return False
+
+
+
+# ============================================================
 # КОНСТАНТЫ
 # ============================================================
 
@@ -3784,10 +3821,31 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
             return
 
     # --- ЭОМ объекта ---
-    if data.startswith("obj_elec_"):
+    if data.startswith("obj_elec_") and not data.startswith("obj_elec_cost_"):
         handled = await handle_obj_elec_callback(query, context, data)
         if handled:
             return
+
+    # --- СМЕТА ЭОМ ОБЪЕКТА ---
+    if data.startswith("obj_elec_cost_"):
+        try:
+            object_id = int(data.replace("obj_elec_cost_", ""))
+        except ValueError:
+            return
+        try:
+            if core_elec_prices:
+                text = core_elec_prices.format_object_elec_total(object_id)
+            else:
+                text = "Модуль цен не загружен"
+        except Exception as e:
+            print("obj elec cost: " + str(e), flush=True)
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        await _safe_edit(query, text, InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ К объекту", callback_data="obj_" + str(object_id))],
+        ]))
+        return
 
     if data.startswith("obj_") and not data.startswith(("obj_del_", "obj_delok_", "obj_rename_", "obj_floor_", "obj_floors_", "obj_elec_")):
         try:
@@ -5171,36 +5229,6 @@ def _build_panel_total_text(panel_id):
     return chr(10).join(lines)
 
 
-async def _safe_edit(query, text, kb=None):
-    """Универсальный edit: text -> caption -> delete+send.
-
-    Используется для надёжного обновления сообщения независимо от того,
-    текст это или фото."""
-    is_photo = bool(getattr(query.message, "photo", None))
-    try:
-        if is_photo:
-            await query.edit_message_caption(caption=text, parse_mode=None, reply_markup=kb)
-        else:
-            await query.edit_message_text(text, parse_mode=None, reply_markup=kb)
-        return True
-    except Exception as e1:
-        err = str(e1).lower()
-        if "message is not modified" in err:
-            return True
-        print("_safe_edit edit failed: " + str(e1), flush=True)
-    try:
-        await query.message.delete()
-    except Exception:
-        pass
-    try:
-        await query.get_bot().send_message(
-            chat_id=query.message.chat_id, text=text, reply_markup=kb
-        )
-        print("_safe_edit send_message OK", flush=True)
-        return True
-    except Exception as e2:
-        print("_safe_edit send failed: " + str(e2), flush=True)
-        return False
 
 
 async def handle_panels_callback(query, context, data):
