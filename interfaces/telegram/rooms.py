@@ -111,6 +111,11 @@ try:
 except Exception:
     core_plumbing = None
 
+try:
+    from core import object_works as core_works
+except Exception:
+    core_works = None
+
 # --- Помещения (этажи / зоны) ---
 try:
     from core import floors as core_floors
@@ -4807,6 +4812,40 @@ async def handle_measure_input(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text("Не удалось создать трассу")
         return
 
+    if step == 'work_new_qty':
+        object_id = context.user_data.get('work_new_object_id')
+        wtype = context.user_data.get('work_new_type')
+        if not object_id or not wtype:
+            await update.message.reply_text("Потерялись данные")
+            context.user_data['waiting_for'] = None
+            return
+        val = (update.message.text or '').strip().replace(',', '.')
+        try:
+            qty = float(val)
+        except ValueError:
+            await update.message.reply_text("Нужно число")
+            return
+        if qty <= 0 or qty > 100000:
+            await update.message.reply_text("Количество от 0.1 до 100 000")
+            return
+        try:
+            wid = core_works.create_work(object_id, wtype, qty=qty)
+        except Exception as e:
+            print("work create: " + str(e), flush=True)
+            wid = None
+        for k in ['work_new_object_id', 'work_new_type', 'waiting_for']:
+            context.user_data[k] = None
+        if wid:
+            await update.message.reply_text(
+                "Работа добавлена",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔨 К работам", callback_data="works_list_" + str(object_id))],
+                ])
+            )
+        else:
+            await update.message.reply_text("Не удалось добавить")
+        return
+
     if step == 'plumb_new_name':
         name = (update.message.text or '').strip()
         if not name:
@@ -5992,6 +6031,115 @@ async def handle_panels_callback(query, context, data):
                 )
             except Exception:
                 pass
+        return True
+
+    # ============ РАБОТЫ ============
+    if data.startswith("works_list_"):
+        object_id = int(data.replace("works_list_", ""))
+        if not core_works:
+            try:
+                await query.edit_message_text("Модуль работ не загружен")
+            except Exception:
+                pass
+            return True
+        try:
+            text = core_works.format_object_works(object_id)
+        except Exception as e:
+            print("works list: " + str(e), flush=True)
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        kb_rows = [
+            [InlineKeyboardButton("➕ Добавить работу", callback_data="works_add_" + str(object_id))],
+            [InlineKeyboardButton("⬅️ К объекту", callback_data="obj_" + str(object_id))],
+        ]
+        await _safe_edit(query, text, InlineKeyboardMarkup(kb_rows))
+        return True
+
+    if data.startswith("works_add_type_"):
+        parts = data.replace("works_add_type_", "").rsplit("_", 1)
+        object_id = int(parts[0])
+        wtype = parts[1]
+        context.user_data['work_new_object_id'] = object_id
+        context.user_data['work_new_type'] = wtype
+        context.user_data['waiting_for'] = 'work_new_qty'
+        try:
+            await query.edit_message_text(
+                "🔨 " + core_spec.get_work_label(wtype) + chr(10) + chr(10) +
+                "Количество (" + core_spec.get_work_unit(wtype) + "):" + chr(10) + chr(10) +
+                "_Например: 15_",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data="works_list_" + str(object_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("works_add_"):
+        object_id = int(data.replace("works_add_", ""))
+        kb_rows = [
+            [InlineKeyboardButton("Штробление (электро)", callback_data="works_add_type_" + str(object_id) + "_elec_shtroba")],
+            [InlineKeyboardButton("Прокладка кабеля", callback_data="works_add_type_" + str(object_id) + "_elec_cable")],
+            [InlineKeyboardButton("Установка розетки", callback_data="works_add_type_" + str(object_id) + "_elec_socket")],
+            [InlineKeyboardButton("Установка светильника", callback_data="works_add_type_" + str(object_id) + "_elec_light")],
+            [InlineKeyboardButton("Монтаж щита", callback_data="works_add_type_" + str(object_id) + "_elec_panel_mount")],
+            [InlineKeyboardButton("Прокладка трубы", callback_data="works_add_type_" + str(object_id) + "_plumb_pipe")],
+            [InlineKeyboardButton("Установка смесителя", callback_data="works_add_type_" + str(object_id) + "_plumb_socket")],
+            [InlineKeyboardButton("Установка унитаза", callback_data="works_add_type_" + str(object_id) + "_plumb_toilet")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data="works_list_" + str(object_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                "🔨 Новая работа" + chr(10) + chr(10) + "Тип:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("works_del_"):
+        work_id = int(data.replace("works_del_", ""))
+        try:
+            w = core_works.get_work(work_id)
+            object_id = w.get('object_id') if w else None
+            core_works.delete_work(work_id)
+        except Exception as e:
+            print("works del: " + str(e), flush=True)
+            object_id = None
+        if object_id:
+            try:
+                await query.edit_message_text(
+                    "Удалено",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К работам", callback_data="works_list_" + str(object_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
+    if data.startswith("works_") and not data.startswith(("works_list_", "works_add_", "works_del_")):
+        try:
+            work_id = int(data.replace("works_", ""))
+        except ValueError:
+            return False
+        w = core_works.get_work(work_id) if core_works else None
+        if not w:
+            try:
+                await query.edit_message_text("Работа не найдена")
+            except Exception:
+                pass
+            return True
+        lines = ["🔨 " + str(w.get('work_label') or '?'), ""]
+        lines.append("Количество: " + str(w.get('qty') or 0) + " " + str(w.get('unit') or ''))
+        lines.append("Цена за ед.: " + str(w.get('price_unit') or 0) + " ₽")
+        lines.append("Итого: " + str(w.get('total') or 0) + " ₽")
+        kb_rows = [
+            [InlineKeyboardButton("🗑 Удалить", callback_data="works_del_" + str(work_id))],
+            [InlineKeyboardButton("⬅️ К работам", callback_data="works_list_" + str(w.get('object_id')))],
+        ]
+        await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
         return True
 
     # ============ САНТЕХНИКА ============

@@ -861,3 +861,47 @@ def get_consumable_price(route_type):
     if not route_type:
         return 0
     return CONSUMABLE_PRICES_DEFAULT.get(route_type, 0)
+
+
+# ============================================================
+# ВИДЫ РАБОТ (дефолтные, для смет)
+# ============================================================
+
+WORK_TYPES_DEFAULT = {
+    # Электромонтаж
+    'elec_shtroba':      ('Штробление под кабель', 'м', 200),
+    'elec_cable':        ('Прокладка кабеля', 'м', 80),
+    'elec_socket':       ('Установка розетки', 'шт', 350),
+    'elec_switch':       ('Установка выключателя', 'шт', 300),
+    'elec_light':        ('Установка светильника', 'шт', 500),
+    'elec_panel_mount':  ('Монтаж щита', 'шт', 3500),
+    'elec_breaker_mount':('Монтаж автомата', 'шт', 300),
+    # Сантехника
+    'plumb_shtroba':     ('Штробление под трубу', 'м', 250),
+    'plumb_pipe':        ('Прокладка трубы', 'м', 150),
+    'plumb_socket':      ('Установка смесителя', 'шт', 500),
+    'plumb_toilet':      ('Установка унитаза', 'шт', 1500),
+    'plumb_sink':        ('Установка раковины', 'шт', 800),
+    'plumb_bath':        ('Установка ванны', 'шт', 2500),
+    'plumb_shower':      ('Установка душевой кабины', 'шт', 2000),
+    'plumb_radiator':    ('Установка радиатора', 'шт', 1500),
+    'plumb_boiler':      ('Монтаж бойлера', 'шт', 2500),
+}
+
+
+def get_work_label(code):
+    if code in WORK_TYPES_DEFAULT:
+        return WORK_TYPES_DEFAULT[code][0]
+    return code
+
+
+def get_work_unit(code):
+    if code in WORK_TYPES_DEFAULT:
+        return WORK_TYPES_DEFAULT[code][1]
+    return 'шт'
+
+
+def get_work_price(code):
+    if code in WORK_TYPES_DEFAULT:
+        return WORK_TYPES_DEFAULT[code][2]
+    return 0
