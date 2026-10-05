@@ -1,5 +1,7 @@
 # DEVLOG — журнал сессий (append-only)
 
+2026-10-05 20:23 — plumb_points_: добавлена кнопка Привязать точку (7b1eb64)
+
 2026-10-05 20:11 — plumbing: assign_point_to_panel / unassign / get_panels_of_point — рабочие, через plumbing_panel_points (f9ca3ed)
 
 2026-10-05 20:08 — миграция 045 применена — таблица plumbing_panel_points (273b9b7)

@@ -6653,6 +6653,7 @@ async def handle_panels_callback(query, context, data):
         if len(text) > 4000:
             text = text[:3900] + chr(10) + "..."
         await _safe_edit(query, text, InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Привязать точку", callback_data="plumb_point_add_" + str(panel_id))],
             [InlineKeyboardButton("⬅️ К коллектору", callback_data="plumb_" + str(panel_id))],
         ]))
         return True
