@@ -1,5 +1,7 @@
 # DEVLOG — журнал сессий (append-only)
 
+2026-10-05 21:22 — 6.B закрыта: привязка точек сантехники к коллектору работает (таблица plumbing_panel_points, UI, get_points_of_panel) (af4c470)
+
 2026-10-05 21:16 — get_points_of_panel: читает из plumbing_panel_points + fallback на plumbing_routes (7d4d378)
 
 2026-10-05 20:59 — plumb_points_ и plumb_point_ добавлены в исключения общего plumb_ — UI привязки работает (24e937c)
