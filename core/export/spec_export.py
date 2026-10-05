@@ -152,3 +152,111 @@ def export_object_spec(object_id):
     lines.append("Сформировано: Бо 7.7 · " + datetime.now().strftime('%Y-%m-%d %H:%M'))
 
     return "\n".join(lines)
+
+
+def export_plumbing_panel_spec(panel_id):
+    """Спецификация сантехники по коллектору (TXT)."""
+    from core.plumbing_panels import (get_panel, get_routes_by_panel,
+                                       get_pipe_label, get_pipe_price,
+                                       calc_montage_cost_by_panel,
+                                       get_panel_type_label)
+    from modules.objects import get_object
+    p = get_panel(panel_id)
+    if not p:
+        return None
+    obj = get_object(p.get('object_id')) if p.get('object_id') else None
+    obj_name = obj['name'] if obj else '—'
+
+    routes = get_routes_by_panel(panel_id)
+    data = calc_montage_cost_by_panel(panel_id)
+
+    lines = []
+    lines.append("=" * 70)
+    lines.append("СПЕЦИФИКАЦИЯ САНТЕХНИКИ (коллектор)")
+    lines.append("=" * 70)
+    lines.append("")
+    lines.append("Объект:      " + str(obj_name))
+    lines.append("Коллектор:   " + str(p.get('name') or '?'))
+    lines.append("Тип:         " + str(get_panel_type_label(p.get('panel_type'))))
+    lines.append("Дата:        " + datetime.now().strftime('%d.%m.%Y'))
+    lines.append("")
+    lines.append("-" * 70)
+    lines.append("№  Труба                    Длина   Цена/м   Сумма")
+    lines.append("-" * 70)
+
+    if not routes:
+        lines.append("(нет трасс)")
+    else:
+        for idx, r in enumerate(routes, start=1):
+            pipe_label = get_pipe_label(r.get('pipe_type'))
+            length = r.get('length_m') or 0
+            price_m = get_pipe_price(r.get('pipe_type'))
+            summa = round(length * price_m, 2)
+            lines.append(
+                str(idx).ljust(3) +
+                pipe_label[:22].ljust(23) +
+                str(length).rjust(6) +
+                str(price_m).rjust(9) +
+                str(summa).rjust(10)
+            )
+
+    lines.append("-" * 70)
+    lines.append("Трубы:".ljust(55) + str(data['total_pipe_cost']).rjust(14) + " ₽")
+    lines.append("Расходники:".ljust(55) + str(data['total_consumable_cost']).rjust(14) + " ₽")
+    lines.append("ИТОГО:".ljust(55) + str(data['total']).rjust(14) + " ₽")
+    lines.append("=" * 70)
+    return chr(10).join(lines)
+
+
+def export_plumbing_panel_spec(panel_id):
+    """Спецификация сантехники по коллектору (TXT)."""
+    from core.plumbing_panels import (get_panel, get_routes_by_panel,
+                                       get_pipe_label, get_pipe_price,
+                                       calc_montage_cost_by_panel,
+                                       get_panel_type_label)
+    from modules.objects import get_object
+    p = get_panel(panel_id)
+    if not p:
+        return None
+    obj = get_object(p.get('object_id')) if p.get('object_id') else None
+    obj_name = obj['name'] if obj else '—'
+
+    routes = get_routes_by_panel(panel_id)
+    data = calc_montage_cost_by_panel(panel_id)
+
+    lines = []
+    lines.append("=" * 70)
+    lines.append("СПЕЦИФИКАЦИЯ САНТЕХНИКИ (коллектор)")
+    lines.append("=" * 70)
+    lines.append("")
+    lines.append("Объект:      " + str(obj_name))
+    lines.append("Коллектор:   " + str(p.get('name') or '?'))
+    lines.append("Тип:         " + str(get_panel_type_label(p.get('panel_type'))))
+    lines.append("Дата:        " + datetime.now().strftime('%d.%m.%Y'))
+    lines.append("")
+    lines.append("-" * 70)
+    lines.append("№  Труба                    Длина   Цена/м   Сумма")
+    lines.append("-" * 70)
+
+    if not routes:
+        lines.append("(нет трасс)")
+    else:
+        for idx, r in enumerate(routes, start=1):
+            pipe_label = get_pipe_label(r.get('pipe_type'))
+            length = r.get('length_m') or 0
+            price_m = get_pipe_price(r.get('pipe_type'))
+            summa = round(length * price_m, 2)
+            lines.append(
+                str(idx).ljust(3) +
+                pipe_label[:22].ljust(23) +
+                str(length).rjust(6) +
+                str(price_m).rjust(9) +
+                str(summa).rjust(10)
+            )
+
+    lines.append("-" * 70)
+    lines.append("Трубы:".ljust(55) + str(data['total_pipe_cost']).rjust(14) + " ₽")
+    lines.append("Расходники:".ljust(55) + str(data['total_consumable_cost']).rjust(14) + " ₽")
+    lines.append("ИТОГО:".ljust(55) + str(data['total']).rjust(14) + " ₽")
+    lines.append("=" * 70)
+    return chr(10).join(lines)

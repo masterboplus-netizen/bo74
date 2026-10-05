@@ -101,10 +101,17 @@ except Exception:
 
 try:
     from core.export.estimate_export import (
-        export_panel_estimate_csv, export_object_estimate_csv, save_estimate_csv
+        export_panel_estimate_csv, export_object_estimate_csv, save_estimate_csv,
+        export_plumbing_object_csv
     )
 except Exception:
     export_panel_estimate_csv = export_object_estimate_csv = save_estimate_csv = None
+    export_plumbing_object_csv = None
+
+try:
+    from core.export.spec_export import export_plumbing_panel_spec
+except Exception:
+    export_plumbing_panel_spec = None
 
 try:
     from core import plumbing_panels as core_plumbing
@@ -6235,6 +6242,7 @@ async def handle_panels_callback(query, context, data):
                 callback_data="plumb_" + str(p['id'])
             )])
         kb_rows.append([InlineKeyboardButton("💰 Смета сантехники", callback_data="plumb_cost_obj_" + str(object_id))])
+        kb_rows.append([InlineKeyboardButton("📊 Смета (CSV)", callback_data="plumb_csv_obj_" + str(object_id))])
         kb_rows.append([InlineKeyboardButton("➕ Добавить коллектор", callback_data="plumb_add_" + str(object_id))])
         kb_rows.append([InlineKeyboardButton("⬅️ К объекту", callback_data="obj_" + str(object_id))])
         await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
@@ -6475,16 +6483,82 @@ async def handle_panels_callback(query, context, data):
 
     if data.startswith("plumb_spec_"):
         panel_id = int(data.replace("plumb_spec_", ""))
+        if export_plumbing_panel_spec is None:
+            try:
+                await query.edit_message_text("Модуль экспорта не загружен")
+            except Exception:
+                pass
+            return True
         try:
-            text = core_plumbing.format_panel_spec(panel_id)
+            import tempfile, os
+            content = export_plumbing_panel_spec(panel_id)
+            if not content:
+                raise Exception("Пустая спецификация")
+            target = os.path.join(tempfile.gettempdir(), "plumb_spec_" + str(panel_id) + ".txt")
+            with open(target, "w", encoding="utf-8") as f:
+                f.write(content)
+            p = core_plumbing.get_panel(panel_id)
+            name = (p.get('name') if p else 'panel') or 'panel'
+            with open(target, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=name + "_spec.txt",
+                    caption="📄 Спецификация сантехники «" + str(name) + "»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К коллектору", callback_data="plumb_" + str(panel_id))],
+                    ])
+                )
         except Exception as e:
             print("plumb spec: " + str(e), flush=True)
-            text = "Ошибка: " + str(e)
-        if len(text) > 4000:
-            text = text[:3900] + chr(10) + "..."
-        await _safe_edit(query, text, InlineKeyboardMarkup([
-            [InlineKeyboardButton("⬅️ К коллектору", callback_data="plumb_" + str(panel_id))],
-        ]))
+            try:
+                await query.edit_message_text(
+                    "Ошибка: " + str(e),
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К коллектору", callback_data="plumb_" + str(panel_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
+    if data.startswith("plumb_csv_obj_"):
+        object_id = int(data.replace("plumb_csv_obj_", ""))
+        if export_plumbing_object_csv is None or save_estimate_csv is None:
+            try:
+                await query.edit_message_text("Модуль экспорта не загружен")
+            except Exception:
+                pass
+            return True
+        try:
+            import tempfile, os
+            content = export_plumbing_object_csv(object_id)
+            if not content:
+                raise Exception("Пустая смета")
+            target = os.path.join(tempfile.gettempdir(), "plumb_obj_" + str(object_id) + ".csv")
+            path = save_estimate_csv(content, path=target, prefix="plumb_obj")
+            from modules.objects import get_object
+            o = get_object(object_id)
+            name = o['name'] if o else ('obj_' + str(object_id))
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=str(name) + "_plumb.csv",
+                    caption="📊 Смета сантехники «" + str(name) + "»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К сантехнике", callback_data="plumb_list_" + str(object_id))],
+                    ])
+                )
+        except Exception as e:
+            print("plumb csv obj: " + str(e), flush=True)
+            try:
+                await query.edit_message_text(
+                    "Ошибка: " + str(e),
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К сантехнике", callback_data="plumb_list_" + str(object_id))],
+                    ])
+                )
+            except Exception:
+                pass
         return True
 
     if data.startswith("plumb_cost_obj_"):

@@ -133,3 +133,87 @@ def save_estimate_csv(content, path=None, prefix='estimate'):
     with open(path, "w", encoding="utf-8-sig") as f:
         f.write(content)
     return path
+
+
+def export_plumbing_object_csv(object_id):
+    """CSV-смета сантехники объекта."""
+    from core.plumbing_panels import get_panels, get_panel, get_routes_by_panel, get_pipe_label, calc_montage_cost_by_panel, calc_object_cost
+    from modules.objects import get_object
+
+    obj = get_object(object_id)
+    obj_name = obj['name'] if obj else ('Объект #' + str(object_id))
+
+    panels = get_panels(object_id)
+    data = calc_object_cost(object_id)
+
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=';', lineterminator='\n')
+
+    writer.writerow(["Смета сантехники"])
+    writer.writerow(["Объект", obj_name])
+    writer.writerow(["Дата", datetime.now().strftime('%d.%m.%Y')])
+    writer.writerow([])
+
+    # По коллекторам
+    for p in panels:
+        writer.writerow(["Коллектор: " + str(p.get('name') or '?')])
+        routes = get_routes_by_panel(p['id'])
+        writer.writerow(["№", "Труба", "Длина (м)", "Цена/м", "Сумма"])
+        for idx, r in enumerate(routes, start=1):
+            pipe_label = get_pipe_label(r.get('pipe_type'))
+            length = r.get('length_m') or 0
+            from core.plumbing_panels import get_pipe_price
+            price_m = get_pipe_price(r.get('pipe_type'))
+            writer.writerow([idx, pipe_label, length, price_m, round(length * price_m, 2)])
+        panel_cost = calc_montage_cost_by_panel(p['id'])
+        writer.writerow(["Итого коллектор", "", "", "", panel_cost['total']])
+        writer.writerow([])
+
+    # Итого
+    writer.writerow(["ИТОГО трубы", data['total_pipe_cost']])
+    writer.writerow(["ИТОГО расходники", data['total_consumable_cost']])
+    writer.writerow(["ИТОГО сантехника", data['total']])
+
+    return output.getvalue()
+
+
+def export_plumbing_object_csv(object_id):
+    """CSV-смета сантехники объекта."""
+    from core.plumbing_panels import get_panels, get_panel, get_routes_by_panel, get_pipe_label, calc_montage_cost_by_panel, calc_object_cost
+    from modules.objects import get_object
+
+    obj = get_object(object_id)
+    obj_name = obj['name'] if obj else ('Объект #' + str(object_id))
+
+    panels = get_panels(object_id)
+    data = calc_object_cost(object_id)
+
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=';', lineterminator='\n')
+
+    writer.writerow(["Смета сантехники"])
+    writer.writerow(["Объект", obj_name])
+    writer.writerow(["Дата", datetime.now().strftime('%d.%m.%Y')])
+    writer.writerow([])
+
+    # По коллекторам
+    for p in panels:
+        writer.writerow(["Коллектор: " + str(p.get('name') or '?')])
+        routes = get_routes_by_panel(p['id'])
+        writer.writerow(["№", "Труба", "Длина (м)", "Цена/м", "Сумма"])
+        for idx, r in enumerate(routes, start=1):
+            pipe_label = get_pipe_label(r.get('pipe_type'))
+            length = r.get('length_m') or 0
+            from core.plumbing_panels import get_pipe_price
+            price_m = get_pipe_price(r.get('pipe_type'))
+            writer.writerow([idx, pipe_label, length, price_m, round(length * price_m, 2)])
+        panel_cost = calc_montage_cost_by_panel(p['id'])
+        writer.writerow(["Итого коллектор", "", "", "", panel_cost['total']])
+        writer.writerow([])
+
+    # Итого
+    writer.writerow(["ИТОГО трубы", data['total_pipe_cost']])
+    writer.writerow(["ИТОГО расходники", data['total_consumable_cost']])
+    writer.writerow(["ИТОГО сантехника", data['total']])
+
+    return output.getvalue()
