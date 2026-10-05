@@ -3162,40 +3162,100 @@ async def handle_groups_callback(query, context, data):
         print("group_routes_ handler: group_id=" + str(group_id), flush=True)
         try:
             text = core_elec_routes.format_routes_summary(group_id=group_id) if core_elec_routes else "Модуль не загружен"
+            routes = core_elec_routes.get_routes_by_group(group_id) if core_elec_routes else []
         except Exception as e:
             print("routes show: " + str(e), flush=True)
             text = "Ошибка: " + str(e)
+            routes = []
         if len(text) > 4000:
             text = text[:3900] + chr(10) + "..."
-        kb_r = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🪄 Авто-трассировка", callback_data="group_routes_auto_" + str(group_id))],
-            [InlineKeyboardButton("🗑 Очистить", callback_data="group_routes_clear_" + str(group_id))],
-            [InlineKeyboardButton("⬅️ К группе", callback_data="group_" + str(group_id))],
-        ])
-        # Безопасный edit: если это фото — edit_caption, иначе edit_text, при ошибке — новое сообщение
+        kb_rows = []
+        for idx, r in enumerate(routes, start=1):
+            label = core_elec_routes.format_route(r)[:45] if core_elec_routes else "?"
+            kb_rows.append([InlineKeyboardButton(
+                str(idx) + ". " + label,
+                callback_data="route_" + str(r['id'])
+            )])
+        kb_rows.append([InlineKeyboardButton("🪄 Авто-трассировка", callback_data="group_routes_auto_" + str(group_id))])
+        kb_rows.append([InlineKeyboardButton("🗑 Очистить", callback_data="group_routes_clear_" + str(group_id))])
+        kb_rows.append([InlineKeyboardButton("⬅️ К группе", callback_data="group_" + str(group_id))])
+        await _safe_edit(query, text, InlineKeyboardMarkup(kb_rows))
+        return True
+
+    # --- КАРТОЧКА ТРАССЫ ---
+    if data.startswith("route_edit_len_"):
+        route_id = int(data.replace("route_edit_len_", ""))
+        context.user_data['route_edit_id'] = route_id
+        context.user_data['waiting_for'] = 'route_length'
         try:
-            _is_photo = bool(getattr(query.message, "photo", None))
-            if _is_photo:
-                await query.edit_message_caption(caption=text, reply_markup=kb_r)
-            else:
-                await query.edit_message_text(text, reply_markup=kb_r)
-            print("group_routes_ show: OK", flush=True)
+            await query.edit_message_text(
+                "📏 Новая длина (метры):" + chr(10) + chr(10) + "_Например: 12.5_",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data="route_" + str(route_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("route_edit_type_"):
+        route_id = int(data.replace("route_edit_type_", ""))
+        context.user_data['route_edit_id'] = route_id
+        try:
+            await query.edit_message_text(
+                "🛠 Выбери тип прокладки:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Штроба", callback_data="route_set_type_" + str(route_id) + "_shtroba")],
+                    [InlineKeyboardButton("Потолок", callback_data="route_set_type_" + str(route_id) + "_potolok")],
+                    [InlineKeyboardButton("Стяжка", callback_data="route_set_type_" + str(route_id) + "_styazhka")],
+                    [InlineKeyboardButton("Лоток", callback_data="route_set_type_" + str(route_id) + "_lotok")],
+                    [InlineKeyboardButton("Открыто", callback_data="route_set_type_" + str(route_id) + "_otkryto")],
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data="route_" + str(route_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("route_set_type_"):
+        parts = data.replace("route_set_type_", "").rsplit("_", 1)
+        route_id = int(parts[0])
+        rtype = parts[1]
+        try:
+            core_elec_routes.update_route(route_id, route_type=rtype, is_manual=1)
         except Exception as e:
-            print("group_routes_ edit failed: " + str(e), flush=True)
-            # Fallback — удалить старое и отправить новое
-            try:
-                await query.message.delete()
-            except Exception:
-                pass
-            try:
-                await query.get_bot().send_message(
-                    chat_id=query.message.chat_id,
-                    text=text,
-                    reply_markup=kb_r
-                )
-                print("group_routes_ send_message OK", flush=True)
-            except Exception as e2:
-                print("group_routes_ send_message failed: " + str(e2), flush=True)
+            print("route set type: " + str(e), flush=True)
+        await _show_route_card(query, route_id)
+        return True
+
+    if data.startswith("route_del_"):
+        route_id = int(data.replace("route_del_", ""))
+        try:
+            r = core_elec_routes.get_route(route_id)
+            group_id = r.get('group_id') if r else None
+            panel_id = r.get('panel_id') if r else None
+            core_elec_routes.delete_route(route_id)
+        except Exception as e:
+            print("route del: " + str(e), flush=True)
+            group_id = None
+            panel_id = None
+        kb = []
+        if group_id:
+            kb.append([InlineKeyboardButton("⬅️ К трассам группы", callback_data="group_routes_" + str(group_id))])
+        elif panel_id:
+            kb.append([InlineKeyboardButton("⬅️ К трассам щита", callback_data="panel_routes_" + str(panel_id))])
+        try:
+            await query.edit_message_text("✅ Трасса удалена", reply_markup=InlineKeyboardMarkup(kb) if kb else None)
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("route_") and not data.startswith(("route_edit_", "route_set_", "route_del_")):
+        try:
+            route_id = int(data.replace("route_", ""))
+        except ValueError:
+            return False
+        await _show_route_card(query, route_id)
         return True
 
     # --- КАРТОЧКА ГРУППЫ ---
@@ -4602,6 +4662,42 @@ async def handle_measure_input(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
 
+    if step == 'route_length':
+        route_id = context.user_data.get('route_edit_id')
+        if not route_id:
+            await update.message.reply_text("Потерялись данные")
+            context.user_data['waiting_for'] = None
+            return
+        val = (update.message.text or '').strip().replace(',', '.')
+        try:
+            length = float(val)
+        except ValueError:
+            await update.message.reply_text("Нужно число")
+            return
+        if length <= 0 or length > 10000:
+            await update.message.reply_text("Длина от 0.1 до 10 000 м")
+            return
+        try:
+            core_elec_routes.update_route(route_id, length_m=length, is_manual=1)
+        except Exception as e:
+            print("route set len: " + str(e), flush=True)
+        for k in ['route_edit_id', 'waiting_for']:
+            context.user_data[k] = None
+        try:
+            r = core_elec_routes.get_route(route_id)
+            gid = r.get('group_id') if r else None
+        except Exception:
+            gid = None
+        kb = []
+        if gid:
+            kb.append([InlineKeyboardButton("📏 К трассам", callback_data="group_routes_" + str(gid))])
+        kb.append([InlineKeyboardButton("⬅️ К трассе", callback_data="route_" + str(route_id))])
+        await update.message.reply_text(
+            "✅ Длина сохранена: " + str(length) + " м",
+            reply_markup=InlineKeyboardMarkup(kb)
+        )
+        return
+
     if step == 'component_price':
         comp_id = context.user_data.get('component_price_id')
         if not comp_id:
@@ -5261,6 +5357,52 @@ def _build_panel_total_text(panel_id):
 
 
 
+async def _show_route_card(query, route_id):
+    """Карточка трассы."""
+    try:
+        r = core_elec_routes.get_route(route_id) if core_elec_routes else None
+    except Exception as e:
+        print("route card: " + str(e), flush=True)
+        r = None
+    if not r:
+        try:
+            await query.edit_message_text("Трасса не найдена")
+        except Exception:
+            pass
+        return
+    # Инфо
+    lines = ["📏 Трасса #" + str(route_id), ""]
+    lines.append("Длина: " + str(r.get('length_m') or 0) + " м")
+    lines.append("Кабель: " + str(r.get('cable_type') or '—'))
+    lines.append("Прокладка: " + str(r.get('route_type') or '—'))
+    if r.get('is_manual'):
+        lines.append("Тип: [ручная]")
+    if r.get('to_point_id'):
+        lines.append("Точка: #" + str(r['to_point_id']))
+    # Цена
+    try:
+        cost = core_elec_routes.calc_route_cost(route_id) if core_elec_routes else None
+        if cost:
+            lines.append("")
+            lines.append("💵 Кабель: " + str(cost.get('cable_cost', 0)) + " ₽")
+            lines.append("🔧 Расходники: " + str(cost.get('consumable_cost', 0)) + " ₽")
+            lines.append("💰 Итого: " + str(cost.get('total', 0)) + " ₽")
+    except Exception:
+        pass
+    # Кнопки
+    kb = []
+    kb.append([InlineKeyboardButton("✏️ Длина", callback_data="route_edit_len_" + str(route_id))])
+    kb.append([InlineKeyboardButton("✏️ Тип прокладки", callback_data="route_edit_type_" + str(route_id))])
+    kb.append([InlineKeyboardButton("🗑 Удалить", callback_data="route_del_" + str(route_id))])
+    gid = r.get('group_id')
+    pid = r.get('panel_id')
+    if gid:
+        kb.append([InlineKeyboardButton("⬅️ К трассам группы", callback_data="group_routes_" + str(gid))])
+    elif pid:
+        kb.append([InlineKeyboardButton("⬅️ К трассам щита", callback_data="panel_routes_" + str(pid))])
+    await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb))
+
+
 async def handle_panels_callback(query, context, data):
     """Обработчик щитов ЭОМ. Возвращает True если обработано."""
     if not core_elec_panels:
@@ -5337,16 +5479,15 @@ async def handle_panels_callback(query, context, data):
                 lines.append(core_elec.format_group(g) if core_elec else str(g.get('name')))
             lines.append("")
             lines.append("📊 Групп: " + str(len(groups)) + " / " + str(total) + " Вт")
-        kb_rows = [
-            [InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))],
-        ]
-        try:
-            await query.edit_message_text(
-                chr(10).join(lines),
-                reply_markup=InlineKeyboardMarkup(kb_rows)
-            )
-        except Exception as e:
-            print("panel groups show: " + str(e), flush=True)
+        kb_rows = []
+        for idx, g in enumerate(groups, start=1):
+            gname = (g.get('name') or ('Группа #' + str(g['id'])))[:35]
+            kb_rows.append([InlineKeyboardButton(
+                str(idx) + ". " + gname,
+                callback_data="group_" + str(g['id'])
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))])
+        await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
         return True
 
     if data.startswith("panel_input_type_"):
@@ -5537,31 +5678,20 @@ async def handle_panels_callback(query, context, data):
             text = "Ошибка: " + str(e)
         if len(text) > 4000:
             text = text[:3900] + chr(10) + "..."
-        kb_r = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🪄 Трассировать все", callback_data="panel_routes_auto_" + str(panel_id))],
-            [InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))],
-        ])
         try:
-            _is_photo = bool(getattr(query.message, "photo", None))
-            if _is_photo:
-                await query.edit_message_caption(caption=text, reply_markup=kb_r)
-            else:
-                await query.edit_message_text(text, reply_markup=kb_r)
-            print("panel_routes show: OK", flush=True)
-        except Exception as e:
-            print("panel_routes edit failed: " + str(e), flush=True)
-            try:
-                await query.message.delete()
-            except Exception:
-                pass
-            try:
-                await query.get_bot().send_message(
-                    chat_id=query.message.chat_id,
-                    text=text,
-                    reply_markup=kb_r
-                )
-            except Exception as e2:
-                print("panel_routes send failed: " + str(e2), flush=True)
+            routes = core_elec_routes.get_routes_by_panel(panel_id) if core_elec_routes else []
+        except Exception:
+            routes = []
+        kb_rows = []
+        for idx, r in enumerate(routes, start=1):
+            label = core_elec_routes.format_route(r)[:45] if core_elec_routes else "?"
+            kb_rows.append([InlineKeyboardButton(
+                str(idx) + ". " + label,
+                callback_data="route_" + str(r['id'])
+            )])
+        kb_rows.append([InlineKeyboardButton("🪄 Трассировать все", callback_data="panel_routes_auto_" + str(panel_id))])
+        kb_rows.append([InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))])
+        await _safe_edit(query, text, InlineKeyboardMarkup(kb_rows))
         return True
 
     if data.startswith("panel_montage_"):
