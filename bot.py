@@ -191,7 +191,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_receipt_object, pattern="^receipt_obj_"))
     app.add_handler(CallbackQueryHandler(handle_receipt_category, pattern="^receipt_cat_"))
     app.add_handler(CallbackQueryHandler(handle_receipt_show, pattern="^receipt_show_"))
-    app.add_handler(CallbackQueryHandler(handle_rooms_callback, pattern="^(rooms_list_|room_|wall_|openings_|opening_|comm_|obj_|floor_|group_|cables_|panels_|panel_|plumb_)"))
+    app.add_handler(CallbackQueryHandler(handle_rooms_callback, pattern="^(rooms_list_|room_|wall_|openings_|opening_|comm_|obj_|floor_|group_|cables_|panels_|panel_|plumb_|works_)"))
     app.add_handler(CallbackQueryHandler(handle_callback, pattern="^(menu_crm|crm_|unknown_|deal_|client_|activity_)"))
     app.add_handler(CallbackQueryHandler(handle_callback, pattern="^(?!room_|rooms_|wall_|openings_|opening_|cat_|choose_obj_|task_|taskdone_|taskdel_|setdate_|taskdate_|taskprio_|setprio_|taskrename_|taskassign_|setassigned_|setrange_|setduration_|cal_|dur_days_|floor_|group_|obj_|comm_).*"))
 
