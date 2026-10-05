@@ -14,7 +14,7 @@ from handlers.commands import (
     add_task_command, tasks_command, done_command,
     finance_command, add_expense_command, personal_command, handle_callback, handle_text,
     handle_photo, handle_photo_stage, handle_photo_task, handle_photo_save,
-    handle_skip_photo, photos_command,
+    handle_skip_photo, photos_command, handle_document,
     handle_photo_filter, handle_photo_page,
     handle_recognize_receipt, handle_receipt_save, handle_receipt_object, handle_receipt_category, handle_receipt_show,
     clients_command, deals_command, handle_crm_menu
@@ -169,6 +169,7 @@ def main():
     app.add_handler(CommandHandler("digest_now", digest_now_command))
     app.add_handler(CommandHandler("survey_now", survey_now_command))
     app.add_handler(CommandHandler("backup_now", backup_now_command))
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 

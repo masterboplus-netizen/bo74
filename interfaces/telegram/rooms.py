@@ -6095,6 +6095,8 @@ async def handle_panels_callback(query, context, data):
             import tempfile, os
             tpl_path = os.path.join(tempfile.gettempdir(), 'prices_template.csv')
             core_marketplaces.generate_csv_template(tpl_path)
+            context.user_data['price_csv_object_id'] = object_id
+            context.user_data['waiting_for'] = 'price_csv'
             with open(tpl_path, 'rb') as f:
                 await query.message.chat.send_document(
                     document=f,
