@@ -611,7 +611,7 @@ def recalc_panel(panel_id, rules=None):
 
 
 def format_panel_components(panel_id):
-    """Полный текст комплектации щита."""
+    """Полный текст комплектации щита (с нумерацией)."""
     p = get_panel(panel_id)
     if not p:
         return "Щит не найден"
@@ -624,6 +624,8 @@ def format_panel_components(panel_id):
         t = c.get('component_type') or 'other'
         by_type.setdefault(t, []).append(c)
 
+    # Сквозной счётчик по всем компонентам
+    global_idx = 0
     type_order = ['auto', 'uzo', 'dif', 'switch', 'counter', 'busbar', 'clamp']
     for t in type_order:
         items = by_type.get(t)
@@ -631,8 +633,20 @@ def format_panel_components(panel_id):
             continue
         lines.append("── " + t.upper() + " ──")
         for c in items:
+            global_idx += 1
             mark = " [ручной]" if c.get('is_manual') else ""
-            lines.append("  " + format_component(c) + mark)
+            lines.append("  " + str(global_idx) + ". " + format_component(c) + mark)
+        lines.append("")
+
+    # Прочие типы (если есть)
+    for t, items in by_type.items():
+        if t in type_order:
+            continue
+        lines.append("── " + t.upper() + " ──")
+        for c in items:
+            global_idx += 1
+            mark = " [ручной]" if c.get('is_manual') else ""
+            lines.append("  " + str(global_idx) + ". " + format_component(c) + mark)
         lines.append("")
 
     return chr(10).join(lines)
