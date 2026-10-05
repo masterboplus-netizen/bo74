@@ -379,3 +379,42 @@ bo_ecosystem/
 - Кнопки — эмодзи + текст, нумерация если много
 
 При правке любой UI-функции — сверяйся со STYLE_GUIDE.
+
+## 15. ЦЕНЫ + СМЕТЫ + STYLE_GUIDE (сессия 3, часть 4)
+
+### core/elec_prices.py (расширен)
+- `get_component_price`, `get_price_info`, `set_component_price`, `list_component_prices`
+- `calc_object_panels_cost`, `calc_object_montage_cost`, `calc_object_elec_total`
+- `format_object_elec_total`
+- Заглушки: `fetch_marketplace_prices`, `import_prices_from_csv`
+
+### core/elec_routes.py (смета монтажа)
+- `calc_route_cost`, `calc_montage_cost_by_group`, `calc_montage_cost_by_panel`
+- `format_montage_cost_summary`
+
+### core/elec_panels.py (смета щита + нумерация)
+- `calc_component_price`, `calc_panel_cost`, `get_panel_cost_breakdown`, `format_panel_cost`
+- `format_panel_components` — с нумерацией
+- `format_component` — без эмодзи (по STYLE_GUIDE)
+
+### core/elec.py (очистка)
+- `_strip_emoji(text)` — убирает эмодзи (для БД)
+- `create_group` — очищает name
+- `create_kitchen_group` — очищает name_label
+- `format_group` — без эмодзи (только текст)
+
+### STYLE_GUIDE (docs/STYLE_GUIDE.md)
+Все UI-сообщения — по правилам:
+- Без `*...*`, `**...**`, `_..._`
+- Списки нумерованные
+- Разделитель ` · `
+- Один эмодзи в заголовке
+- Эмодзи в БД — НЕ хранятся
+
+### UI (rooms.py)
+- `_safe_edit(query, text, kb)` — универсальный edit
+- `panel_montage_`, `panel_total_`, `panel_comp_` (нумерация)
+- `panel_comp_item_`, `panel_comp_price_`, `panel_comp_del_`
+- `route_*` (карточка, длина, тип, удаление)
+- `panel_groups_` — кнопки групп
+- `obj_elec_cost_` — смета объекта
