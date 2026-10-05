@@ -41,12 +41,36 @@ def get_supply(object_id):
 # ГРУППЫ
 # ============================================================
 
+
+
+def _strip_emoji(text):
+    """Убирает эмодзи из строки (для БД)."""
+    if not text:
+        return text
+    import re
+    emoji_pattern = re.compile(
+        "[" 
+        "\U0001F600-\U0001F64F" 
+        "\U0001F300-\U0001F5FF" 
+        "\U0001F680-\U0001F6FF" 
+        "\U0001F1E0-\U0001F1FF" 
+        "\U00002700-\U000027BF" 
+        "\U0001F900-\U0001F9FF" 
+        "\U0001FA00-\U0001FAFF" 
+        "\U00002600-\U000026FF" 
+        "]+", 
+        flags=re.UNICODE
+    )
+    return emoji_pattern.sub('', text).strip()
+
+
 def create_group(object_id, room_id, name, phase=1, purpose='socket',
                  cable_type=None, load_watt=None, breaker_type=None,
                  breaker_curve='C', ip_class='ip20',
                  is_emergency=0, diff_protection=0, note=None,
                  floor_id=None, phase_l1=1, phase_l2=0, phase_l3=0):
     """Создаёт группу. Возвращает group_id."""
+    name = _strip_emoji(name) or 'Группа'
     return commit(
         """INSERT INTO elec_groups
            (object_id, room_id, name, phase, purpose, cable_type,
@@ -175,15 +199,20 @@ def auto_fill_group(group_id, voltage=220):
 # ============================================================
 
 def format_group(g):
-    """Форматирует группу в строку."""
-    icon = "🚨" if g.get('is_emergency') else spec.PURPOSE_TYPES.get(g.get('purpose'), '📦').split(' ', 1)[0]
-    name = g.get('name') or '—'
+    """Форматирует группу в строку (без эмодзи, по STYLE_GUIDE)."""
+    name = _strip_emoji(g.get('name') or '—')
+    if g.get('is_emergency'):
+        name = '[АВАРИЙНАЯ] ' + name
+
     phase = g.get('phase') or 1
     load = g.get('load_watt') or 0
     breaker = g.get('breaker_type') or '—'
     cable = g.get('cable_type') or '—'
     diff = " + УЗО" if g.get('diff_protection') else ""
-    return f"{icon} *{name}*\n   {phase}ф · {int(load)} Вт · {breaker}{diff}\n   Кабель: {cable}"
+
+    return (name + chr(10) +
+            '   ' + str(phase) + 'ф · ' + str(int(load)) + ' Вт · ' + str(breaker) + diff + chr(10) +
+            '   Кабель: ' + str(cable))
 
 
 def format_supply(object_id):

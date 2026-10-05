@@ -3316,7 +3316,7 @@ async def handle_groups_callback(query, context, data):
         groups = core_elec.get_groups_by_room(room_id)
         if not groups:
             groups = core_elec.get_groups(room_id)
-        lines = [f"⚡ *Группы ЭОМ — «{name}»*\n"]
+        lines = ["📋 Группы ЭОМ «" + str(name) + "»", ""]
         if not groups:
             lines.append("_Пока групп нет._\n")
         else:
@@ -5469,16 +5469,16 @@ async def handle_panels_callback(query, context, data):
             groups = []
             p = None
         pname = (p.get('name') if p else '?')
-        lines = ["⚡ *Группы щита «" + str(pname) + "»*", ""]
+        lines = ["📋 Группы щита «" + str(pname) + "»", ""]
         if not groups:
-            lines.append("_Пока групп нет._")
+            lines.append("Пока групп нет.")
         else:
             total = 0
-            for g in groups:
+            for idx, g in enumerate(groups, start=1):
                 total += int(g.get('load_watt') or 0)
-                lines.append(core_elec.format_group(g) if core_elec else str(g.get('name')))
+                lines.append(str(idx) + ". " + core_elec.format_group(g))
             lines.append("")
-            lines.append("📊 Групп: " + str(len(groups)) + " / " + str(total) + " Вт")
+            lines.append("📊 Групп: " + str(len(groups)) + " · Σ " + str(total) + " Вт")
         kb_rows = []
         for idx, g in enumerate(groups, start=1):
             gname = (g.get('name') or ('Группа #' + str(g['id'])))[:35]
