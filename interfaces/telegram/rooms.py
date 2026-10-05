@@ -106,6 +106,11 @@ try:
 except Exception:
     export_panel_estimate_csv = export_object_estimate_csv = save_estimate_csv = None
 
+try:
+    from core import plumbing_panels as core_plumbing
+except Exception:
+    core_plumbing = None
+
 # --- Помещения (этажи / зоны) ---
 try:
     from core import floors as core_floors
@@ -4132,6 +4137,12 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         if handled:
             return
 
+    # --- САНТЕХНИКА ---
+    if data.startswith("plumb_"):
+        handled = await handle_panels_callback(query, context, data)
+        if handled:
+            return
+
     # --- КАБЕЛЬНЫЙ ЖУРНАЛ ---
     if data.startswith("cables_"):
         handled = await handle_cables_callback(query, context, data)
@@ -4753,6 +4764,36 @@ async def handle_measure_input(update: Update, context: ContextTypes.DEFAULT_TYP
             "✅ Длина сохранена: " + str(length) + " м",
             reply_markup=InlineKeyboardMarkup(kb)
         )
+        return
+
+    if step == 'plumb_new_name':
+        name = (update.message.text or '').strip()
+        if not name:
+            await update.message.reply_text("Введи название")
+            return
+        object_id = context.user_data.get('plumb_new_object_id')
+        ptype = context.user_data.get('plumb_new_type') or 'collector'
+        if not object_id:
+            await update.message.reply_text("Потерялись данные")
+            context.user_data['waiting_for'] = None
+            return
+        try:
+            pid = core_plumbing.create_panel(object_id, name, ptype, mount_type='wall')
+        except Exception as e:
+            print("plumb create: " + str(e), flush=True)
+            pid = None
+        for k in ['plumb_new_object_id', 'plumb_new_type', 'waiting_for']:
+            context.user_data[k] = None
+        if pid:
+            await update.message.reply_text(
+                "Создано: " + name,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Открыть", callback_data="plumb_" + str(pid))],
+                    [InlineKeyboardButton("К сантехнике", callback_data="plumb_list_" + str(object_id))],
+                ])
+            )
+        else:
+            await update.message.reply_text("Не удалось создать")
         return
 
     if step == 'component_price':
@@ -5910,6 +5951,134 @@ async def handle_panels_callback(query, context, data):
                 )
             except Exception:
                 pass
+        return True
+
+    # ============ САНТЕХНИКА ============
+    if data.startswith("plumb_list_"):
+        object_id = int(data.replace("plumb_list_", ""))
+        if not core_plumbing:
+            try:
+                await query.edit_message_text("Модуль сантехники не загружен")
+            except Exception:
+                pass
+            return True
+        panels = core_plumbing.get_panels(object_id)
+        lines = ["🔧 Сантехника объекта", ""]
+        if not panels:
+            lines.append("Пока коллекторов нет.")
+        else:
+            for idx, p in enumerate(panels, start=1):
+                ptype = core_plumbing.get_panel_type_label(p.get('panel_type'))
+                lines.append(str(idx) + ". " + str(p.get('name')) + " (" + str(ptype) + ")")
+        kb_rows = []
+        for idx, p in enumerate(panels, start=1):
+            kb_rows.append([InlineKeyboardButton(
+                str(idx) + ". " + str(p.get('name'))[:35],
+                callback_data="plumb_" + str(p['id'])
+            )])
+        kb_rows.append([InlineKeyboardButton("➕ Добавить коллектор", callback_data="plumb_add_" + str(object_id))])
+        kb_rows.append([InlineKeyboardButton("⬅️ К объекту", callback_data="obj_" + str(object_id))])
+        await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
+        return True
+
+    if data.startswith("plumb_add_type_"):
+        parts = data.replace("plumb_add_type_", "").rsplit("_", 1)
+        object_id = int(parts[0])
+        ptype = parts[1]
+        context.user_data['plumb_new_object_id'] = object_id
+        context.user_data['plumb_new_type'] = ptype
+        context.user_data['waiting_for'] = 'plumb_new_name'
+        type_labels = {
+            'collector': 'Коллектор', 'riser': 'Стояк',
+            'boiler': 'Котёл', 'pump': 'Насосная группа', 'filter': 'Фильтр',
+        }
+        try:
+            await query.edit_message_text(
+                "🔧 Новый элемент: " + type_labels.get(ptype, ptype) + chr(10) + chr(10) +
+                "Напиши название (например «Коллектор ХВС»):",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data="plumb_list_" + str(object_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("plumb_add_"):
+        object_id = int(data.replace("plumb_add_", ""))
+        kb_rows = [
+            [InlineKeyboardButton("Коллектор", callback_data="plumb_add_type_" + str(object_id) + "_collector")],
+            [InlineKeyboardButton("Стояк", callback_data="plumb_add_type_" + str(object_id) + "_riser")],
+            [InlineKeyboardButton("Котёл", callback_data="plumb_add_type_" + str(object_id) + "_boiler")],
+            [InlineKeyboardButton("Насосная группа", callback_data="plumb_add_type_" + str(object_id) + "_pump")],
+            [InlineKeyboardButton("Фильтр", callback_data="plumb_add_type_" + str(object_id) + "_filter")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data="plumb_list_" + str(object_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                "🔧 Новый элемент сантехники" + chr(10) + chr(10) + "Тип:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("plumb_del_"):
+        panel_id = int(data.replace("plumb_del_", ""))
+        try:
+            p = core_plumbing.get_panel(panel_id)
+            object_id = p.get('object_id') if p else None
+            core_plumbing.delete_panel(panel_id)
+        except Exception as e:
+            print("plumb del: " + str(e), flush=True)
+            object_id = None
+        if object_id:
+            try:
+                await query.edit_message_text(
+                    "Удалено",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К сантехнике", callback_data="plumb_list_" + str(object_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
+    if data.startswith("plumb_") and not data.startswith(("plumb_list_", "plumb_add_", "plumb_del_")):
+        try:
+            panel_id = int(data.replace("plumb_", ""))
+        except ValueError:
+            return False
+        try:
+            p = core_plumbing.get_panel(panel_id)
+        except Exception:
+            p = None
+        if not p:
+            try:
+                await query.edit_message_text("Не найдено")
+            except Exception:
+                pass
+            return True
+        ptype = core_plumbing.get_panel_type_label(p.get('panel_type'))
+        mount = core_plumbing.get_mount_type_label(p.get('mount_type'))
+        lines = ["🔧 " + str(p.get('name')) + " (" + str(ptype) + ")", ""]
+        lines.append("Монтаж: " + str(mount))
+        if p.get('note'):
+            lines.append("Заметка: " + str(p['note']))
+        # Трассы
+        try:
+            routes = core_plumbing.get_routes_by_panel(panel_id)
+            lines.append("")
+            lines.append("Трассы: " + str(len(routes)))
+            for idx, r in enumerate(routes, start=1):
+                lines.append("  " + str(idx) + ". " + core_plumbing.format_route(r))
+        except Exception:
+            pass
+        kb_rows = [
+            [InlineKeyboardButton("⬅️ К сантехнике", callback_data="plumb_list_" + str(p.get('object_id')))],
+            [InlineKeyboardButton("🗑 Удалить", callback_data="plumb_del_" + str(panel_id))],
+        ]
+        await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
         return True
 
     if data.startswith("panel_auto_"):
