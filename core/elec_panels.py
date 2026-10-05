@@ -968,3 +968,14 @@ def format_panel_cost(panel_id):
     lines.append("")
     lines.append("💰 ИТОГО: " + str(data['total']) + " ₽")
     return chr(10).join(lines)
+
+
+def recalc_panel_safe(panel_id):
+    """Безопасный пересчёт щита — вызывается после мутаций групп.
+    Не падает, если что-то сломано. Возвращает dict или None.
+    """
+    try:
+        return autocomplete_panel(panel_id)
+    except Exception as e:
+        print("recalc_panel_safe(" + str(panel_id) + "): " + str(e), flush=True)
+        return None

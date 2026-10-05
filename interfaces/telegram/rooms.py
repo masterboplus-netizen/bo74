@@ -3348,6 +3348,7 @@ async def handle_groups_callback(query, context, data):
         try:
             if core_elec_panels:
                 core_elec_panels.assign_group_to_panel(group_id, panel_id)
+                core_elec_panels.recalc_panel_safe(panel_id)
         except Exception as e:
             print("group_panel_set: " + str(e), flush=True)
         await handle_panels_callback(query, context, "panel_" + str(panel_id))
@@ -3355,9 +3356,17 @@ async def handle_groups_callback(query, context, data):
 
     if data.startswith("group_panel_unset_"):
         group_id = int(data.replace("group_panel_unset_", ""))
+        _old_panel_id = None
+        try:
+            _g_before = core_elec.get_group(group_id) if core_elec else None
+            _old_panel_id = _g_before.get("panel_id") if _g_before else None
+        except Exception:
+            _old_panel_id = None
         try:
             if core_elec_panels:
                 core_elec_panels.unassign_group_from_panel(group_id)
+                if _old_panel_id:
+                    core_elec_panels.recalc_panel_safe(_old_panel_id)
         except Exception as e:
             print("group_panel_unset: " + str(e), flush=True)
         _g = core_elec.get_group(group_id) if core_elec else None
@@ -4737,6 +4746,7 @@ async def _handle_group_load_input(update, context):
             _object_panels = core_elec_panels.get_panels(object_id)
             if len(_object_panels) == 1:
                 core_elec_panels.assign_group_to_panel(group_id, _object_panels[0]["id"])
+                core_elec_panels.recalc_panel_safe(_object_panels[0]["id"])
     except Exception as _e:
         print("auto assign: " + str(_e), flush=True)
 
