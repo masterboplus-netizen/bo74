@@ -866,3 +866,92 @@ def _get_link(parent_panel_id, child_id):
         (parent_panel_id, child_id)
     )
     return dict(row) if row else None
+
+
+# ============================================================
+# СМЕТА ЩИТА (расчёт стоимости)
+# ============================================================
+
+def calc_component_price(c):
+    """Цена одного компонента (с учётом quantity).
+
+    Приоритет:
+    1. c['price_unit'] — ручная цена на конкретный компонент
+    2. core.elec_prices.get_component_price (справочник + дефолт)
+    """
+    from core import elec_prices as prices_mod
+
+    qty = c.get('quantity') or 1
+    manual = c.get('price_unit')
+    if manual:
+        return round(float(manual) * qty, 2)
+
+    ctype = c.get('component_type')
+    if not ctype:
+        return 0.0
+    rating = c.get('rating')
+    poles = c.get('poles')
+    brand = c.get('brand')
+    unit = 0.0
+    try:
+        unit = prices_mod.get_component_price(ctype, rating=rating, poles=poles, brand=brand)
+    except Exception as e:
+        print("calc_component_price: " + str(e), flush=True)
+    return round(float(unit) * qty, 2)
+
+
+def calc_panel_cost(panel_id):
+    """Стоимость щита (сумма всех компонентов)."""
+    comps = get_components(panel_id)
+    total = 0.0
+    for c in comps:
+        total += calc_component_price(c)
+    return round(total, 2)
+
+
+def get_panel_cost_breakdown(panel_id):
+    """Детально: [{component, price, source}], + итог + по типам."""
+    comps = get_components(panel_id)
+    lines = []
+    by_type = {}
+    total = 0.0
+    for c in comps:
+        price = calc_component_price(c)
+        total += price
+        ctype = c.get('component_type') or 'other'
+        by_type[ctype] = by_type.get(ctype, 0) + price
+        lines.append({'component': c, 'price': price})
+    return {
+        'lines': lines,
+        'by_type': {k: round(v, 2) for k, v in by_type.items()},
+        'total': round(total, 2),
+    }
+
+
+def format_panel_cost(panel_id):
+    """Текстовая смета щита."""
+    p = get_panel(panel_id)
+    if not p:
+        return "Щит не найден"
+    data = get_panel_cost_breakdown(panel_id)
+    lines = ["💰 Смета щита «" + str(p.get('name') or '?') + "»", ""]
+    if not data['lines']:
+        lines.append("_Компонентов нет._")
+        lines.append("")
+        lines.append("Запусти 🪄 Автокомплектацию сначала.")
+        return chr(10).join(lines)
+
+    for item in data['lines']:
+        c = item['component']
+        price = item['price']
+        mark = " [ручная]" if c.get('is_manual') else ""
+        lines.append("• " + format_component(c) + mark + " — " + str(price) + " ₽")
+
+    lines.append("")
+    lines.append("── По типам ──")
+    for t, s in sorted(data['by_type'].items(), key=lambda x: -x[1]):
+        lines.append("  " + str(t) + ": " + str(s) + " ₽")
+
+    lines.append("")
+    lines.append("💰 ИТОГО: " + str(data['total']) + " ₽")
+    return chr(10).join(lines)

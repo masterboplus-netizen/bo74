@@ -342,3 +342,135 @@ def _decode_waypoints(d):
 
 def _decode_row(d):
     return _decode_waypoints(d)
+
+
+# ============================================================
+# СМЕТА ЭЛЕКТРОМОНТАЖА (кабель + расходники)
+# ============================================================
+
+def calc_route_cost(route_id, with_consumables=True):
+    """Стоимость одной трассы: кабель + (опц.) расходники.
+
+    Возвращает dict: {length_m, cable_type, route_type,
+                      cable_price_per_m, cable_cost, consumable_cost, total}
+    """
+    from core import spec
+
+    r = get_route(route_id)
+    if not r:
+        return None
+
+    length = r.get('length_m') or 0
+    ctype = r.get('cable_type')
+    rtype = r.get('route_type')
+
+    cable_price = spec.get_cable_price(ctype)
+    cable_cost = round(length * cable_price, 2)
+
+    consumable_cost = 0.0
+    if with_consumables and rtype:
+        cons_price = spec.get_consumable_price(rtype)
+        consumable_cost = round(length * cons_price, 2)
+
+    return {
+        'length_m': length,
+        'cable_type': ctype,
+        'route_type': rtype,
+        'cable_price_per_m': cable_price,
+        'cable_cost': cable_cost,
+        'consumable_cost': consumable_cost,
+        'total': round(cable_cost + consumable_cost, 2),
+    }
+
+
+def calc_montage_cost_by_group(group_id, with_consumables=True):
+    """Смета электромонтажа по группе."""
+    routes = get_routes_by_group(group_id)
+    total_cable = 0.0
+    total_cons = 0.0
+    total_m = 0.0
+    by_cable = {}
+    by_route = {}
+    for r in routes:
+        c = calc_route_cost(r['id'], with_consumables=with_consumables)
+        if not c:
+            continue
+        total_cable += c['cable_cost']
+        total_cons += c['consumable_cost']
+        total_m += c['length_m']
+        ctype = c['cable_type'] or 'без типа'
+        by_cable[ctype] = by_cable.get(ctype, 0) + c['cable_cost']
+        rtype = c['route_type'] or 'без типа'
+        by_route[rtype] = by_route.get(rtype, 0) + c['consumable_cost']
+    return {
+        'routes_count': len(routes),
+        'total_m': round(total_m, 2),
+        'total_cable_cost': round(total_cable, 2),
+        'total_consumable_cost': round(total_cons, 2),
+        'total': round(total_cable + total_cons, 2),
+        'by_cable': {k: round(v, 2) for k, v in by_cable.items()},
+        'by_route': {k: round(v, 2) for k, v in by_route.items()},
+    }
+
+
+def calc_montage_cost_by_panel(panel_id, with_consumables=True):
+    """Смета электромонтажа по щиту (все группы щита)."""
+    from core.elec_panels import get_groups_by_panel
+    groups = get_groups_by_panel(panel_id)
+    total_cable = 0.0
+    total_cons = 0.0
+    total_m = 0.0
+    by_cable = {}
+    by_route = {}
+    for g in groups:
+        s = calc_montage_cost_by_group(g['id'], with_consumables=with_consumables)
+        total_cable += s['total_cable_cost']
+        total_cons += s['total_consumable_cost']
+        total_m += s['total_m']
+        for k, v in s['by_cable'].items():
+            by_cable[k] = by_cable.get(k, 0) + v
+        for k, v in s['by_route'].items():
+            by_route[k] = by_route.get(k, 0) + v
+    return {
+        'total_m': round(total_m, 2),
+        'total_cable_cost': round(total_cable, 2),
+        'total_consumable_cost': round(total_cons, 2),
+        'total': round(total_cable + total_cons, 2),
+        'by_cable': {k: round(v, 2) for k, v in by_cable.items()},
+        'by_route': {k: round(v, 2) for k, v in by_route.items()},
+    }
+
+
+def format_montage_cost_summary(panel_id=None, group_id=None):
+    """Текстовая смета электромонтажа (кабель + расходники)."""
+    if group_id:
+        s = calc_montage_cost_by_group(group_id)
+        header = "🔧 Смета электромонтажа (группа)"
+    elif panel_id:
+        s = calc_montage_cost_by_panel(panel_id)
+        header = "🔧 Смета электромонтажа (щит)"
+    else:
+        return "Не задан ни щит, ни группа"
+
+    lines = [header + ":", ""]
+    lines.append("Трасс: " + str(s.get('routes_count', '-')) + " · Метраж: " + str(s['total_m']) + " м")
+    lines.append("")
+    lines.append("── По типам кабеля ──")
+    if s['by_cable']:
+        for ctype, cost in sorted(s['by_cable'].items(), key=lambda x: -x[1]):
+            lines.append("  • " + str(ctype) + ": " + str(cost) + " ₽")
+    else:
+        lines.append("  (нет)")
+    lines.append("")
+    lines.append("── По типам прокладки ──")
+    if s['by_route']:
+        for rtype, cost in sorted(s['by_route'].items(), key=lambda x: -x[1]):
+            lines.append("  • " + str(rtype) + ": " + str(cost) + " ₽")
+    else:
+        lines.append("  (нет)")
+    lines.append("")
+    lines.append("💵 Кабель: " + str(s['total_cable_cost']) + " ₽")
+    lines.append("🔧 Расходники: " + str(s['total_consumable_cost']) + " ₽")
+    lines.append("")
+    lines.append("💰 ИТОГО: " + str(s['total']) + " ₽")
+    return chr(10).join(lines)

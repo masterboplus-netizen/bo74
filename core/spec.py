@@ -750,3 +750,114 @@ def pick_breaker_by_current(current_a):
             return rating
     return BREAKER_RATINGS[-1]
 
+
+
+# ============================================================
+# ЦЕНЫ КОМПОНЕНТОВ (дефолтные, для смет)
+# ============================================================
+
+COMPONENT_PRICES_DEFAULT = {
+    # Автоматы модульные (EKF ВА47-29, IEK)
+    'auto_1p': 250,
+    'auto_2p': 450,
+    'auto_3p': 700,
+    'auto_4p': 900,
+    # УЗО (ВД1-63)
+    'uzo_2p': 1500,
+    'uzo_4p': 3500,
+    # Дифавтоматы (АВДТ32)
+    'dif_2p': 2500,
+    'dif_4p': 4500,
+    # Рубильники
+    'switch_2p': 500,
+    'switch_4p': 1200,
+    # Счётчики
+    'counter_1p': 2500,
+    'counter_3p': 5000,
+    # Шины
+    'busbar_n': 150,
+    'busbar_pe': 150,
+    # Клеммы
+    'clamp': 20,
+}
+
+
+def get_default_price(component_type, poles=None):
+    """Возвращает дефолтную цену по типу компонента.
+
+    Логика:
+    1. component_type + '_' + poles + 'p' (например auto_1p)
+    2. component_type
+    3. Первый ключ с префиксом component_type + '_' (fallback)
+    """
+    key = component_type
+    if poles:
+        key = component_type + '_' + str(poles) + 'p'
+    if key in COMPONENT_PRICES_DEFAULT:
+        return COMPONENT_PRICES_DEFAULT[key]
+    if component_type in COMPONENT_PRICES_DEFAULT:
+        return COMPONENT_PRICES_DEFAULT[component_type]
+    # Fallback: ищем по префиксу
+    prefix = str(component_type) + '_'
+    for k, v in COMPONENT_PRICES_DEFAULT.items():
+        if k.startswith(prefix):
+            return v
+    # Дополнительные алиасы
+    aliases = {
+        'auto': 250,
+        'uzo': 1500,
+        'dif': 2500,
+        'switch': 500,
+        'counter': 3000,
+        'busbar': 150,
+        'clamp': 20,
+        'input': 250,
+    }
+    if component_type in aliases:
+        return aliases[component_type]
+    return 0
+
+
+# ============================================================
+# ЦЕНЫ КАБЕЛЯ (₽/м)
+# ============================================================
+
+CABLE_PRICES_DEFAULT = {
+    '3x1.5':  80,
+    '3x2.5':  120,
+    '3x4':    180,
+    '3x6':    250,
+    '5x1.5':  130,
+    '5x2.5':  180,
+    '5x4':    280,
+    '5x6':    380,
+    '5x10':   550,
+}
+
+
+def get_cable_price(cable_type):
+    """Возвращает цену кабеля за метр по типу."""
+    if not cable_type:
+        return 0
+    return CABLE_PRICES_DEFAULT.get(cable_type, 0)
+
+
+# ============================================================
+# ЦЕНЫ РАСХОДНИКОВ (₽/м — для прокладки)
+# ============================================================
+
+CONSUMABLE_PRICES_DEFAULT = {
+    'gofra':    30,     # гофра
+    'shtroba':  200,    # штробление
+    'lotok':    150,    # кабельный лоток
+    'styazhka': 100,    # прокладка в стяжке
+    'otkryto':  50,     # открытая прокладка
+    'klipsa':   15,     # клипсы
+}
+
+
+def get_consumable_price(route_type):
+    """Возвращает цену расходника за метр по типу прокладки."""
+    if not route_type:
+        return 0
+    return CONSUMABLE_PRICES_DEFAULT.get(route_type, 0)
