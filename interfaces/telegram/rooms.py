@@ -92,9 +92,12 @@ except Exception:
     core_elec_prices = None
 
 try:
-    from core.export.spec_export import save_panel_spec, export_panel_spec
+    from core.export.spec_export import (
+        save_panel_spec, export_panel_spec, export_object_spec
+    )
 except Exception:
     save_panel_spec = export_panel_spec = None
+    export_object_spec = None
 
 try:
     from core.export.estimate_export import (
@@ -3897,6 +3900,48 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         handled = await handle_obj_elec_callback(query, context, data)
         if handled:
             return
+
+    # --- СПЕЦИФИКАЦИЯ ОБЪЕКТА ---
+    if data.startswith("obj_spec_"):
+        object_id = int(data.replace("obj_spec_", ""))
+        if export_object_spec is None:
+            try:
+                await query.edit_message_text("Модуль экспорта не загружен")
+            except Exception:
+                pass
+            return True
+        try:
+            import tempfile, os
+            content = export_object_spec(object_id)
+            if not content:
+                raise Exception("Пустая спецификация")
+            target = os.path.join(tempfile.gettempdir(), "obj_spec_" + str(object_id) + ".txt")
+            with open(target, "w", encoding="utf-8") as f:
+                f.write(content)
+            from modules.objects import get_object
+            o = get_object(object_id)
+            name = o['name'] if o else ('obj_' + str(object_id))
+            with open(target, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=str(name) + "_spec.txt",
+                    caption="📄 Спецификация ЭОМ объекта «" + str(name) + "»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К объекту", callback_data="obj_" + str(object_id))],
+                    ])
+                )
+        except Exception as e:
+            print("obj spec: " + str(e), flush=True)
+            try:
+                await query.edit_message_text(
+                    "Ошибка: " + str(e),
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К объекту", callback_data="obj_" + str(object_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
 
     # --- СМЕТА ЭОМ ОБЪЕКТА ---
     if data.startswith("obj_elec_cost_"):

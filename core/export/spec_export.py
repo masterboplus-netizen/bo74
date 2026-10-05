@@ -94,3 +94,61 @@ def save_panel_spec(panel_id, path=None):
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
     return path
+
+
+def export_object_spec(object_id):
+    """Спецификация ЭОМ объекта (все щиты + монтаж)."""
+    from core.elec_panels import get_panels, get_components, format_component, calc_component_price
+    from core.elec_prices import calc_object_elec_total
+    from modules.objects import get_object
+
+    obj = get_object(object_id)
+    obj_name = obj['name'] if obj else ('Объект #' + str(object_id))
+
+    panels = get_panels(object_id)
+    data = calc_object_elec_total(object_id)
+
+    lines = []
+    lines.append("=" * 72)
+    lines.append("СПЕЦИФИКАЦИЯ ЭОМ ОБЪЕКТА")
+    lines.append("=" * 72)
+    lines.append("")
+    lines.append("Объект:  " + str(obj_name))
+    lines.append("Дата:    " + datetime.now().strftime('%d.%m.%Y'))
+    lines.append("")
+    lines.append("-" * 72)
+    lines.append("ЩИТЫ")
+    lines.append("-" * 72)
+
+    for p in panels:
+        lines.append("")
+        lines.append("Щит: " + str(p.get('name') or '?'))
+        lines.append("Тип: " + str(p.get('panel_type') or '?'))
+        comps = get_components(p['id'])
+        if not comps:
+            lines.append("  (нет компонентов)")
+        else:
+            for idx, c in enumerate(comps, start=1):
+                lines.append("  " + str(idx) + ". " + format_component(c))
+        try:
+            cost = sum(calc_component_price(c) for c in comps)
+        except Exception:
+            cost = 0
+        lines.append("  Итого щит: " + str(round(cost, 2)) + " ₽")
+
+    lines.append("")
+    lines.append("=" * 72)
+    lines.append("СВОДКА")
+    lines.append("=" * 72)
+    lines.append("")
+    lines.append("Щиты: " + str(data['panels_cost']) + " ₽")
+    lines.append("Электромонтаж:")
+    lines.append("  Кабель: " + str(data['montage_cable_cost']) + " ₽")
+    lines.append("  Расходники: " + str(data['montage_consumable_cost']) + " ₽")
+    lines.append("  Итого: " + str(data['montage_total']) + " ₽")
+    lines.append("")
+    lines.append("ВСЕГО ЭОМ: " + str(data['total']) + " ₽")
+    lines.append("")
+    lines.append("Сформировано: Бо 7.7 · " + datetime.now().strftime('%Y-%m-%d %H:%M'))
+
+    return "\n".join(lines)
