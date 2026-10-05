@@ -3296,73 +3296,6 @@ async def handle_groups_callback(query, context, data):
         return True
 
     # --- КАРТОЧКА ГРУППЫ ---
-    if data.startswith("group_panel_pick_"):
-        group_id = int(data.replace("group_panel_pick_", ""))
-        g = core_elec.get_group(group_id) if core_elec else None
-        if not g:
-            try:
-                await query.edit_message_text("Группа не найдена")
-            except Exception:
-                pass
-            return True
-        object_id = g.get('object_id')
-        panels = core_elec_panels.get_panels(object_id) if core_elec_panels else []
-        if not panels:
-            try:
-                await query.edit_message_text(
-                    "У объекта нет щитов. Создай щит сначала.",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("K группе", callback_data="group_" + str(group_id))],
-                    ])
-                )
-            except Exception:
-                pass
-            return True
-        cur_panel_id = g.get('panel_id')
-        lines = ["Привязать группу к щиту:", ""]
-        kb_rows = []
-        for idx, p2 in enumerate(panels, start=1):
-            ptype = core_elec_panels.get_panel_type_label(p2.get('panel_type'))
-            mark = " - текущий" if p2['id'] == cur_panel_id else ""
-            pname = (p2.get('name') or '?')[:30]
-            lines.append(str(idx) + ". " + pname + " (" + str(ptype) + ")" + mark)
-            label = str(idx) + ". " + pname + mark
-            kb_rows.append([InlineKeyboardButton(
-                label[:60],
-                callback_data="group_panel_set_" + str(group_id) + "_" + str(p2['id'])
-            )])
-        kb_rows.append([InlineKeyboardButton("K группе", callback_data="group_" + str(group_id))])
-        try:
-            await query.edit_message_text(
-                chr(10).join(lines),
-                reply_markup=InlineKeyboardMarkup(kb_rows)
-            )
-        except Exception:
-            pass
-        return True
-
-    if data.startswith("group_panel_set_"):
-        parts = data.replace("group_panel_set_", "").rsplit("_", 1)
-        group_id = int(parts[0])
-        panel_id = int(parts[1])
-        try:
-            if core_elec_panels:
-                core_elec_panels.assign_group_to_panel(group_id, panel_id)
-        except Exception as e:
-            print("group_panel_set: " + str(e), flush=True)
-        await handle_groups_callback(query, context, "group_" + str(group_id))
-        return True
-
-    if data.startswith("group_panel_unset_"):
-        group_id = int(data.replace("group_panel_unset_", ""))
-        try:
-            if core_elec_panels:
-                core_elec_panels.unassign_group_from_panel(group_id)
-        except Exception as e:
-            print("group_panel_unset: " + str(e), flush=True)
-        await handle_groups_callback(query, context, "group_" + str(group_id))
-        return True
-
     if data.startswith("group_") and not data.startswith(("group_new_", "group_purpose_", "group_phase_", "group_routes_")):
         try:
             group_id = int(data.replace("group_", ""))
@@ -3393,16 +3326,12 @@ async def handle_groups_callback(query, context, data):
             "Кабель: " + str(_cable)
         )
         if _panel_id:
-            text += chr(10) + "Щит: " + (core_elec_panels.get_panel(_panel_id).get("name") if (core_elec_panels and core_elec_panels.get_panel(_panel_id)) else ("#" + str(_panel_id)))
+            text += chr(10) + "Щит: #" + str(_panel_id)
         kb_rows = [
             [InlineKeyboardButton("📏 Трассы", callback_data="group_routes_" + str(group_id))],
         ]
         if _panel_id:
             kb_rows.append([InlineKeyboardButton("⚡ К щиту", callback_data="panel_" + str(_panel_id))])
-            kb_rows.append([InlineKeyboardButton("⚡ Сменить щит", callback_data="group_panel_pick_" + str(group_id))])
-            kb_rows.append([InlineKeyboardButton("⚡ Отвязать", callback_data="group_panel_unset_" + str(group_id))])
-        else:
-            kb_rows.append([InlineKeyboardButton("⚡ Привязать к щиту", callback_data="group_panel_pick_" + str(group_id))])
         kb_rows.append([InlineKeyboardButton("⬅️ К группам", callback_data="room_groups_" + str(g.get('room_id') or 0))])
         try:
             await query.edit_message_text(
