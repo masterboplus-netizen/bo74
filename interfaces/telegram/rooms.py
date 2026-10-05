@@ -6314,6 +6314,7 @@ async def handle_panels_callback(query, context, data):
                 str(idx) + ". " + str(p.get('name'))[:35],
                 callback_data="plumb_" + str(p['id'])
             )])
+        kb_rows.append([InlineKeyboardButton("🚰 Вода", callback_data="plumb_water_" + str(object_id))])
         kb_rows.append([InlineKeyboardButton("💰 Смета сантехники", callback_data="plumb_cost_obj_" + str(object_id))])
         kb_rows.append([InlineKeyboardButton("📊 Смета (CSV)", callback_data="plumb_csv_obj_" + str(object_id))])
         kb_rows.append([InlineKeyboardButton("➕ Добавить коллектор", callback_data="plumb_add_" + str(object_id))])
@@ -6567,6 +6568,21 @@ async def handle_panels_callback(query, context, data):
             text = text[:3900] + chr(10) + "..."
         await _safe_edit(query, text, InlineKeyboardMarkup([
             [InlineKeyboardButton("⬅️ К коллектору", callback_data="plumb_" + str(panel_id))],
+        ]))
+        return True
+
+    if data.startswith("plumb_water_"):
+        object_id = int(data.replace("plumb_water_", ""))
+        try:
+            text = core_plumbing.format_water_summary(object_id)
+        except Exception as e:
+            print("plumb water: " + str(e), flush=True)
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        await _safe_edit(query, text, InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Стояк", callback_data="plumb_add_type_" + str(object_id) + "_riser")],
+            [InlineKeyboardButton("⬅️ К сантехнике", callback_data="plumb_list_" + str(object_id))],
         ]))
         return True
 

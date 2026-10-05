@@ -477,3 +477,67 @@ def format_points_of_panel(panel_id):
         lines.append(str(idx) + ". " + " · ".join(parts))
     return chr(10).join(lines)
 
+# ============================================================
+# ВОДА: СТОЯКИ + СЧЁТЧИКИ
+# ============================================================
+
+WATER_TYPES = {
+    'cold': 'ХВС (холодная вода)',
+    'hot': 'ГВС (горячая вода)',
+    'sewer': 'Канализация',
+    'heating': 'Отопление',
+    'gas': 'Газ',
+    'vent': 'Вентиляция',
+}
+
+METER_TYPES = {
+    'cold_meter': 'Счётчик ХВС',
+    'hot_meter': 'Счётчик ГВС',
+    'heat_meter': 'Счётчик тепла',
+    'gas_meter': 'Счётчик газа',
+    'electric_meter': 'Счётчик электрики',
+}
+
+
+def get_water_type_label(code):
+    return WATER_TYPES.get(code, code or '—')
+
+
+def get_meter_type_label(code):
+    return METER_TYPES.get(code, code or '—')
+
+
+def create_riser(object_id, name, water_type='cold', floor_id=None, note=None):
+    """Создаёт стояк воды."""
+    return create_panel(
+        object_id=object_id, name=name,
+        panel_type='riser', floor_id=floor_id,
+        mount_type='wall', note=note
+    )
+
+
+def get_risers(object_id):
+    """Все стояки воды объекта."""
+    rows = fetchall(
+        "SELECT * FROM plumbing_panels WHERE object_id = ? AND panel_type = 'riser' ORDER BY id",
+        (object_id,)
+    )
+    return [dict(r) for r in rows]
+
+
+def format_water_summary(object_id):
+    """Сводка по воде объекта."""
+    panels = get_panels(object_id)
+    risers = [p for p in panels if p.get('panel_type') == 'riser']
+    collectors = [p for p in panels if p.get('panel_type') == 'collector']
+
+    lines = ["🚰 Вода на объекте", ""]
+    lines.append("Стояков: " + str(len(risers)))
+    for idx, p in enumerate(risers, start=1):
+        lines.append(str(idx) + ". " + str(p.get('name') or '?'))
+    lines.append("")
+    lines.append("Коллекторов: " + str(len(collectors)))
+    for idx, p in enumerate(collectors, start=1):
+        lines.append(str(idx) + ". " + str(p.get('name') or '?'))
+    return chr(10).join(lines)
+
