@@ -4766,6 +4766,47 @@ async def handle_measure_input(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
 
+    if step == 'plumb_route_length':
+        panel_id = context.user_data.get('plumb_route_panel_id')
+        pipe_type = context.user_data.get('plumb_route_pipe')
+        if not panel_id or not pipe_type:
+            await update.message.reply_text("Потерялись данные")
+            context.user_data['waiting_for'] = None
+            return
+        val = (update.message.text or '').strip().replace(',', '.')
+        try:
+            length = float(val)
+        except ValueError:
+            await update.message.reply_text("Нужно число")
+            return
+        if length <= 0 or length > 10000:
+            await update.message.reply_text("Длина от 0.1 до 10 000 м")
+            return
+        try:
+            p = core_plumbing.get_panel(panel_id)
+            object_id = p.get('object_id') if p else None
+            rid = core_plumbing.create_route(
+                object_id=object_id, panel_id=panel_id,
+                pipe_type=pipe_type, length_m=length,
+                route_type='shtroba'
+            )
+        except Exception as e:
+            print("plumb route create: " + str(e), flush=True)
+            rid = None
+        for k in ['plumb_route_panel_id', 'plumb_route_pipe', 'waiting_for']:
+            context.user_data[k] = None
+        if rid:
+            await update.message.reply_text(
+                "Трасса создана: " + core_plumbing.get_pipe_label(pipe_type) + " · " + str(length) + " м",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📏 К трассам", callback_data="plumb_routes_" + str(panel_id))],
+                    [InlineKeyboardButton("📏 Открыть", callback_data="plumb_route_" + str(rid))],
+                ])
+            )
+        else:
+            await update.message.reply_text("Не удалось создать трассу")
+        return
+
     if step == 'plumb_new_name':
         name = (update.message.text or '').strip()
         if not name:
@@ -6076,11 +6117,157 @@ async def handle_panels_callback(query, context, data):
         except Exception:
             pass
         kb_rows = [
+            [InlineKeyboardButton("📏 Трассы", callback_data="plumb_routes_" + str(panel_id))],
+            [InlineKeyboardButton("➕ Добавить трассу", callback_data="plumb_route_new_" + str(panel_id))],
             [InlineKeyboardButton("💰 Смета коллектора", callback_data="plumb_cost_" + str(panel_id))],
+            [InlineKeyboardButton("📄 Спецификация (TXT)", callback_data="plumb_spec_" + str(panel_id))],
             [InlineKeyboardButton("⬅️ К сантехнике", callback_data="plumb_list_" + str(p.get('object_id')))],
             [InlineKeyboardButton("🗑 Удалить", callback_data="plumb_del_" + str(panel_id))],
         ]
         await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
+        return True
+
+    # --- ТРАССЫ САНТЕХНИКИ ---
+    if data.startswith("plumb_routes_"):
+        panel_id = int(data.replace("plumb_routes_", ""))
+        try:
+            routes = core_plumbing.get_routes_by_panel(panel_id)
+            p = core_plumbing.get_panel(panel_id)
+            pname = p.get('name') if p else '?'
+        except Exception as e:
+            print("plumb routes: " + str(e), flush=True)
+            routes = []
+            pname = '?'
+        lines = ["📏 Трассы коллектора «" + str(pname) + "»", ""]
+        if not routes:
+            lines.append("Трасс пока нет.")
+        else:
+            for idx, r in enumerate(routes, start=1):
+                lines.append(str(idx) + ". " + core_plumbing.format_route(r))
+        kb_rows = []
+        for idx, r in enumerate(routes, start=1):
+            label = core_plumbing.format_route(r)[:40]
+            kb_rows.append([InlineKeyboardButton(
+                str(idx) + ". " + label,
+                callback_data="plumb_route_" + str(r['id'])
+            )])
+        kb_rows.append([InlineKeyboardButton("➕ Добавить", callback_data="plumb_route_new_" + str(panel_id))])
+        kb_rows.append([InlineKeyboardButton("⬅️ К коллектору", callback_data="plumb_" + str(panel_id))])
+        await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
+        return True
+
+    if data.startswith("plumb_route_new_"):
+        panel_id = int(data.replace("plumb_route_new_", ""))
+        context.user_data['plumb_route_panel_id'] = panel_id
+        # Шаг 1 — тип трубы
+        kb_rows = [
+            [InlineKeyboardButton("PPR 20 мм", callback_data="plumb_route_pipe_" + str(panel_id) + "_ppr20")],
+            [InlineKeyboardButton("PPR 25 мм", callback_data="plumb_route_pipe_" + str(panel_id) + "_ppr25")],
+            [InlineKeyboardButton("PPR 32 мм", callback_data="plumb_route_pipe_" + str(panel_id) + "_ppr32")],
+            [InlineKeyboardButton("PEX 16 мм", callback_data="plumb_route_pipe_" + str(panel_id) + "_pex16")],
+            [InlineKeyboardButton("Медь 15 мм", callback_data="plumb_route_pipe_" + str(panel_id) + "_copper15")],
+            [InlineKeyboardButton("Канализация 50 мм", callback_data="plumb_route_pipe_" + str(panel_id) + "_sewer50")],
+            [InlineKeyboardButton("Канализация 110 мм", callback_data="plumb_route_pipe_" + str(panel_id) + "_sewer110")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data="plumb_routes_" + str(panel_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                "📏 Новая трасса" + chr(10) + chr(10) + "Тип трубы:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("plumb_route_pipe_"):
+        parts = data.replace("plumb_route_pipe_", "").rsplit("_", 1)
+        panel_id = int(parts[0])
+        pipe_type = parts[1]
+        context.user_data['plumb_route_pipe'] = pipe_type
+        context.user_data['waiting_for'] = 'plumb_route_length'
+        try:
+            await query.edit_message_text(
+                "📏 Длина трассы (метры):" + chr(10) + chr(10) + "_Например: 8.5_",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data="plumb_routes_" + str(panel_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("plumb_route_del_"):
+        route_id = int(data.replace("plumb_route_del_", ""))
+        try:
+            import sqlite3
+            from core.db import fetchone
+            row = fetchone("SELECT panel_id FROM plumbing_routes WHERE id = ?", (route_id,))
+            panel_id = row['panel_id'] if row else None
+            core_plumbing.delete_route(route_id)
+        except Exception as e:
+            print("plumb route del: " + str(e), flush=True)
+            panel_id = None
+        if panel_id:
+            try:
+                await query.edit_message_text(
+                    "Удалено",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К трассам", callback_data="plumb_routes_" + str(panel_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
+    if data.startswith("plumb_route_") and not data.startswith(("plumb_route_new_", "plumb_route_pipe_", "plumb_route_del_")):
+        try:
+            route_id = int(data.replace("plumb_route_", ""))
+        except ValueError:
+            return False
+        try:
+            from core.db import fetchone
+            row = fetchone("SELECT * FROM plumbing_routes WHERE id = ?", (route_id,))
+            r = dict(row) if row else None
+        except Exception:
+            r = None
+        if not r:
+            try:
+                await query.edit_message_text("Трасса не найдена")
+            except Exception:
+                pass
+            return True
+        lines = ["📏 Трасса #" + str(route_id), ""]
+        lines.append("Труба: " + core_plumbing.get_pipe_label(r.get('pipe_type')))
+        lines.append("Длина: " + str(r.get('length_m') or 0) + " м")
+        lines.append("Прокладка: " + str(r.get('route_type') or '—'))
+        try:
+            cost = core_plumbing.calc_route_cost(route_id)
+            if cost:
+                lines.append("")
+                lines.append("Труба: " + str(cost.get('pipe_cost', 0)) + " ₽")
+                lines.append("Расходники: " + str(cost.get('consumable_cost', 0)) + " ₽")
+                lines.append("💰 Итого: " + str(cost.get('total', 0)) + " ₽")
+        except Exception:
+            pass
+        kb_rows = [
+            [InlineKeyboardButton("🗑 Удалить", callback_data="plumb_route_del_" + str(route_id))],
+            [InlineKeyboardButton("⬅️ К трассам", callback_data="plumb_routes_" + str(r.get('panel_id')))],
+        ]
+        await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
+        return True
+
+    if data.startswith("plumb_spec_"):
+        panel_id = int(data.replace("plumb_spec_", ""))
+        try:
+            text = core_plumbing.format_panel_spec(panel_id)
+        except Exception as e:
+            print("plumb spec: " + str(e), flush=True)
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        await _safe_edit(query, text, InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ К коллектору", callback_data="plumb_" + str(panel_id))],
+        ]))
         return True
 
     if data.startswith("plumb_cost_obj_"):
