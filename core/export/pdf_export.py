@@ -90,3 +90,63 @@ def export_panel_spec_pdf(panel_id):
 
     doc.build(story)
     return path
+
+
+
+def export_object_elec_pdf(object_id):
+    """PDF-смета ЭОМ объекта (щиты + монтаж + работы)."""
+    from core import elec_prices as ep
+    from modules.objects import get_object
+    obj = get_object(object_id)
+    obj_name = obj["name"] if obj else ("Объект " + str(object_id))
+    data = ep.calc_object_elec_total(object_id)
+    path = os.path.join(tempfile.gettempdir(), "obj_" + str(object_id) + "_elec.pdf")
+    doc = SimpleDocTemplate(path, pagesize=A4, title="Смета ЭОМ")
+    story = []
+    _pdf_header(story, "Смета ЭОМ: " + str(obj_name), "Электрооборудование и монтаж")
+
+    rows = [["Раздел", "Сумма, руб."]]
+    rows.append(["Щиты (компоненты)", str(round(data.get("panels_cost", 0), 2))])
+    rows.append(["Кабель", str(round(data.get("montage_cable_cost", 0), 2))])
+    rows.append(["Расходники", str(round(data.get("montage_consumable_cost", 0), 2))])
+    rows.append(["Работы", str(round(data.get("works_total", 0), 2))])
+    rows.append(["ИТОГО:", str(round(data.get("total", 0), 2))])
+    _pdf_table(story, rows, col_widths=[100*mm, 60*mm])
+
+    story.append(Spacer(1, 6*mm))
+    styles = getSampleStyleSheet()
+    story.append(Paragraph("Щитов: " + str(data.get("panels_count", 0)), styles["Normal"]))
+    story.append(Paragraph("Метраж: " + str(data.get("montage_meters", 0)) + " м", styles["Normal"]))
+    story.append(Paragraph("Работ: " + str(data.get("works_count", 0)), styles["Normal"]))
+
+    doc.build(story)
+    return path
+
+
+def export_plumbing_estimate_pdf(object_id):
+    """PDF-смета сантехники объекта (трубы + расходники + работы)."""
+    from core import plumbing_panels as pp
+    from modules.objects import get_object
+    obj = get_object(object_id)
+    obj_name = obj["name"] if obj else ("Объект " + str(object_id))
+    data = pp.calc_object_cost(object_id)
+    path = os.path.join(tempfile.gettempdir(), "obj_" + str(object_id) + "_plumb.pdf")
+    doc = SimpleDocTemplate(path, pagesize=A4, title="Смета сантехники")
+    story = []
+    _pdf_header(story, "Смета сантехники: " + str(obj_name), "Трубы, расходники, работы")
+
+    rows = [["Раздел", "Сумма, руб."]]
+    rows.append(["Трубы", str(round(data.get("total_pipe_cost", 0), 2))])
+    rows.append(["Расходники", str(round(data.get("total_consumable_cost", 0), 2))])
+    rows.append(["Работы", str(round(data.get("works_total", 0), 2))])
+    rows.append(["ИТОГО:", str(round(data.get("total", 0), 2))])
+    _pdf_table(story, rows, col_widths=[100*mm, 60*mm])
+
+    story.append(Spacer(1, 6*mm))
+    styles = getSampleStyleSheet()
+    story.append(Paragraph("Коллекторов: " + str(data.get("panels_count", 0)), styles["Normal"]))
+    story.append(Paragraph("Трасс: " + str(data.get("routes_count", 0)), styles["Normal"]))
+    story.append(Paragraph("Метраж: " + str(data.get("total_m", 0)) + " м", styles["Normal"]))
+
+    doc.build(story)
+    return path

@@ -1,5 +1,7 @@
 # DEVLOG — журнал сессий (append-only)
 
+2026-10-06 11:06 — задача 5: все 3 PDF-функции в ядре — panel/elec/plumb (c3060a3)
+
 2026-10-06 11:04 — задача 5: pdf_export.py + export_panel_spec_pdf — спецификация щита работает (3f41f79)
 
 2026-10-06 10:58 — reportlab 5.0.1 установлен; DEPS.md создан; requirements.txt обновлён (c4e9a60)
