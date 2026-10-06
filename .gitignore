@@ -28,3 +28,5 @@ replit.nix
 
 # Бэкапы БД
 backups/*.db
+project.zip
+part_*.txt
