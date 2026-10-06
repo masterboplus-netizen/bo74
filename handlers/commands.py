@@ -1054,6 +1054,7 @@ def object_detail_keyboard(object_id):
         [InlineKeyboardButton("📄 Спецификация ЭОМ", callback_data=f"obj_spec_{object_id}")],
         [InlineKeyboardButton("📄 PDF-смета ЭОМ", callback_data=f"obj_elec_pdf_{object_id}")],
         [InlineKeyboardButton("🔧 Сантехника", callback_data=f"plumb_list_{object_id}")],
+            [InlineKeyboardButton("📄 PDF-смета сантехники", callback_data=f"plumb_pdf_obj_{object_id}")],
         [InlineKeyboardButton("🔨 Работы", callback_data=f"works_list_{object_id}")],
         [InlineKeyboardButton("💱 Импорт цен", callback_data=f"prices_import_{object_id}")],
         [InlineKeyboardButton("📋 Задачи объекта", callback_data=f"objtasks_{object_id}")],

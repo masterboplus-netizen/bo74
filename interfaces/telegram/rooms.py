@@ -6564,7 +6564,7 @@ async def handle_panels_callback(query, context, data):
                 pass
         return True
 
-    if data.startswith("plumb_") and not data.startswith(("plumb_list_", "plumb_add_", "plumb_del_", "plumb_spec_", "plumb_csv_obj_", "plumb_cost_", "plumb_cost_obj_", "plumb_routes_", "plumb_route_", "plumb_points_", "plumb_point_add_", "plumb_point_set_", "plumb_point_unset_")):
+    if data.startswith("plumb_") and not data.startswith(("plumb_list_", "plumb_add_", "plumb_del_", "plumb_spec_", "plumb_csv_obj_", "plumb_cost_", "plumb_cost_obj_", "plumb_routes_", "plumb_route_", "plumb_points_", "plumb_point_add_", "plumb_point_set_", "plumb_point_unset_", "plumb_pdf_obj_")):
         try:
             panel_id = int(data.replace("plumb_", ""))
         except ValueError:
