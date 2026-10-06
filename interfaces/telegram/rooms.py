@@ -6091,6 +6091,37 @@ async def handle_panels_callback(query, context, data):
                 pass
         return True
 
+    if data.startswith("panel_pdf_"):
+        panel_id = int(data.replace("panel_pdf_", ""))
+        try:
+            from core.export import pdf_export as _pp
+            path = _pp.export_panel_spec_pdf(panel_id)
+            if not path:
+                raise Exception("PDF не создан")
+            p = core_elec_panels.get_panel(panel_id)
+            name = (p.get("name") if p else "panel") or "panel"
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=str(name) + "_spec.pdf",
+                    caption="📄 PDF-спецификация щита «" + str(name) + "»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))],
+                    ])
+                )
+        except Exception as e:
+            print("panel_pdf: " + str(e), flush=True)
+            try:
+                await query.edit_message_text(
+                    "Ошибка PDF: " + str(e),
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
     if data.startswith("panel_est_csv_"):
         panel_id = int(data.replace("panel_est_csv_", ""))
         if save_estimate_csv is None or export_panel_estimate_csv is None:
@@ -7134,6 +7165,7 @@ async def handle_panels_callback(query, context, data):
             [InlineKeyboardButton("🔧 Смета монтажа", callback_data="panel_montage_" + str(panel_id))],
             [InlineKeyboardButton("💰 Общая смета щита", callback_data="panel_total_" + str(panel_id))],
             [InlineKeyboardButton("📄 Спецификация (TXT)", callback_data="panel_spec_" + str(panel_id))],
+            [InlineKeyboardButton("📄 PDF-спецификация", callback_data="panel_pdf_" + str(panel_id))],
             [InlineKeyboardButton("📊 Смета (CSV)", callback_data="panel_est_csv_" + str(panel_id))],
             [InlineKeyboardButton("📋 Комплектация", callback_data="panel_comp_" + str(panel_id))],
             [InlineKeyboardButton("📊 Статистика", callback_data="panel_stats_" + str(panel_id))],

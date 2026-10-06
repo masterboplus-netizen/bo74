@@ -1,5 +1,7 @@
 # DEVLOG — журнал сессий (append-only)
 
+2026-10-06 11:42 — PDF: встроен TTF-шрифт (DejaVu → OpenSans), кириллица должна работать (7cbb9e9)
+
 2026-10-06 11:06 — задача 5: все 3 PDF-функции в ядре — panel/elec/plumb (c3060a3)
 
 2026-10-06 11:04 — задача 5: pdf_export.py + export_panel_spec_pdf — спецификация щита работает (3f41f79)

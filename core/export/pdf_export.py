@@ -13,16 +13,28 @@ from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
+FONT_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "docs", "fonts", "DejaVuSans.ttf")
+FONT_NAME = "Helvetica"
+try:
+    if os.path.exists(FONT_PATH):
+        pdfmetrics.registerFont(TTFont("DejaVu", FONT_PATH))
+        FONT_NAME = "DejaVu"
+except Exception as _e:
+    print("pdf font register: " + str(_e), flush=True)
 
 
 def _pdf_header(story, title, subtitle=None):
     styles = getSampleStyleSheet()
-    h1 = ParagraphStyle("H1", parent=styles["Heading1"], fontSize=16, spaceAfter=6)
-    h2 = ParagraphStyle("H2", parent=styles["Heading2"], fontSize=11, textColor=colors.grey, spaceAfter=12)
+    h1 = ParagraphStyle("H1", parent=styles["Heading1"], fontName=FONT_NAME, fontSize=16, spaceAfter=6)
+    h2 = ParagraphStyle("H2", parent=styles["Heading2"], fontName=FONT_NAME, fontSize=11, textColor=colors.grey, spaceAfter=12)
+    normal = ParagraphStyle("N", parent=ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME), fontName=FONT_NAME)
     story.append(Paragraph(title, h1))
     if subtitle:
         story.append(Paragraph(subtitle, h2))
-    story.append(Paragraph("Дата: " + datetime.now().strftime("%d.%m.%Y %H:%M"), styles["Normal"]))
+    story.append(Paragraph("Дата: " + datetime.now().strftime("%d.%m.%Y %H:%M"), normal))
     story.append(Spacer(1, 6*mm))
 
 
@@ -33,7 +45,7 @@ def _pdf_table(story, rows, col_widths=None):
     t = Table(rows, colWidths=col_widths)
     t.setStyle(TableStyle([
         ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#EEEEEE")),
-        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+        ("FONTNAME", (0,0), (-1,-1), FONT_NAME),
         ("FONTSIZE", (0,0), (-1,-1), 9),
         ("GRID", (0,0), (-1,-1), 0.25, colors.grey),
         ("VALIGN", (0,0), (-1,-1), "TOP"),
@@ -81,12 +93,12 @@ def export_panel_spec_pdf(panel_id):
 
     story.append(Spacer(1, 6*mm))
     styles = getSampleStyleSheet()
-    story.append(Paragraph("Компонентов: " + str(stats.get("components_total", 0)), styles["Normal"]))
-    story.append(Paragraph("Модулей занято: " + str(stats.get("modules_used", 0)), styles["Normal"]))
-    story.append(Paragraph("Групп: " + str(stats.get("groups_count", 0)), styles["Normal"]))
-    story.append(Paragraph("Нагрузка: " + str(stats.get("total_load_watt", 0)) + " Вт", styles["Normal"]))
+    story.append(Paragraph("Компонентов: " + str(stats.get("components_total", 0)), ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
+    story.append(Paragraph("Модулей занято: " + str(stats.get("modules_used", 0)), ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
+    story.append(Paragraph("Групп: " + str(stats.get("groups_count", 0)), ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
+    story.append(Paragraph("Нагрузка: " + str(stats.get("total_load_watt", 0)) + " Вт", ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
     story.append(Spacer(1, 4*mm))
-    story.append(Paragraph("ИТОГО стоимость щита: " + str(round(total, 2)) + " руб.", styles["Heading3"]))
+    story.append(Paragraph("ИТОГО стоимость щита: " + str(round(total, 2)) + " руб.", ParagraphStyle("H3", parent=styles["Heading3"], fontName=FONT_NAME)))
 
     doc.build(story)
     return path
@@ -115,9 +127,9 @@ def export_object_elec_pdf(object_id):
 
     story.append(Spacer(1, 6*mm))
     styles = getSampleStyleSheet()
-    story.append(Paragraph("Щитов: " + str(data.get("panels_count", 0)), styles["Normal"]))
-    story.append(Paragraph("Метраж: " + str(data.get("montage_meters", 0)) + " м", styles["Normal"]))
-    story.append(Paragraph("Работ: " + str(data.get("works_count", 0)), styles["Normal"]))
+    story.append(Paragraph("Щитов: " + str(data.get("panels_count", 0)), ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
+    story.append(Paragraph("Метраж: " + str(data.get("montage_meters", 0)) + " м", ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
+    story.append(Paragraph("Работ: " + str(data.get("works_count", 0)), ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
 
     doc.build(story)
     return path
@@ -144,9 +156,9 @@ def export_plumbing_estimate_pdf(object_id):
 
     story.append(Spacer(1, 6*mm))
     styles = getSampleStyleSheet()
-    story.append(Paragraph("Коллекторов: " + str(data.get("panels_count", 0)), styles["Normal"]))
-    story.append(Paragraph("Трасс: " + str(data.get("routes_count", 0)), styles["Normal"]))
-    story.append(Paragraph("Метраж: " + str(data.get("total_m", 0)) + " м", styles["Normal"]))
+    story.append(Paragraph("Коллекторов: " + str(data.get("panels_count", 0)), ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
+    story.append(Paragraph("Трасс: " + str(data.get("routes_count", 0)), ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
+    story.append(Paragraph("Метраж: " + str(data.get("total_m", 0)) + " м", ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
 
     doc.build(story)
     return path
