@@ -1,5 +1,7 @@
 # DEVLOG — журнал сессий (append-only)
 
+2026-10-06 10:58 — reportlab 5.0.1 установлен; DEPS.md создан; requirements.txt обновлён (c4e9a60)
+
 2026-10-05 21:26 — 1.3: триггеры пересчёта — set/unset/создание группы → recalc_panel_safe (7b9c033)
 
 2026-10-05 21:22 — 6.B закрыта: привязка точек сантехники к коллектору работает (таблица plumbing_panel_points, UI, get_points_of_panel) (af4c470)

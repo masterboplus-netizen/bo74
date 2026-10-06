@@ -2,3 +2,4 @@ python-telegram-bot[job-queue]
 Pillow
 rapidfuzz
 APScheduler
+reportlab>=4.0
