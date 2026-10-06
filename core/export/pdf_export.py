@@ -30,7 +30,7 @@ def _pdf_header(story, title, subtitle=None):
     styles = getSampleStyleSheet()
     h1 = ParagraphStyle("H1", parent=styles["Heading1"], fontName=FONT_NAME, fontSize=16, spaceAfter=6)
     h2 = ParagraphStyle("H2", parent=styles["Heading2"], fontName=FONT_NAME, fontSize=11, textColor=colors.grey, spaceAfter=12)
-    normal = ParagraphStyle("N", parent=ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME), fontName=FONT_NAME)
+    normal = ParagraphStyle("N", parent=ParagraphStyle("N", parent=ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME), fontName=FONT_NAME), fontName=FONT_NAME)
     story.append(Paragraph(title, h1))
     if subtitle:
         story.append(Paragraph(subtitle, h2))
@@ -93,12 +93,12 @@ def export_panel_spec_pdf(panel_id):
 
     story.append(Spacer(1, 6*mm))
     styles = getSampleStyleSheet()
-    story.append(Paragraph("Компонентов: " + str(stats.get("components_total", 0)), ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
-    story.append(Paragraph("Модулей занято: " + str(stats.get("modules_used", 0)), ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
-    story.append(Paragraph("Групп: " + str(stats.get("groups_count", 0)), ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
-    story.append(Paragraph("Нагрузка: " + str(stats.get("total_load_watt", 0)) + " Вт", ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
+    story.append(Paragraph("Компонентов: " + str(stats.get("components_total", 0)), ParagraphStyle("N", parent=ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME), fontName=FONT_NAME)))
+    story.append(Paragraph("Модулей занято: " + str(stats.get("modules_used", 0)), ParagraphStyle("N", parent=ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME), fontName=FONT_NAME)))
+    story.append(Paragraph("Групп: " + str(stats.get("groups_count", 0)), ParagraphStyle("N", parent=ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME), fontName=FONT_NAME)))
+    story.append(Paragraph("Нагрузка: " + str(stats.get("total_load_watt", 0)) + " Вт", ParagraphStyle("N", parent=ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME), fontName=FONT_NAME)))
     story.append(Spacer(1, 4*mm))
-    story.append(Paragraph("ИТОГО стоимость щита: " + str(round(total, 2)) + " руб.", ParagraphStyle("H3", parent=styles["Heading3"], fontName=FONT_NAME)))
+    story.append(Paragraph("ИТОГО стоимость щита: " + str(round(total, 2)) + " руб.", ParagraphStyle("H3", parent=ParagraphStyle("H3", parent=styles["Heading3"], fontName=FONT_NAME), fontName=FONT_NAME)))
 
     doc.build(story)
     return path
@@ -127,9 +127,9 @@ def export_object_elec_pdf(object_id):
 
     story.append(Spacer(1, 6*mm))
     styles = getSampleStyleSheet()
-    story.append(Paragraph("Щитов: " + str(data.get("panels_count", 0)), ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
-    story.append(Paragraph("Метраж: " + str(data.get("montage_meters", 0)) + " м", ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
-    story.append(Paragraph("Работ: " + str(data.get("works_count", 0)), ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
+    story.append(Paragraph("Щитов: " + str(data.get("panels_count", 0)), ParagraphStyle("N", parent=ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME), fontName=FONT_NAME)))
+    story.append(Paragraph("Метраж: " + str(data.get("montage_meters", 0)) + " м", ParagraphStyle("N", parent=ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME), fontName=FONT_NAME)))
+    story.append(Paragraph("Работ: " + str(data.get("works_count", 0)), ParagraphStyle("N", parent=ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME), fontName=FONT_NAME)))
 
     doc.build(story)
     return path
@@ -156,9 +156,9 @@ def export_plumbing_estimate_pdf(object_id):
 
     story.append(Spacer(1, 6*mm))
     styles = getSampleStyleSheet()
-    story.append(Paragraph("Коллекторов: " + str(data.get("panels_count", 0)), ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
-    story.append(Paragraph("Трасс: " + str(data.get("routes_count", 0)), ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
-    story.append(Paragraph("Метраж: " + str(data.get("total_m", 0)) + " м", ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME)))
+    story.append(Paragraph("Коллекторов: " + str(data.get("panels_count", 0)), ParagraphStyle("N", parent=ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME), fontName=FONT_NAME)))
+    story.append(Paragraph("Трасс: " + str(data.get("routes_count", 0)), ParagraphStyle("N", parent=ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME), fontName=FONT_NAME)))
+    story.append(Paragraph("Метраж: " + str(data.get("total_m", 0)) + " м", ParagraphStyle("N", parent=ParagraphStyle("N", parent=styles["Normal"], fontName=FONT_NAME), fontName=FONT_NAME)))
 
     doc.build(story)
     return path
