@@ -3078,7 +3078,7 @@ async def handle_obj_elec_callback(query, context, data):
         await _show_obj_elec(query, object_id)
         return True
 
-    if data.startswith("obj_elec_"):
+    if data.startswith("obj_elec_") and not data.startswith(("obj_elec_cost_", "obj_elec_pdf_")):
         object_id = int(data.replace("obj_elec_", ""))
         await _show_obj_elec(query, object_id)
         return True
@@ -4000,7 +4000,7 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
             return
 
     # --- ЭОМ объекта ---
-    if data.startswith("obj_elec_") and not data.startswith("obj_elec_cost_"):
+    if data.startswith("obj_elec_") and not data.startswith(("obj_elec_cost_", "obj_elec_pdf_")):
         handled = await handle_obj_elec_callback(query, context, data)
         if handled:
             return
@@ -4270,6 +4270,12 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         handled = await handle_obj_elec_callback(query, context, data)
         if handled:
             return
+
+    if data.startswith(("obj_elec_pdf_", "plumb_pdf_obj_")):
+        handled = await handle_panels_callback(query, context, data)
+        if handled:
+            return
+
     # --- Помещения ---
 
     if data.startswith("obj_floors_") or data.startswith("floor_"):
@@ -6120,6 +6126,52 @@ async def handle_panels_callback(query, context, data):
                 )
             except Exception:
                 pass
+        return True
+
+    if data.startswith("obj_elec_pdf_"):
+        object_id = int(data.replace("obj_elec_pdf_", ""))
+        try:
+            from core.export import pdf_export as _pp
+            from modules.objects import get_object
+            path = _pp.export_object_elec_pdf(object_id)
+            if not path:
+                raise Exception("PDF не создан")
+            o = get_object(object_id)
+            name = o["name"] if o else ("obj_" + str(object_id))
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=str(name) + "_elec.pdf",
+                    caption="📄 PDF-смета ЭОМ «" + str(name) + "»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К объекту", callback_data="obj_" + str(object_id))],
+                    ])
+                )
+        except Exception as e:
+            print("obj_elec_pdf: " + str(e), flush=True)
+        return True
+
+    if data.startswith("plumb_pdf_obj_"):
+        object_id = int(data.replace("plumb_pdf_obj_", ""))
+        try:
+            from core.export import pdf_export as _pp
+            from modules.objects import get_object
+            path = _pp.export_plumbing_estimate_pdf(object_id)
+            if not path:
+                raise Exception("PDF не создан")
+            o = get_object(object_id)
+            name = o["name"] if o else ("obj_" + str(object_id))
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=str(name) + "_plumb.pdf",
+                    caption="📄 PDF-смета сантехники «" + str(name) + "»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К сантехнике", callback_data="plumb_list_" + str(object_id))],
+                    ])
+                )
+        except Exception as e:
+            print("plumb_pdf_obj: " + str(e), flush=True)
         return True
 
     if data.startswith("panel_est_csv_"):
