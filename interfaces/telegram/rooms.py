@@ -7100,6 +7100,24 @@ async def handle_panels_callback(query, context, data):
             pass
         return True
 
+    if data.startswith("panel_comp_rating_manual_"):
+        tail = data.replace("panel_comp_rating_manual_", "")
+        try:
+            pid_str, ctype = tail.rsplit("_", 1)
+            panel_id = int(pid_str)
+        except Exception as e:
+            print("rating manual parse: " + str(e), flush=True)
+            return True
+        context.user_data["panel_comp_panel_id"] = panel_id
+        context.user_data["panel_comp_type"] = ctype
+        context.user_data["waiting_for"] = "panel_comp_rating"
+        labels = {"breaker": "Автомат", "rcd": "УЗО", "dif": "Дифавтомат", "meter": "Счётчик", "relay": "Реле"}
+        tlabel = labels.get(ctype, ctype)
+        await _safe_edit(query, "⚡ " + str(tlabel) + chr(10) + chr(10) + "Напиши номинал (А):", InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ Отмена", callback_data="panel_comp_" + str(panel_id))],
+        ]))
+        return True
+
     if data.startswith("panel_comp_type_"):
         tail = data.replace("panel_comp_type_", "")
         pid_str, ctype = tail.rsplit("_", 1)
