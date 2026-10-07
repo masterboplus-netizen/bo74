@@ -30,3 +30,4 @@ replit.nix
 backups/*.db
 project.zip
 part_*.txt
+.netrc

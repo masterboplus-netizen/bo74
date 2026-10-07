@@ -150,7 +150,8 @@ core/export/pdf_export.py (reportlab):
 - comms.py add_name
 - Полиш: кнопка «➕ Добавить вручную» дублируется в списке
 - Полиш: новый компонент идёт первым в списке (order_num)
-- git push (нужен токен GitHub)
+- Push: git push origin main
+- Если push упал: восстановить ~/.netrc через python3 -c (токен в Replit Secrets: GITHUB_TOKEN)
 
 ---
 
