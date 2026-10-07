@@ -98,6 +98,84 @@ def calc_object_works_cost(object_id):
     }
 
 
+def calc_object_labor(object_id, rate_per_hour=None):
+    """Расчёт работ по норматив-часам.
+    Возвращает часы × ставка, отдельно от цен по прайсу."""
+    if rate_per_hour is None:
+        rate_per_hour = 800.0
+        try:
+            r = fetchone("SELECT value FROM system_settings WHERE key = 'labor_rate_hour'")
+            if r and r['value']:
+                rate_per_hour = float(r['value'])
+        except Exception:
+            pass
+
+    works = get_works_by_object(object_id)
+    total_hours = 0.0
+    total_by_price = 0.0
+    by_type = {}
+    for w in works:
+        wt = w.get('work_type') or 'other'
+        qty = float(w.get('qty') or 0)
+        h_per_unit = spec.get_work_hours(wt)
+        h = round(qty * h_per_unit, 3)
+        total_hours += h
+        total_by_price += float(w.get('total') or 0)
+        if wt not in by_type:
+            by_type[wt] = {
+                'label': spec.get_work_label(wt),
+                'qty': 0.0, 'unit': w.get('unit') or '',
+                'hours': 0.0,
+                'cost_by_hours': 0.0,
+                'cost_by_price': 0.0,
+            }
+        by_type[wt]['qty'] = round(by_type[wt]['qty'] + qty, 3)
+        by_type[wt]['hours'] = round(by_type[wt]['hours'] + h, 3)
+        by_type[wt]['cost_by_hours'] = round(by_type[wt]['hours'] * rate_per_hour, 2)
+        by_type[wt]['cost_by_price'] = round(by_type[wt]['cost_by_price'] + float(w.get('total') or 0), 2)
+
+    return {
+        'works_count': len(works),
+        'total_hours': round(total_hours, 2),
+        'rate_per_hour': rate_per_hour,
+        'total_by_hours': round(total_hours * rate_per_hour, 2),
+        'total_by_price': round(total_by_price, 2),
+        'by_type': by_type,
+    }
+
+
+def format_object_labor(object_id):
+    """Текстовая смета работ по норматив-часам (отдельно от материалов)."""
+    from modules.objects import get_object
+    obj = get_object(object_id)
+    obj_name = obj['name'] if obj else ('Объект #' + str(object_id))
+    d = calc_object_labor(object_id)
+
+    lines = ["👷 Работы (норматив-часы) «" + str(obj_name) + "»", ""]
+    if not d['works_count']:
+        lines.append("Работ пока нет.")
+        return chr(10).join(lines)
+
+    for wt, info in d['by_type'].items():
+        lines.append(
+            str(info['label']) + ": " +
+            str(info['qty']) + " " + str(info['unit']) + " × " +
+            str(round(info['hours'] / info['qty'], 3) if info['qty'] else 0) + " ч = " +
+            str(info['hours']) + " ч"
+        )
+        lines.append(
+            "  · по нормативам: " + str(info['cost_by_hours']) + " ₽" +
+            "  | по прайсу: " + str(info['cost_by_price']) + " ₽"
+        )
+
+    lines.append("")
+    lines.append("Ставка часа: " + str(d['rate_per_hour']) + " ₽")
+    lines.append("Всего часов: " + str(d['total_hours']) + " ч")
+    lines.append("💰 Работы по нормативам: " + str(d['total_by_hours']) + " ₽")
+    lines.append("💵 Работы по прайсу: " + str(d['total_by_price']) + " ₽")
+    return chr(10).join(lines)
+
+
 def format_object_works(object_id):
     """Текстовая смета работ объекта."""
     from modules.objects import get_object
