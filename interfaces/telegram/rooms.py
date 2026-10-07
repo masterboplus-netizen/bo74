@@ -4271,7 +4271,7 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         if handled:
             return
 
-    if data.startswith(("obj_elec_pdf_", "plumb_pdf_obj_")):
+    if data.startswith(("obj_elec_pdf_", "plumb_pdf_obj_", "plumb_labor_obj_")):
         handled = await handle_panels_callback(query, context, data)
         if handled:
             return
@@ -6495,6 +6495,7 @@ async def handle_panels_callback(query, context, data):
             )])
         kb_rows.append([InlineKeyboardButton("🚰 Вода", callback_data="plumb_water_" + str(object_id))])
         kb_rows.append([InlineKeyboardButton("💰 Смета сантехники", callback_data="plumb_cost_obj_" + str(object_id))])
+        kb_rows.append([InlineKeyboardButton("👷 Работы (часы)", callback_data="plumb_labor_obj_" + str(object_id))])
         kb_rows.append([InlineKeyboardButton("📊 Смета (CSV)", callback_data="plumb_csv_obj_" + str(object_id))])
         kb_rows.append([InlineKeyboardButton("➕ Добавить коллектор", callback_data="plumb_add_" + str(object_id))])
         kb_rows.append([InlineKeyboardButton("⬅️ К объекту", callback_data="obj_" + str(object_id))])
@@ -6562,6 +6563,21 @@ async def handle_panels_callback(query, context, data):
                 )
             except Exception:
                 pass
+        return True
+
+    if data.startswith("plumb_labor_obj_"):
+        object_id = int(data.replace("plumb_labor_obj_", ""))
+        try:
+            from core import object_works as core_works
+            text = core_works.format_object_labor(object_id)
+        except Exception as e:
+            print("plumb labor obj: " + str(e), flush=True)
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        await _safe_edit(query, text, InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ К сантехнике", callback_data="plumb_list_" + str(object_id))],
+            ]))
         return True
 
     if data.startswith("plumb_") and not data.startswith(("plumb_list_", "plumb_add_", "plumb_del_", "plumb_spec_", "plumb_csv_obj_", "plumb_cost_", "plumb_cost_obj_", "plumb_routes_", "plumb_route_", "plumb_points_", "plumb_point_add_", "plumb_point_set_", "plumb_point_unset_", "plumb_pdf_obj_")):
