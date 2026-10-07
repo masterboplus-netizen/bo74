@@ -362,6 +362,9 @@ def add_component(panel_id, component_type, component_model=None,
                   quantity=1, linked_group_id=None, order_num=None,
                   is_manual=0, note=None):
     """Добавляет компонент в щит. Возвращает component_id."""
+    if order_num is None:
+        _r = fetchone("SELECT COALESCE(MAX(order_num), 0) + 1 AS n FROM elec_panel_components WHERE panel_id = ?", (panel_id,))
+        order_num = (_r["n"] if _r else 1) or 1
     return commit(
         """INSERT INTO elec_panel_components
            (panel_id, component_type, component_model, rating, curve,
