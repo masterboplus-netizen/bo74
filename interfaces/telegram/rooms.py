@@ -7087,8 +7087,19 @@ async def handle_panels_callback(query, context, data):
         context.user_data["waiting_for"] = "panel_comp_rating"
         labels = {"breaker": "Автомат", "rcd": "УЗО", "dif": "Дифавтомат", "meter": "Счётчик", "relay": "Реле"}
         tlabel = labels.get(ctype, ctype)
-        mk = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Отмена", callback_data="panel_comp_" + str(panel_id))]])
-        await _safe_edit(query, "⚡ " + tlabel + chr(10) + chr(10) + "Напиши номинал (А), например 16:", mk)
+        RATINGS = {"breaker": [6, 10, 16, 20, 25, 32, 40, 50, 63], "rcd": [16, 25, 32, 40, 63, 80, 100], "dif": [16, 20, 25, 32, 40, 63], "meter": [5, 10, 16, 25, 32, 40, 63], "relay": [16, 25, 32, 40, 63]}
+        rs = RATINGS.get(ctype, [6, 10, 16, 20, 25, 32, 40, 63])
+        kb_rows = []
+        row = []
+        for r in rs:
+            row.append(InlineKeyboardButton(str(r), callback_data="panel_comp_rating_set_" + str(panel_id) + "_" + ctype + "_" + str(r)))
+            if len(row) == 3:
+                kb_rows.append(row); row = []
+        if row: kb_rows.append(row)
+        kb_rows.append([InlineKeyboardButton("✏️ Другое (ввод вручную)", callback_data="panel_comp_rating_manual_" + str(panel_id) + "_" + ctype)])
+        kb_rows.append([InlineKeyboardButton("⬅️ Отмена", callback_data="panel_comp_" + str(panel_id))])
+        text_out = "⚡ " + str(tlabel) + chr(10) + chr(10) + "Выбери номинал (А):"
+        await _safe_edit(query, text_out, InlineKeyboardMarkup(kb_rows))
         return True
 
     if data.startswith("panel_comp_add_"):
