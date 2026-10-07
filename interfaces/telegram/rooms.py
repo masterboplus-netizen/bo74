@@ -7078,6 +7078,28 @@ async def handle_panels_callback(query, context, data):
         await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
         return True
 
+    if data.startswith("panel_comp_rating_set_"):
+        tail = data.replace("panel_comp_rating_set_", "")
+        try:
+            pid_str, rest = tail.split("_", 1)
+            panel_id = int(pid_str)
+            ctype, rating_str = rest.rsplit("_", 1)
+            rating = int(rating_str)
+        except Exception as e:
+            print("rating set parse: " + str(e), flush=True)
+            return True
+        try:
+            core_elec_panels.add_component(panel_id, component_type=ctype, rating=rating, is_manual=1)
+        except Exception as e:
+            print("rating set add: " + str(e), flush=True)
+        try:
+            await _safe_edit(query, "✅ Компонент добавлен", InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ К комплектации", callback_data="panel_comp_" + str(panel_id))],
+            ]))
+        except Exception:
+            pass
+        return True
+
     if data.startswith("panel_comp_type_"):
         tail = data.replace("panel_comp_type_", "")
         pid_str, ctype = tail.rsplit("_", 1)
