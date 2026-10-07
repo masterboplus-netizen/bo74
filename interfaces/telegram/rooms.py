@@ -3078,7 +3078,22 @@ async def handle_obj_elec_callback(query, context, data):
         await _show_obj_elec(query, object_id)
         return True
 
-    if data.startswith("obj_elec_") and not data.startswith(("obj_elec_cost_", "obj_elec_pdf_")):
+    if data.startswith("obj_elec_labor_"):
+        object_id = int(data.replace("obj_elec_labor_", ""))
+        try:
+            from core import object_works as core_works
+            text = core_works.format_object_labor(object_id, prefix="elec_")
+        except Exception as e:
+            print("elec labor: " + str(e), flush=True)
+            text = "Ошибка: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + "..."
+        await _safe_edit(query, text, InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ К электрике", callback_data="obj_elec_" + str(object_id))],
+            ]))
+        return True
+
+    if data.startswith("obj_elec_") and not data.startswith(("obj_elec_cost_", "obj_elec_pdf_", "obj_elec_labor_")):
         object_id = int(data.replace("obj_elec_", ""))
         await _show_obj_elec(query, object_id)
         return True
@@ -4000,7 +4015,7 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
             return
 
     # --- ЭОМ объекта ---
-    if data.startswith("obj_elec_") and not data.startswith(("obj_elec_cost_", "obj_elec_pdf_")):
+    if data.startswith("obj_elec_") and not data.startswith(("obj_elec_cost_", "obj_elec_pdf_", "obj_elec_labor_")):
         handled = await handle_obj_elec_callback(query, context, data)
         if handled:
             return
@@ -6569,7 +6584,7 @@ async def handle_panels_callback(query, context, data):
         object_id = int(data.replace("plumb_labor_obj_", ""))
         try:
             from core import object_works as core_works
-            text = core_works.format_object_labor(object_id)
+            text = core_works.format_object_labor(object_id, prefix="plumb_")
         except Exception as e:
             print("plumb labor obj: " + str(e), flush=True)
             text = "Ошибка: " + str(e)

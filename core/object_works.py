@@ -98,7 +98,7 @@ def calc_object_works_cost(object_id):
     }
 
 
-def calc_object_labor(object_id, rate_per_hour=None):
+def calc_object_labor(object_id, rate_per_hour=None, prefix=None):
     """Расчёт работ по норматив-часам.
     Возвращает часы × ставка, отдельно от цен по прайсу."""
     if rate_per_hour is None:
@@ -116,6 +116,8 @@ def calc_object_labor(object_id, rate_per_hour=None):
     by_type = {}
     for w in works:
         wt = w.get('work_type') or 'other'
+        if prefix and not wt.startswith(prefix):
+            continue
         qty = float(w.get('qty') or 0)
         h_per_unit = spec.get_work_hours(wt)
         h = round(qty * h_per_unit, 3)
@@ -144,12 +146,12 @@ def calc_object_labor(object_id, rate_per_hour=None):
     }
 
 
-def format_object_labor(object_id):
+def format_object_labor(object_id, prefix=None):
     """Текстовая смета работ по норматив-часам (отдельно от материалов)."""
     from modules.objects import get_object
     obj = get_object(object_id)
     obj_name = obj['name'] if obj else ('Объект #' + str(object_id))
-    d = calc_object_labor(object_id)
+    d = calc_object_labor(object_id, prefix=prefix)
 
     lines = ["👷 Работы (норматив-часы) «" + str(obj_name) + "»", ""]
     if not d['works_count']:

@@ -1050,6 +1050,7 @@ def object_detail_keyboard(object_id):
         [InlineKeyboardButton("⚡ Щиты объекта", callback_data=f"panels_list_{object_id}")],
         [InlineKeyboardButton("⚡ ЭОМ объекта", callback_data=f"obj_elec_{object_id}")],
         [InlineKeyboardButton("💰 Смета ЭОМ", callback_data=f"obj_elec_cost_{object_id}")],
+        [InlineKeyboardButton("👷 Работы (часы)", callback_data=f"obj_elec_labor_{object_id}")],
         [InlineKeyboardButton("📊 Смета ЭОМ (CSV)", callback_data=f"obj_est_csv_{object_id}")],
         [InlineKeyboardButton("📄 Спецификация ЭОМ", callback_data=f"obj_spec_{object_id}")],
         [InlineKeyboardButton("📄 PDF-смета ЭОМ", callback_data=f"obj_elec_pdf_{object_id}")],
