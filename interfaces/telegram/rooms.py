@@ -5088,23 +5088,6 @@ async def handle_measure_input(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text("Не удалось создать щит")
         return
 
-        if step == "panel_comp_rating":
-            panel_id = context.user_data.get("panel_comp_panel_id")
-            ctype = context.user_data.get("panel_comp_type")
-            text_in = update.message.text.strip()
-            try:
-                rating = int(text_in)
-            except ValueError:
-                await update.message.reply_text("Нужно число, например 16. Попробуй ещё раз.")
-                return
-            try:
-                core_elec_panels.add_component(panel_id, component_type=ctype, rating=rating, is_manual=1)
-            except Exception as e:
-                print("panel comp add: " + str(e), flush=True)
-            for k in ["panel_comp_panel_id", "panel_comp_type", "waiting_for"]:
-                context.user_data[k] = None
-            await update.message.reply_text("✅ Компонент добавлен", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⚡ К щиту", callback_data="panel_" + str(panel_id))], [InlineKeyboardButton("📦 К компонентам", callback_data="panel_comp_" + str(panel_id))]]))
-            return
     if step == 'group_load_watt':
         await _handle_group_load_input(update, context)
         return
@@ -7062,6 +7045,32 @@ async def handle_panels_callback(query, context, data):
             [InlineKeyboardButton("⬅️ К комплектации", callback_data="panel_comp_" + str(panel_id))],
         ]
         await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
+        return True
+
+    if data.startswith("panel_comp_type_"):
+        tail = data.replace("panel_comp_type_", "")
+        pid_str, ctype = tail.rsplit("_", 1)
+        panel_id = int(pid_str)
+        context.user_data["panel_comp_panel_id"] = panel_id
+        context.user_data["panel_comp_type"] = ctype
+        context.user_data["waiting_for"] = "panel_comp_rating"
+        labels = {"breaker": "Автомат", "rcd": "УЗО", "dif": "Дифавтомат", "meter": "Счётчик", "relay": "Реле"}
+        tlabel = labels.get(ctype, ctype)
+        mk = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Отмена", callback_data="panel_comp_" + str(panel_id))]])
+        await _safe_edit(query, "⚡ " + tlabel + chr(10) + chr(10) + "Напиши номинал (А), например 16:", mk)
+        return True
+
+    if data.startswith("panel_comp_add_"):
+        panel_id = int(data.replace("panel_comp_add_", ""))
+        kb_rows = [
+            [InlineKeyboardButton("⚡ Автомат", callback_data="panel_comp_type_" + str(panel_id) + "_breaker")],
+            [InlineKeyboardButton("🛡️ УЗО", callback_data="panel_comp_type_" + str(panel_id) + "_rcd")],
+            [InlineKeyboardButton("🛡️⚡ Дифавтомат", callback_data="panel_comp_type_" + str(panel_id) + "_dif")],
+            [InlineKeyboardButton("🔢 Счётчик", callback_data="panel_comp_type_" + str(panel_id) + "_meter")],
+            [InlineKeyboardButton("🔌 Реле", callback_data="panel_comp_type_" + str(panel_id) + "_relay")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data="panel_comp_" + str(panel_id))],
+        ]
+        await _safe_edit(query, "➕ Ручной компонент" + chr(10) + chr(10) + "Выбери тип:", InlineKeyboardMarkup(kb_rows))
         return True
 
     if data.startswith("panel_comp_"):

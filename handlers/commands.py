@@ -2336,7 +2336,33 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-    if context.user_data.get('waiting_for') in ('floor_new_name', 'panel_new_name', 'panel_comp_rating', 'child_panel_name', 'component_price', 'route_length', 'plumb_new_name', 'plumb_route_length', 'work_new_qty', 'work_edit_value', 'group_load_watt', 'measure_first_dim', 'measure_second_dim', 'wall_angle_value', 'wall_niche_width', 'wall_niche_depth', 'wall_niche_height', 'room_height_point', 'room_height_same', 'wall_round_length', 'wall_round_angle_val', 'wall_round_plane_bottom', 'wall_round_plane_middle', 'wall_round_plane_top', 'opening_width', 'opening_height', 'opening_sill', 'opening_offset', 'opening_edit_value', 'comm_offset_x', 'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_edit_value', 'comm_size', 'comm_size_w', 'comm_size_h', 'comm_size_d', 'comm_edit_size_part', 'wall_round_opening_width', 'wall_round_opening_height', 'comm_offset_x', 'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_edit_value',
+    if context.user_data.get("waiting_for") == "panel_comp_rating":
+        from core import elec_panels as core_elec_panels
+        panel_id = context.user_data.get("panel_comp_panel_id")
+        ctype = context.user_data.get("panel_comp_type")
+        text_in = text.strip()
+        if not panel_id or not ctype:
+            await update.message.reply_text("Потерялись данные. Начни заново.")
+            context.user_data["waiting_for"] = None
+            return
+        try:
+            rating = int(text_in)
+        except ValueError:
+            await update.message.reply_text("Нужно число, например 16. Попробуй ещё раз.")
+            return
+        try:
+            core_elec_panels.add_component(panel_id, component_type=ctype, rating=rating, is_manual=1)
+        except Exception as e:
+            print("panel comp add: " + str(e), flush=True)
+        for k in ["panel_comp_panel_id", "panel_comp_type", "waiting_for"]:
+            context.user_data[k] = None
+        await update.message.reply_text("✅ Компонент добавлен", reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⚡ К щиту", callback_data="panel_" + str(panel_id))],
+            [InlineKeyboardButton("📦 К компонентам", callback_data="panel_comp_" + str(panel_id))],
+        ]))
+        return
+
+    if context.user_data.get('waiting_for') in ('floor_new_name', 'panel_new_name', 'child_panel_name', 'component_price', 'route_length', 'plumb_new_name', 'plumb_route_length', 'work_new_qty', 'work_edit_value', 'group_load_watt', 'measure_first_dim', 'measure_second_dim', 'wall_angle_value', 'wall_niche_width', 'wall_niche_depth', 'wall_niche_height', 'room_height_point', 'room_height_same', 'wall_round_length', 'wall_round_angle_val', 'wall_round_plane_bottom', 'wall_round_plane_middle', 'wall_round_plane_top', 'opening_width', 'opening_height', 'opening_sill', 'opening_offset', 'opening_edit_value', 'comm_offset_x', 'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_edit_value', 'comm_size', 'comm_size_w', 'comm_size_h', 'comm_size_d', 'comm_edit_size_part', 'wall_round_opening_width', 'wall_round_opening_height', 'comm_offset_x', 'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_edit_value',
                                                   'wall_round_length', 'wall_round_angle_val', 'wall_round_plane_bottom', 'wall_round_plane_middle', 'wall_round_plane_top'):
         from interfaces.telegram.rooms import handle_measure_input
         await handle_measure_input(update, context)
