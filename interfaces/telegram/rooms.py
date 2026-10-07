@@ -7059,7 +7059,6 @@ async def handle_panels_callback(query, context, data):
         kb_rows = [
             [InlineKeyboardButton("💰 Изменить цену", callback_data="panel_comp_price_" + str(comp_id))],
             [InlineKeyboardButton("🗑 Удалить", callback_data="panel_comp_del_" + str(comp_id))],
-            kb_rows.append([InlineKeyboardButton("➕ Добавить вручную", callback_data="panel_comp_add_" + str(panel_id))])
             [InlineKeyboardButton("⬅️ К комплектации", callback_data="panel_comp_" + str(panel_id))],
         ]
         await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
@@ -7109,6 +7108,7 @@ async def handle_panels_callback(query, context, data):
                 num + label + mark,
                 callback_data="panel_comp_item_" + str(c['id'])
             )])
+            kb_rows.append([InlineKeyboardButton("➕ Добавить вручную", callback_data="panel_comp_add_" + str(panel_id))])
         kb_rows.append([InlineKeyboardButton("⬅️ К щиту", callback_data="panel_" + str(panel_id))])
         await _safe_edit(query, text, InlineKeyboardMarkup(kb_rows))
         return True
