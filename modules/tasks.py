@@ -172,3 +172,81 @@ def update_task(task_id, title=None, description=None, priority=None,
     conn.commit()
     conn.close()
     return True
+
+
+# ============================================================
+# ДНЕВНИК РАБОТ (task_progress)
+# ============================================================
+
+def add_progress(task_id, hours=None, qty=None, unit=None, description=None,
+                 raw_text=None, type="work", source="text", user_id=None):
+    """Добавляет запись в дневник работ."""
+    from core.db import commit
+    return commit(
+        """INSERT INTO task_progress
+        (task_id, user_id, hours, qty, unit, description, raw_text, type, source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (task_id, user_id, hours, qty, unit, description, raw_text, type, source)
+    )
+
+
+def get_task_progress(task_id, limit=50):
+    """Все записи по задаче."""
+    from core.db import fetchall
+    rows = fetchall(
+        "SELECT * FROM task_progress WHERE task_id = ? ORDER BY work_date DESC, id DESC LIMIT ?",
+        (task_id, limit)
+    )
+    return [dict(r) for r in rows]
+
+
+def calc_task_hours(task_id):
+    """Сумма часов по всем записям."""
+    from core.db import fetchone
+    r = fetchone("SELECT COALESCE(SUM(hours), 0) AS s FROM task_progress WHERE task_id = ?", (task_id,))
+    return round(float(r["s"]) if r else 0, 2)
+
+
+def calc_task_qty(task_id):
+    """Сумма объёма по всем записям type=work."""
+    from core.db import fetchone
+    r = fetchone("SELECT COALESCE(SUM(qty), 0) AS s FROM task_progress WHERE task_id = ? AND type = 'work'", (task_id,))
+    return round(float(r["s"]) if r else 0, 2)
+
+
+def calc_task_rework(task_id):
+    """Сумма переделок."""
+    from core.db import fetchone
+    r = fetchone("SELECT COALESCE(SUM(qty), 0) AS s FROM task_progress WHERE task_id = ? AND type = 'rework'", (task_id,))
+    return round(float(r["s"]) if r else 0, 2)
+
+
+def format_progress_bar(percent):
+    """Прогресс-бар"""
+    percent = max(0, min(100, int(percent or 0)))
+    filled = percent // 10
+    return chr(0x2588) * filled + chr(0x2591) * (10 - filled) + " " + str(percent) + "%"
+
+
+def format_task_progress(task_id):
+    """Текстовый дневник задачи."""
+    rows = get_task_progress(task_id)
+    if not rows:
+        return "_Записей пока нет._"
+    lines = []
+    for r in rows[:10]:
+        d = str(r.get("work_date") or "?")
+        h = r.get("hours")
+        q = r.get("qty")
+        u = r.get("unit") or ""
+        desc = r.get("description") or r.get("raw_text") or ""
+        t = r.get("type") or "work"
+        icon = {"work": chr(0x1f528), "rework": chr(0x1f504), "pause": chr(0x23f8), "material": chr(0x1f4e6)}.get(t, chr(0x1f528))
+        parts = [d]
+        if h: parts.append(str(h) + "ч")
+        if q: parts.append(str(q) + " " + u)
+        line = chr(0x2022) + " " + " · ".join(parts)
+        if desc:
+            line += " — " + str(desc)[:60]
+        lines.append(icon + " " + line)
+    return chr(10).join(lines)
