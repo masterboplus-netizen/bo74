@@ -106,13 +106,23 @@ def get_full_path(floor_id):
     return " / ".join(reversed(parts))
 
 
-def ensure_default_house(object_id):
-    """Гарантирует корневое помещение «Дом». Возвращает floor_id корня."""
+def ensure_default_root(object_id, root_type='building'):
+    """Гарантирует корневое помещение.
+
+    root_type: land (усадьба) / building (многоэтажка, офис) / apartment (квартира) / zone
+    """
     roots = get_root_floors(object_id)
     for r in roots:
-        if r.get("type") == "house":
+        if r.get("type") in (root_type, 'land', 'building', 'house'):
             return r["id"]
-    return create_floor(object_id, floor_name="Дом", type="house", parent_id=None)
+    labels = {"land": "Участок", "building": "Здание", "apartment": "Квартира", "zone": "Зона"}
+    name = labels.get(root_type, "Здание")
+    return create_floor(object_id, floor_name=name, type=root_type, parent_id=None)
+
+
+# Обратная совместимость
+def ensure_default_house(object_id):
+    return ensure_default_root(object_id, 'building')
 
 
 def delete_floor_cascade(floor_id):
