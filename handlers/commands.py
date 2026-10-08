@@ -2361,7 +2361,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["waiting_for"] = None
             return
         try:
-                import re as _re ; _m = _re.search(r"[0-9]+", text_in) ; rating = int(_m.group()) if _m else -1
+                import re as _re
+                _m = _re.search(r"[0-9]+", text_in)
+                if _m is None:
+                    await update.message.reply_text("Не нашёл число. Введи номинал, например 16:")
+                    return
+                rating = int(_m.group())
         except ValueError:
             await update.message.reply_text("Нужно число, например 16. Попробуй ещё раз.")
             return
