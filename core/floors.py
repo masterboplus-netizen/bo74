@@ -11,13 +11,24 @@ from core.db import fetchone, fetchall, commit
 # ============================================================
 
 FLOOR_TYPES = {
-    'house':     '🏢 Дом',
+    'land':      '🌳 Участок',
+    'building':  '🏢 Здание',
+    'house':     '🏠 Дом',
     'floor':     '🏠 Этаж',
     'apartment': '🚪 Квартира',
     'basement':  '🏚 Подвал',
     'common':    '🚶 МОП',
     'roof':      '🏔 Кровля',
-    'land':      '🌳 Участок',
+    'technical': '⚙️ Тех.помещение',
+    'parking':   '🅿️ Парковка',
+    'landscape': '🌿 Ландшафт',
+    'bathhouse': '🧖 Баня',
+    'garage':    '🚗 Гараж',
+    'warehouse': '📦 Склад',
+    'utility':   '🔧 Сетевой',
+    'span':      '🌉 Пролёт',
+    'monument':  '🏛 Памятник',
+    'green':     '🌳 Зелёные',
     'zone':      '📍 Зона',
 }
 
