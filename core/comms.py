@@ -41,7 +41,8 @@ WALLS = [("A", "Стена A"), ("B", "Стена B"), ("C", "Стена C"), ("
 def add_comm(room_id, comm_type, label=None, wall=None,
              offset_x=None, offset_y=None, depth=None,
              diameter=None, voltage=None, size=None, note=None,
-             photo_id=None, tenant_id=1, created_by=None):
+             photo_id=None, tenant_id=1, created_by=None,
+            session_id=None):
     """Добавляет коммуникацию. Возвращает comm_id."""
     return commit(
         "INSERT INTO room_comms "
