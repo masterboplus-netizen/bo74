@@ -412,6 +412,8 @@ def format_component(c):
     """Строка описания компонента (по STYLE_GUIDE, без эмодзи)."""
     type_labels = {
         'auto': 'Автомат',
+        'breaker': 'Автомат',
+        'rcd': 'УЗО',
         'uzo': 'УЗО',
         'dif': 'Дифавтомат',
         'switch': 'Рубильник',
