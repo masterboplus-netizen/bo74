@@ -2780,6 +2780,30 @@ async def handle_floors_callback(query, context, data):
         return True
 
     # --- СОЗДАТЬ ПОМЕЩЕНИЕ ---
+    if data.startswith("obj_floor_type_more_"):
+        object_id = int(data.replace("obj_floor_type_more_", ""))
+        kb_rows = [
+            [InlineKeyboardButton("🧖 Баня", callback_data="obj_floor_type_" + str(object_id) + "_bathhouse"),
+             InlineKeyboardButton("🚗 Гараж", callback_data="obj_floor_type_" + str(object_id) + "_garage")],
+            [InlineKeyboardButton("📦 Склад", callback_data="obj_floor_type_" + str(object_id) + "_warehouse"),
+             InlineKeyboardButton("🔧 Сетевой", callback_data="obj_floor_type_" + str(object_id) + "_utility")],
+            [InlineKeyboardButton("🌉 Пролёт", callback_data="obj_floor_type_" + str(object_id) + "_span"),
+             InlineKeyboardButton("🏛 Памятник", callback_data="obj_floor_type_" + str(object_id) + "_monument")],
+            [InlineKeyboardButton("🌳 Зелёные", callback_data="obj_floor_type_" + str(object_id) + "_green"),
+             InlineKeyboardButton("📍 Зона", callback_data="obj_floor_type_" + str(object_id) + "_zone")],
+            [InlineKeyboardButton("🌳 Участок", callback_data="obj_floor_type_" + str(object_id) + "_land")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="obj_floor_add_" + str(object_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                "🏠 *Другие типы помещений:*",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
+        return True
+
     if data.startswith("obj_floor_type_"):
         tail = data.replace("obj_floor_type_", "")
         try:
@@ -2809,11 +2833,17 @@ async def handle_floors_callback(query, context, data):
         object_id = int(data.replace("obj_floor_add_", ""))
         context.user_data["floor_obj_id"] = object_id
         kb_rows = [
-            [InlineKeyboardButton("🏠 Этаж", callback_data="obj_floor_type_" + str(object_id) + "_floor")],
-            [InlineKeyboardButton("🚪 Квартира", callback_data="obj_floor_type_" + str(object_id) + "_apartment")],
-            [InlineKeyboardButton("🏚 Подвал", callback_data="obj_floor_type_" + str(object_id) + "_basement")],
-            [InlineKeyboardButton("🚶 МОП", callback_data="obj_floor_type_" + str(object_id) + "_common")],
-            [InlineKeyboardButton("📍 Зона", callback_data="obj_floor_type_" + str(object_id) + "_zone")],
+            [InlineKeyboardButton("🏠 Этаж", callback_data="obj_floor_type_" + str(object_id) + "_floor"),
+             InlineKeyboardButton("🚪 Квартира", callback_data="obj_floor_type_" + str(object_id) + "_apartment")],
+            [InlineKeyboardButton("🏚 Подвал", callback_data="obj_floor_type_" + str(object_id) + "_basement"),
+             InlineKeyboardButton("⚙️ Тех.помещ", callback_data="obj_floor_type_" + str(object_id) + "_technical")],
+            [InlineKeyboardButton("🚶 МОП", callback_data="obj_floor_type_" + str(object_id) + "_common"),
+             InlineKeyboardButton("🅿️ Парковка", callback_data="obj_floor_type_" + str(object_id) + "_parking")],
+            [InlineKeyboardButton("🌿 Ландшафт", callback_data="obj_floor_type_" + str(object_id) + "_landscape"),
+             InlineKeyboardButton("🏢 Здание", callback_data="obj_floor_type_" + str(object_id) + "_building")],
+            [InlineKeyboardButton("🏠 Дом", callback_data="obj_floor_type_" + str(object_id) + "_house"),
+             InlineKeyboardButton("🏔 Кровля", callback_data="obj_floor_type_" + str(object_id) + "_roof")],
+            [InlineKeyboardButton("📁 Другие типы", callback_data="obj_floor_type_more_" + str(object_id))],
             [InlineKeyboardButton("⬅️ Отмена", callback_data="obj_floors_" + str(object_id))],
         ]
         try:
@@ -3049,7 +3079,7 @@ async def _show_floor_rooms_list(query, context, floor_id):
             f"📦 {r['name']}",
             callback_data=f"room_{r['id']}"
         )])
-    buttons.append([InlineKeyboardButton("➕ Добавить комнату", callback_data=f"room_add_{object_id}")])
+    buttons.append([InlineKeyboardButton("➕ Добавить комнату", callback_data=f"room_add_{floor_id}")])
     buttons.append([InlineKeyboardButton("⬅️ К помещению", callback_data=f"floor_{floor_id}")])
 
     try:
@@ -4217,9 +4247,22 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     # --- Добавление комнаты ---
     if data.startswith("room_add_"):
-        object_id = int(data.replace("room_add_", ""))
-        context.user_data['waiting_for'] = 'room_name'
-        context.user_data['room_object_id'] = object_id
+        tail = data.replace("room_add_", "")
+        floor_id = None
+        object_id = None
+        try:
+            from core import floors as _core_floors
+            _fl = _core_floors.get_floor(int(tail))
+            if _fl:
+                floor_id = _fl["id"]
+                object_id = _fl["object_id"]
+        except Exception:
+            pass
+        if object_id is None:
+            object_id = int(tail)
+        context.user_data["room_floor_id"] = floor_id
+        context.user_data["room_object_id"] = object_id
+        context.user_data["waiting_for"] = "room_name"
         try:
             await query.edit_message_text(
                 "📦 *Новая комната*\n\nНапиши название:",
@@ -4237,7 +4280,9 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
         object_id = int(parts[0])
         room_type = parts[1] if len(parts) > 1 else 'rough'
         name = context.user_data.get('room_name_pending') or 'Комната'
-        new_room_id = create_room(object_id, name, room_type=room_type)
+        # Привязка к этажу (если известен)
+        _fid = context.user_data.get("room_floor_id")
+        new_room_id = create_room(object_id, name, room_type=room_type, floor_id=_fid)
         if new_room_id:
             context.user_data['room_name_pending'] = None
             context.user_data['waiting_for'] = None
