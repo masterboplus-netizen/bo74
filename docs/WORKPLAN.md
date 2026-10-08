@@ -26,7 +26,44 @@
 
 ---
 
-## 🔴 СЛЕДУЮЩАЯ СЕССИЯ (6)
+## ✅ СЕССИЯ 6 (07–08.10.2026) — закрыто
+
+### Архив объектов
+- [x] get_archived_objects
+- [x] Кнопка «📦 Архив (N)» в списке объектов
+- [x] Условная «📦 В архив / 📤 Из архива» в карточке
+- [x] Архивный объект открывает карточку, «Назад» → архив
+
+### Иерархия помещений (floors)
+- [x] Миграция 046 — parent_id, type, sort_order + elec_panels.floor_id
+- [x] core/floors.py — get_children, get_tree, get_full_path, delete_floor_cascade
+- [x] FLOOR_TYPES — 20 типов
+- [x] ensure_default_root (land/building/apartment)
+- [x] Дерево в list_floors_text (├─ └─ с отступами)
+- [x] format_floor — иконки по типу
+
+### Модель объектов (objects)
+- [x] Миграция 047 — object_kind, work_kind, root_floor_id
+- [x] object_networks — наружные сети (15 колонок)
+- [x] Типы объектов + виды работ в законспеченных значениях
+
+### UI помещений
+- [x] Экран выбора типа — 12 + «📁 Другие типы»
+- [x] Автосоздание корня (Дом/Участок/Квартира)
+- [x] Привязка комнат к этажам (room_add_ принимает floor_id)
+- [x] create_room(floor_id=...)
+- [x] Кнопка «➕ Добавить комнату» в карточке этажа
+
+### Фиксы и инфраструктура
+- [x] Кривая B/C/D в panel_comp_type_ + handler (d8a714c и др.)
+- [x] rating = -1 → переспрос (4cda19c)
+- [x] parser.py add_task — уже работает
+- [x] comms.py add_comm — session_id в сигнатуре (7e31e66)
+- [x] type_labels: breaker→Автомат, rcd→УЗО (c1cb252)
+
+---
+
+## 🔴 СЛЕДУЮЩАЯ СЕССИЯ (7)
 
 ### Фиксы (по горячим следам)
 - [ ] Кривая B/C/D — правильно (без дубля, передавать в add_component)
