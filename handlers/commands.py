@@ -1040,11 +1040,24 @@ def objects_keyboard():
             f"{icon} {obj['name']}",
             callback_data=f"obj_{obj['id']}"
         )])
+    try:
+        from modules.objects import get_archived_objects
+        _arch = get_archived_objects()
+        if _arch:
+            buttons.append([InlineKeyboardButton("📦 Архив (" + str(len(_arch)) + ")", callback_data="obj_archive_list")])
+    except Exception:
+        pass
     buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
     return InlineKeyboardMarkup(buttons)
 
 
 def object_detail_keyboard(object_id):
+    try:
+        from modules.objects import get_object
+        _obj_data = get_object(object_id)
+        _status = (_obj_data or {}).get("status") or "active"
+    except Exception:
+        _status = "active"
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🏠 Помещения", callback_data=f"obj_floors_{object_id}")],
         [InlineKeyboardButton("⚡ Щиты объекта", callback_data=f"panels_list_{object_id}")],
@@ -1062,6 +1075,7 @@ def object_detail_keyboard(object_id):
         [InlineKeyboardButton("💰 Финансы", callback_data=f"objfin_{object_id}")],
         [InlineKeyboardButton("📸 Фото объекта", callback_data=f"objphotos_{object_id}")],
         [InlineKeyboardButton("✏️ Переименовать", callback_data=f"obj_rename_{object_id}")],
+        [InlineKeyboardButton(("📤 Из архива" if _status == "archived" else "📦 В архив"), callback_data=(f"obj_unarchive_{object_id}" if _status == "archived" else f"obj_archive_{object_id}"))],
         [InlineKeyboardButton("🗑 Удалить объект", callback_data=f"obj_del_{object_id}")],
         [InlineKeyboardButton("⬅️ Назад", callback_data="menu_objects")],
     ])

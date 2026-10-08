@@ -63,6 +63,16 @@ def get_all_objects() -> list:
 
 VALID_STATUSES = ('active', 'paused', 'waiting', 'completed', 'closed', 'archived')
 
+def get_archived_objects() -> list:
+    """Объекты в архиве."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT id, code, name, status FROM objects WHERE status = 'archived' ORDER BY created_at DESC")
+    rows = c.fetchall()
+    conn.close()
+    return [{'id': r[0], 'code': r[1], 'name': r[2], 'status': r[3]} for r in rows]
+
+
 def update_object_status(object_id: int, status: str):
     if status not in VALID_STATUSES:
         raise ValueError(f'Недопустимый статус: {status}. Доступно: {VALID_STATUSES}')

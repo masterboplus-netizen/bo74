@@ -4002,6 +4002,50 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
     print(f"🔍 ROOMS: data={data!r}", flush=True)
 
     # --- Объекты ---
+    if data == "obj_archive_list":
+        try:
+            from modules.objects import get_archived_objects
+            arch = get_archived_objects()
+        except Exception as e:
+            print("arch list: " + str(e), flush=True)
+            arch = []
+        if not arch:
+            await _safe_edit(query, "📦 Архив пуст", InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_objects")],
+            ]))
+            return True
+        kb_rows = []
+        for o in arch:
+            kb_rows.append([InlineKeyboardButton("📦 " + str(o.get("name") or "?"), callback_data="obj_" + str(o["id"]))])
+        kb_rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_objects")])
+        await _safe_edit(query, "📦 Архив (" + str(len(arch)) + "):", InlineKeyboardMarkup(kb_rows))
+        return True
+
+    if data.startswith("obj_archive_"):
+        object_id = int(data.replace("obj_archive_", ""))
+        try:
+            from modules.objects import update_object_status
+            update_object_status(object_id, "archived")
+        except Exception as e:
+            print("archive: " + str(e), flush=True)
+        await _safe_edit(query, "📦 Объект в архиве", InlineKeyboardMarkup([
+            [InlineKeyboardButton("⬅️ К объектам", callback_data="menu_objects")],
+        ]))
+        return True
+
+    if data.startswith("obj_unarchive_"):
+        object_id = int(data.replace("obj_unarchive_", ""))
+        try:
+            from modules.objects import update_object_status
+            update_object_status(object_id, "active")
+        except Exception as e:
+            print("unarchive: " + str(e), flush=True)
+        await _safe_edit(query, "✅ Объект восстановлен", InlineKeyboardMarkup([
+            [InlineKeyboardButton("📦 К архиву", callback_data="obj_archive_list")],
+            [InlineKeyboardButton("⬅️ К объектам", callback_data="menu_objects")],
+        ]))
+        return True
+
     if data.startswith(("obj_del_", "obj_delok_", "obj_rename_")):
         handled = await handle_object_callback(update, context, data)
         if handled:
