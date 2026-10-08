@@ -5162,8 +5162,17 @@ async def handle_measure_input(update: Update, context: ContextTypes.DEFAULT_TYP
         name = (update.message.text or '').strip()
         if object_id and name:
             try:
-                floor_id = core_floors.create_floor(object_id, floor_number=1, floor_name=name)
+                # Автосоздание Дом-корня
+                root_id = core_floors.ensure_default_house(object_id)
+                f_type = context.user_data.get("floor_new_type") or "floor"
+                f_parent = context.user_data.get("floor_new_parent")
+                if f_parent is None:
+                    f_parent = root_id
+                floor_id = core_floors.create_floor(object_id, floor_number=1, floor_name=name,
+                                                     parent_id=f_parent, type=f_type)
                 context.user_data['waiting_for'] = None
+                context.user_data.pop('floor_new_type', None)
+                context.user_data.pop('floor_new_parent', None)
                 context.user_data['floor_obj_id'] = None
                 # Показать карточку помещения
                 await update.message.reply_text(
