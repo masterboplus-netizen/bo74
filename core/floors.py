@@ -167,7 +167,7 @@ def format_floor(f):
     name = f.get('floor_name') or f"Этаж {f.get('floor_number') or '?'}"
     rooms = count_rooms(f['id'])
     area = f.get('area_sqm')
-    parts = [f"🏠 *{name}*"]
+    parts = [f"{get_type_icon(f.get("type"))} *{name}*"]
     if area:
         parts.append(f"{area} м²")
     parts.append(f"комнат: {rooms}")
@@ -175,11 +175,22 @@ def format_floor(f):
 
 
 def list_floors_text(object_id):
-    """Текстовый список помещений объекта."""
-    floors = get_floors(object_id)
-    if not floors:
+    """Текстовый список помещений объекта — дерево."""
+    roots = get_root_floors(object_id)
+    if not roots:
         return "_Пока помещений нет._"
     lines = []
-    for f in floors:
-        lines.append(format_floor(f))
-    return "\n".join(lines)
+    def walk(fl, depth, is_last):
+        indent = "    " * depth
+        if depth == 0:
+            prefix = ""
+        else:
+            prefix = "└─ " if is_last else "├─ "
+        lines.append(indent + prefix + format_floor(fl))
+        children = get_children(fl["id"])
+        for idx, c in enumerate(children):
+            walk(c, depth + 1, idx == len(children) - 1)
+    for idx, r in enumerate(roots):
+        walk(r, 0, idx == len(roots) - 1)
+    return chr(10).join(lines)
+
