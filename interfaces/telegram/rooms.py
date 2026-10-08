@@ -7130,6 +7130,12 @@ async def handle_panels_callback(query, context, data):
         RATINGS = {"breaker": [6, 10, 16, 20, 25, 32, 40, 50, 63], "rcd": [16, 25, 32, 40, 63, 80, 100], "dif": [16, 20, 25, 32, 40, 63], "meter": [5, 10, 16, 25, 32, 40, 63], "relay": [16, 25, 32, 40, 63]}
         rs = RATINGS.get(ctype, [6, 10, 16, 20, 25, 32, 40, 63])
         kb_rows = []
+        if ctype in ("breaker", "dif"):
+            kb_rows.append([
+                InlineKeyboardButton("B", callback_data="panel_comp_curve_set_" + str(panel_id) + "_" + ctype + "_B"),
+                InlineKeyboardButton("C", callback_data="panel_comp_curve_set_" + str(panel_id) + "_" + ctype + "_C"),
+                InlineKeyboardButton("D", callback_data="panel_comp_curve_set_" + str(panel_id) + "_" + ctype + "_D"),
+            ])
         row = []
         for r in rs:
             row.append(InlineKeyboardButton(str(r), callback_data="panel_comp_rating_set_" + str(panel_id) + "_" + ctype + "_" + str(r)))
