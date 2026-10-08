@@ -2780,21 +2780,52 @@ async def handle_floors_callback(query, context, data):
         return True
 
     # --- СОЗДАТЬ ПОМЕЩЕНИЕ ---
-    if data.startswith("obj_floor_add_"):
-        object_id = int(data.replace("obj_floor_add_", ""))
-        context.user_data['waiting_for'] = 'floor_new_name'
-        context.user_data['floor_obj_id'] = object_id
+    if data.startswith("obj_floor_type_"):
+        tail = data.replace("obj_floor_type_", "")
+        try:
+            oid_str, f_type = tail.rsplit("_", 1)
+            object_id = int(oid_str)
+        except Exception as e:
+            print("floor type parse: " + str(e), flush=True)
+            return True
+        context.user_data["floor_new_type"] = f_type
+        context.user_data["floor_new_parent"] = None
+        context.user_data["floor_obj_id"] = object_id
+        context.user_data["waiting_for"] = "floor_new_name"
+        tlabels = {"floor": "🏠 Этаж", "apartment": "🚪 Квартира", "basement": "🏚 Подвал", "common": "🚶 МОП", "zone": "📍 Зона"}
+        tlabel = tlabels.get(f_type, f_type)
         try:
             await query.edit_message_text(
-                "🏠 *Новое помещение*\n\nНапиши название (например «1 этаж», «Цоколь», «Зал»):",
-                parse_mode=ParseMode.MARKDOWN,
+                tlabel + " — напиши название:",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"obj_floors_{object_id}")],
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data="obj_floors_" + str(object_id))],
                 ])
             )
         except Exception:
             pass
         return True
+
+    if data.startswith("obj_floor_add_"):
+        object_id = int(data.replace("obj_floor_add_", ""))
+        context.user_data["floor_obj_id"] = object_id
+        kb_rows = [
+            [InlineKeyboardButton("🏠 Этаж", callback_data="obj_floor_type_" + str(object_id) + "_floor")],
+            [InlineKeyboardButton("🚪 Квартира", callback_data="obj_floor_type_" + str(object_id) + "_apartment")],
+            [InlineKeyboardButton("🏚 Подвал", callback_data="obj_floor_type_" + str(object_id) + "_basement")],
+            [InlineKeyboardButton("🚶 МОП", callback_data="obj_floor_type_" + str(object_id) + "_common")],
+            [InlineKeyboardButton("📍 Зона", callback_data="obj_floor_type_" + str(object_id) + "_zone")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data="obj_floors_" + str(object_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                "🏠 *Что создаём?*",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
+        return True
+
 
     # --- КАРТОЧКА ПОМЕЩЕНИЯ ---
     if data.startswith("floor_"):
