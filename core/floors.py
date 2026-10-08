@@ -7,19 +7,46 @@ from core.db import fetchone, fetchall, commit
 
 
 # ============================================================
+# ТИПЫ ПОМЕЩЕНИЙ
+# ============================================================
+
+FLOOR_TYPES = {
+    'house':     '🏢 Дом',
+    'floor':     '🏠 Этаж',
+    'apartment': '🚪 Квартира',
+    'basement':  '🏚 Подвал',
+    'common':    '🚶 МОП',
+    'roof':      '🏔 Кровля',
+    'land':      '🌳 Участок',
+    'zone':      '📍 Зона',
+}
+
+
+def get_type_icon(t):
+    return FLOOR_TYPES.get(t or 'floor', '🏠')
+
+
+# ============================================================
 # CRUD
 # ============================================================
 
 def create_floor(object_id, floor_number=1, floor_name=None,
-                 area_sqm=None, height_avg=None, note=None):
-    """Создаёт помещение. Возвращает floor_id."""
+                 area_sqm=None, height_avg=None, note=None,
+                 parent_id=None, type="floor", sort_order=0):
+    """Создаёт помещение. Возвращает floor_id.
+
+    parent_id — родитель (None = корень)
+    type — house/floor/apartment/basement/common/roof/land/zone
+    """
     if not floor_name:
         floor_name = f"Этаж {floor_number}"
     return commit(
         """INSERT INTO floors
-           (object_id, floor_number, floor_name, area_sqm, height_avg, note)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (object_id, floor_number, floor_name, area_sqm, height_avg, note)
+        (object_id, floor_number, floor_name, area_sqm, height_avg, note,
+         parent_id, type, sort_order)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (object_id, floor_number, floor_name, area_sqm, height_avg, note,
+         parent_id, type, sort_order)
     )
 
 
@@ -35,6 +62,55 @@ def get_floors(object_id):
         (object_id,)
     )
     return [dict(r) for r in rows]
+
+
+def get_children(floor_id):
+    """Дочерние помещения."""
+    rows = fetchall(
+        "SELECT * FROM floors WHERE parent_id = ? ORDER BY sort_order, id",
+        (floor_id,)
+    )
+    return [dict(r) for r in rows]
+
+
+def get_root_floors(object_id):
+    """Корневые помещения (без родителя)."""
+    rows = fetchall(
+        "SELECT * FROM floors WHERE object_id = ? AND parent_id IS NULL ORDER BY sort_order, floor_number, id",
+        (object_id,)
+    )
+    return [dict(r) for r in rows]
+
+
+def get_full_path(floor_id):
+    """Путь до помещения: Дом / Этаж 1 / Квартира 1."""
+    parts = []
+    cur = get_floor(floor_id)
+    seen = set()
+    while cur and cur["id"] not in seen:
+        seen.add(cur["id"])
+        parts.append(str(cur.get("floor_name") or "?"))
+        pid = cur.get("parent_id")
+        cur = get_floor(pid) if pid else None
+    return " / ".join(reversed(parts))
+
+
+def ensure_default_house(object_id):
+    """Гарантирует корневое помещение «Дом». Возвращает floor_id корня."""
+    roots = get_root_floors(object_id)
+    for r in roots:
+        if r.get("type") == "house":
+            return r["id"]
+    return create_floor(object_id, floor_name="Дом", type="house", parent_id=None)
+
+
+def delete_floor_cascade(floor_id):
+    """Удаляет помещение + всех детей рекурсивно."""
+    children = get_children(floor_id)
+    for c in children:
+        delete_floor_cascade(c["id"])
+    delete_floor(floor_id)
+    return True
 
 
 def update_floor(floor_id, **kwargs):
