@@ -1,1 +1,3 @@
-CREATE TABLE IF NOT EXISTS plumbing_panel_points (id INTEGER PRIMARY KEY AUTOINCREMENT, panel_id INTEGER NOT NULL, point_id INTEGER NOT NULL, note TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(panel_id, point_id)); CREATE INDEX IF NOT EXISTS idx_ppp_panel ON plumbing_panel_points(panel_id); CREATE INDEX IF NOT EXISTS idx_ppp_point ON plumbing_panel_points(point_id);
+CREATE TABLE IF NOT EXISTS plumbing_panel_points (id INTEGER PRIMARY KEY AUTOINCREMENT, panel_id INTEGER NOT NULL, point_id INTEGER NOT NULL, note TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(panel_id, point_id));
+CREATE INDEX IF NOT EXISTS idx_ppp_panel ON plumbing_panel_points(panel_id);
+CREATE INDEX IF NOT EXISTS idx_ppp_point ON plumbing_panel_points(point_id);
