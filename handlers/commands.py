@@ -1077,7 +1077,7 @@ def object_detail_keyboard(object_id):
         [InlineKeyboardButton("✏️ Переименовать", callback_data=f"obj_rename_{object_id}")],
         [InlineKeyboardButton(("📤 Из архива" if _status == "archived" else "📦 В архив"), callback_data=(f"obj_unarchive_{object_id}" if _status == "archived" else f"obj_archive_{object_id}"))],
         [InlineKeyboardButton("🗑 Удалить объект", callback_data=f"obj_del_{object_id}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="menu_objects")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=("obj_archive_list" if _status == "archived" else "menu_objects"))],
     ])
 
 
