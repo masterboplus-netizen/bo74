@@ -3750,18 +3750,40 @@ async def handle_task_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # Удалить
     if data.startswith("taskdel_"):
         task_id = int(data.split("_")[1])
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
-        conn.commit()
-        conn.close()
-        await query.edit_message_text(
-            "❌ Задача удалена",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")]
-            ])
-        )
+        from core.db import fetchone as _fo
+        _r = _fo("SELECT title FROM tasks WHERE id = ?", (task_id,))
+        _title = (_r["title"] if _r else "?")
+        try:
+            await query.edit_message_text(
+                "🗑 *Удалить задачу?*\n\n" + str(_title) + "\n\nЗадача переместится в архив на 60 дней. Её можно будет восстановить.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Да, в архив", callback_data=f"taskdelconfirm_{task_id}")],
+                    [InlineKeyboardButton("❌ Отмена", callback_data=f"task_{task_id}")],
+                ])
+            )
+        except Exception:
+            pass
         return
+
+    if data.startswith("taskdelconfirm_"):
+        task_id = int(data.replace("taskdelconfirm_", ""))
+        try:
+            from modules import tasks as _tasks
+            _tasks.soft_delete_task(task_id)
+        except Exception as _e:
+            print("soft_delete fail: " + str(_e), flush=True)
+        try:
+            await query.edit_message_text(
+                "🗑 Задача в архиве. Можно восстановить в течение 60 дней.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")],
+                ])
+            )
+        except Exception:
+            pass
+        return
+
 
     # Показать карточку
     if data.startswith("task_") and not any(data.startswith(p) for p in ["taskdate_", "taskdone_", "taskdel_", "taskprio_", "taskrename_"]):
