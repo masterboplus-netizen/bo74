@@ -226,7 +226,7 @@ async def tasks_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         SELECT t.id, t.title, t.deadline, o.name as object_name
         FROM tasks t
         LEFT JOIN objects o ON t.object_id = o.id
-        WHERE t.status IN ('open', 'in_progress')
+        WHERE t.deleted_at IS NULL AND t.status IN ('open', 'in_progress')
         ORDER BY t.deadline IS NULL, t.deadline ASC
     """)
     rows = c.fetchall()
@@ -1101,6 +1101,30 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     data = query.data
 
+    if data == "tasks_archive_list":
+        try:
+            from modules import tasks as _t_arch
+            _arch = _t_arch.get_archived_tasks()
+        except Exception as _e:
+            print("archive list fail: " + str(_e), flush=True)
+            _arch = []
+        if not _arch:
+            try:
+                await query.edit_message_text("🗑 Архив пуст.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")]]))
+            except Exception:
+                pass
+            return
+        kb = []
+        for _a in _arch[:30]:
+            _t = (_a.get("title") or "?")[:40]
+            kb.append([InlineKeyboardButton("🗑 " + _t, callback_data=f"task_{_a["id"]}")])
+        kb.append([InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")])
+        try:
+            await query.edit_message_text("🗑 *Архив задач (" + str(len(_arch)) + ")*\n\nУдалённые задачи (хранятся 60 дней):", parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(kb))
+        except Exception:
+            pass
+        return
+
     if data == "menu_back":
         await query.edit_message_text(
             "🏠 **Главное меню**",
@@ -1175,6 +1199,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )])
         buttons.append([InlineKeyboardButton("👤 Мои задачи", callback_data="my_tasks"),
                         InlineKeyboardButton("👥 По исполнителям", callback_data="by_assignee")])
+        try:
+            from modules import tasks as _t_arch
+            _arch_n = len(_t_arch.get_archived_tasks())
+        except Exception:
+            _arch_n = 0
+        if _arch_n:
+            buttons.append([InlineKeyboardButton("🗑 Архив (" + str(_arch_n) + ")", callback_data="tasks_archive_list")])
         buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
 
         await query.edit_message_text(
@@ -3385,7 +3416,10 @@ def tasks_keyboard_by_object():
 # === КАРТОЧКА ЗАДАЧИ ===
 
 def task_card_keyboard(task_id, deadline=None):
-    """Клавиатура карточки задачи"""
+    """Клавиатура карточки задачи."""
+    from core.db import fetchone as _fo
+    _r = _fo("SELECT deleted_at FROM tasks WHERE id = ?", (task_id,))
+    _is_deleted = bool(_r and _r["deleted_at"])
     buttons = [
         [InlineKeyboardButton("📅 Срок", callback_data=f"taskdate_{task_id}")],
     ]
@@ -3396,11 +3430,18 @@ def task_card_keyboard(task_id, deadline=None):
         [InlineKeyboardButton("👤 Назначить", callback_data=f"taskassign_{task_id}")],
         [InlineKeyboardButton("🔴 Приоритет", callback_data=f"taskprio_{task_id}")],
         [InlineKeyboardButton("✏️ Название", callback_data=f"taskrename_{task_id}")],
-        [InlineKeyboardButton("✅ Выполнить", callback_data=f"taskdone_{task_id}")],
-        [InlineKeyboardButton("❌ Удалить", callback_data=f"taskdel_{task_id}")],
-        [InlineKeyboardButton("⬅ К задачам", callback_data="menu_tasks")],
     ]
+    if _is_deleted:
+        buttons.append([InlineKeyboardButton("♻️ Восстановить", callback_data=f"taskrestore_{task_id}")])
+        buttons.append([InlineKeyboardButton("🗑 Удалить навсегда", callback_data=f"taskdelhard_{task_id}")])
+        buttons.append([InlineKeyboardButton("⬅️ К архиву", callback_data="tasks_archive_list")])
+    else:
+        buttons.append([InlineKeyboardButton("✅ Выполнить", callback_data=f"taskdone_{task_id}")])
+        buttons.append([InlineKeyboardButton("❌ Удалить", callback_data=f"taskdel_{task_id}")])
+        buttons.append([InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")])
     return InlineKeyboardMarkup(buttons)
+
+
 def task_date_keyboard(task_id):
     """Клавиатура выбора срока"""
     from datetime import date, timedelta
@@ -3748,6 +3789,48 @@ async def handle_task_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     # Удалить
+    if data.startswith("taskrestore_"):
+        task_id = int(data.replace("taskrestore_", ""))
+        try:
+            from modules import tasks as _tasks
+            _tasks.restore_task(task_id)
+        except Exception as _e:
+            print("restore fail: " + str(_e), flush=True)
+        try:
+            await query.answer("✅ Восстановлена", show_alert=False)
+        except Exception:
+            pass
+        await show_task_card(query, task_id)
+        return
+
+    if data.startswith("taskdelhardconfirm_"):
+        task_id = int(data.replace("taskdelhardconfirm_", ""))
+        try:
+            from modules import tasks as _tasks
+            _tasks.hard_delete_task(task_id)
+        except Exception as _e:
+            print("hard delete fail: " + str(_e), flush=True)
+        try:
+            await query.edit_message_text("🗑 Задача удалена НАВСЕГДА.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ К архиву", callback_data="tasks_archive_list")]]))
+        except Exception:
+            pass
+        return
+
+    if data.startswith("taskdelhard_"):
+        task_id = int(data.replace("taskdelhard_", ""))
+        try:
+            await query.edit_message_text(
+                "⚠️ *Удалить НАВСЕГДА?*\n\nВсе работы, дневник и связи будут потеряны. Отменить будет НЕЛЬЗЯ.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⚠️ Да, удалить навсегда", callback_data=f"taskdelhardconfirm_{task_id}")],
+                    [InlineKeyboardButton("❌ Отмена", callback_data=f"task_{task_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return
+
     if data.startswith("taskdel_"):
         task_id = int(data.split("_")[1])
         from core.db import fetchone as _fo

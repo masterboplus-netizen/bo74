@@ -39,7 +39,7 @@ def cancel_task(task_id: int, reason: str = None):
 def get_active_tasks(user_id: int = None) -> list:
     conn = get_connection()
     c = conn.cursor()
-    query = "SELECT id, object_id, title, status, priority, deadline, assigned_to FROM tasks WHERE status IN ('open', 'in_progress')"
+    query = "SELECT id, object_id, title, status, priority, deadline, assigned_to FROM tasks WHERE deleted_at IS NULL AND status IN ('open', 'in_progress')"
     params = []
     if user_id:
         query += " AND assigned_to = ?"
