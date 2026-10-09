@@ -2349,19 +2349,41 @@ async def handle_comm_callback(query, context, data):
     if data.startswith("comm_del_"):
         comm_id = int(data.replace("comm_del_", ""))
         c = get_comm(comm_id)
-        room_id = c['room_id'] if c else None
-        delete_comm(comm_id)
-        if room_id:
+        _room_id = c["room_id"] if c else None
+        _name = (str(c.get("label") or c.get("comm_type") or "?") if c else "?")
+        try:
+            await query.edit_message_text(
+                "🗑 *Удалить коммуникацию «" + _name + "»?*\n\nДействие нельзя отменить.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⚠️ Да, удалить", callback_data="comm_delok_" + str(comm_id))],
+                    [InlineKeyboardButton("❌ Отмена", callback_data="comm_" + str(comm_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("comm_delok_"):
+        comm_id = int(data.replace("comm_delok_", ""))
+        c = get_comm(comm_id)
+        _room_id = c["room_id"] if c else None
+        try:
+            delete_comm(comm_id)
+        except Exception as _e:
+            print("comm del: " + str(_e), flush=True)
+        if _room_id:
             try:
                 await query.edit_message_text(
-                    "✅ Удалено",
+                    "✅ Коммуникация удалена",
                     reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("⬅️ К коммуникациям", callback_data=f"room_comms_{room_id}")],
+                        [InlineKeyboardButton("⬅️ К коммуникациям", callback_data=f"room_comms_{_room_id}")],
                     ])
                 )
             except Exception:
                 pass
         return True
+
 
     if data.startswith("comm_edit_"):
         parts = data.replace("comm_edit_", "").split("_")
@@ -4064,7 +4086,7 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     # ─── УНИВЕРСАЛЬНОЕ ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ ───
     import re as _re_del
-    _m_del = _re_del.match(r"^(room|works|plumb|plumb_route|panel_comp|panel)_del_(\d+)$", data)
+    _m_del = _re_del.match(r"^(room|works|plumb|plumb_route|panel_comp|panel|comm|opening)_del_(\d+)$", data)
     if _m_del:
         _prefix = _m_del.group(1)
         _item_id = int(_m_del.group(2))
@@ -5946,7 +5968,7 @@ async def handle_panels_callback(query, context, data):
 
     # ─── ПОДТВЕРЖДЁННОЕ УДАЛЕНИЕ (ДА) ───
     import re as _re_delok
-    _m_delok = _re_delok.match(r"^(plumb|plumb_route|panel_comp|panel|works)_delok_(\d+)$", data)
+    _m_delok = _re_delok.match(r"^(plumb|plumb_route|panel_comp|panel|works|comm|opening)_delok_(\d+)$", data)
     if _m_delok:
         _prefix = _m_delok.group(1)
         _item_id = int(_m_delok.group(2))
