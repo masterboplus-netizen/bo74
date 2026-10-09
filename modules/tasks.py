@@ -269,13 +269,18 @@ def restore_task(task_id):
 
 
 def hard_delete_task(task_id):
-    """Удаляет навсегда + записи дневника."""
+    """Удаляет навсегда + сохраняет TXT-отчёт."""
+    # 1. Экспорт в TXT (перед удалением)
+    try:
+        archive_task_to_file(task_id)
+    except Exception as _e:
+        print("archive fail: " + str(_e), flush=True)
+    # 2. Удаление записей дневника
     from core.db import commit
     commit("DELETE FROM task_progress WHERE task_id = ?", (task_id,))
+    # 3. Удаление задачи
     commit("DELETE FROM tasks WHERE id = ?", (task_id,))
     return True
-
-
 def get_archived_tasks() -> list:
     """Список удалённых задач."""
     from core.db import fetchall
@@ -304,3 +309,108 @@ def is_task_deleted(task_id):
     if not r:
         return None
     return r['deleted_at'] is not None
+
+
+# ============================================================
+# ЭКСПОРТ ЗАДАЧИ В TXT
+# ============================================================
+
+def export_task_to_txt(task_id):
+    """Полный TXT-отчёт по задаче (слепок карточки + связи)."""
+    from core.db import fetchone, fetchall
+    from datetime import datetime as _dt
+
+    t = fetchone("""SELECT t.*, o.name AS object_name FROM tasks t
+                    LEFT JOIN objects o ON t.object_id = o.id WHERE t.id = ?""", (task_id,))
+    if not t:
+        return None
+    t = dict(t)
+
+    lines = []
+    lines.append("━" * 60)
+    lines.append("📋 Задача #" + str(task_id) + ": " + str(t.get("title") or "?"))
+    lines.append("━" * 60)
+    lines.append("Объект: " + str(t.get("object_name") or "—"))
+    lines.append("Статус: " + str(t.get("status") or "—"))
+    lines.append("Приоритет: " + str(t.get("priority") or "—"))
+    prog = t.get("progress_percent") or 0
+    lines.append("Прогресс: " + str(prog) + "%")
+    if t.get("planned_qty"):
+        lines.append("План: " + str(t["planned_qty"]) + " " + str(t.get("planned_unit") or ""))
+    if t.get("deadline"):
+        lines.append("Срок: " + str(t["deadline"]))
+    if t.get("assigned_to"):
+        lines.append("Исполнитель id: " + str(t["assigned_to"]))
+    if t.get("created_at"):
+        lines.append("Создана: " + str(t["created_at"]))
+    if t.get("completed_at"):
+        lines.append("Выполнена: " + str(t["completed_at"]))
+    if t.get("deleted_at"):
+        lines.append("Удалена: " + str(t["deleted_at"]))
+    if t.get("description"):
+        lines.append("")
+        lines.append("Описание: " + str(t["description"]))
+    lines.append("")
+
+    # Дневник работ
+    prog_rows = fetchall("SELECT * FROM task_progress WHERE task_id = ? ORDER BY work_date, id", (task_id,))
+    if prog_rows:
+        lines.append("─" * 60)
+        lines.append("📓 Дневник работ (записей: " + str(len(prog_rows)) + ")")
+        lines.append("─" * 60)
+        for p in prog_rows:
+            p = dict(p)
+            d = str(p.get("work_date") or "?")
+            h = p.get("hours")
+            q = p.get("qty")
+            u = p.get("unit") or ""
+            desc = p.get("description") or p.get("raw_text") or ""
+            typ = p.get("type") or "work"
+            parts = ["• " + d]
+            if h: parts.append(str(h) + "ч")
+            if q: parts.append(str(q) + " " + u)
+            parts.append("[" + typ + "]")
+            if desc: parts.append(desc)
+            lines.append(" · ".join(parts))
+        lines.append("")
+
+    # Фото
+    photo_rows = fetchall("SELECT id, file_id, caption, stage, taken_at FROM photos WHERE task_id = ? ORDER BY taken_at", (task_id,))
+    if photo_rows:
+        lines.append("─" * 60)
+        lines.append("📸 Фото (шт: " + str(len(photo_rows)) + ")")
+        lines.append("─" * 60)
+        for p in photo_rows:
+            p = dict(p)
+            lines.append("• " + str(p.get("stage") or "?") + " | " + str(p.get("taken_at") or "?") + " | " + (p.get("caption") or "") + " | file_id=" + str(p.get("file_id") or "?"))
+        lines.append("")
+
+    # Итоги
+    h_all = calc_task_hours(task_id)
+    q_all = calc_task_qty(task_id)
+    rw = calc_task_rework(task_id)
+    lines.append("─" * 60)
+    lines.append("⏱ Часов всего: " + str(h_all))
+    if q_all:
+        lines.append("📐 Объём всего: " + str(q_all))
+    if rw:
+        lines.append("🔄 Переделок: " + str(rw))
+    lines.append("")
+    lines.append("Экспортировано: " + _dt.now().strftime("%Y-%m-%d %H:%M:%S"))
+    lines.append("━" * 60)
+    return chr(10).join(lines)
+
+
+def archive_task_to_file(task_id, dir_path="backups/tasks_archive"):
+    """Сохраняет TXT-отчёт в файл. Возвращает путь."""
+    import os
+    from datetime import datetime as _dt
+    txt = export_task_to_txt(task_id)
+    if not txt:
+        return None
+    os.makedirs(dir_path, exist_ok=True)
+    ts = _dt.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(dir_path, str(task_id) + "_" + ts + ".txt")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(txt)
+    return path
