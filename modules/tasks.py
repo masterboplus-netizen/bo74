@@ -250,3 +250,57 @@ def format_task_progress(task_id):
             line += " — " + str(desc)[:60]
         lines.append(icon + " " + line)
     return chr(10).join(lines)
+
+
+# ============================================================
+# SOFT DELETE ЗАДАЧ
+# ============================================================
+
+def soft_delete_task(task_id):
+    """Помечает задачу как удалённую."""
+    from core.db import commit
+    return commit("UPDATE tasks SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?", (task_id,))
+
+
+def restore_task(task_id):
+    """Восстанавливает из архива."""
+    from core.db import commit
+    return commit("UPDATE tasks SET deleted_at = NULL WHERE id = ?", (task_id,))
+
+
+def hard_delete_task(task_id):
+    """Удаляет навсегда + записи дневника."""
+    from core.db import commit
+    commit("DELETE FROM task_progress WHERE task_id = ?", (task_id,))
+    commit("DELETE FROM tasks WHERE id = ?", (task_id,))
+    return True
+
+
+def get_archived_tasks() -> list:
+    """Список удалённых задач."""
+    from core.db import fetchall
+    rows = fetchall(
+        "SELECT * FROM tasks WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC"
+    )
+    return [dict(r) for r in rows]
+
+
+def purge_old_deleted(days=60):
+    """Физически удаляет старые удалённые (старше N дней)."""
+    from core.db import fetchall, commit
+    rows = fetchall(
+        "SELECT id FROM tasks WHERE deleted_at IS NOT NULL AND deleted_at < datetime('now', ?)",
+        ('-' + str(int(days)) + ' days',)
+    )
+    for r in rows:
+        hard_delete_task(r['id'])
+    return len(rows)
+
+
+def is_task_deleted(task_id):
+    """True если задача в архиве."""
+    from core.db import fetchone
+    r = fetchone("SELECT deleted_at FROM tasks WHERE id = ?", (task_id,))
+    if not r:
+        return None
+    return r['deleted_at'] is not None

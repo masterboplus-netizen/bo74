@@ -184,7 +184,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_choose_object, pattern="^choose_obj_"))
     app.add_handler(CallbackQueryHandler(handle_confirm_date, pattern="^confirmdate_"))
     app.add_handler(CallbackQueryHandler(handle_add_menu, pattern="^(menu_add|add_object|add_task|add_expense|newtask_obj_|newexp_obj_)"))
-    app.add_handler(CallbackQueryHandler(handle_task_action, pattern="^(task_|taskdone_|taskdel_|setdate_|taskdate_|tasknodate_|taskprio_|setprio_|taskrename_|taskassign_|setassigned_|setrange_|setduration_|cal_|dur_days_)"))
+    app.add_handler(CallbackQueryHandler(handle_task_action, pattern="^(task_|taskdone_|taskdel_|setdate_|taskdate_|tasknodate_|taskprio_|setprio_|taskrename_|taskassign_|setassigned_|setrange_|setduration_|cal_|dur_days_|taskjournal_|taskaddprog_|taskaddprogskip_)"))
     register_onboarding_handlers(app)
     register_admin_handlers(app)
     app.add_handler(CallbackQueryHandler(handle_recognize_receipt, pattern="^recognize_receipt$"))

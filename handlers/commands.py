@@ -2382,7 +2382,58 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]))
         return
 
-    if context.user_data.get('waiting_for') in ('floor_new_name', 'panel_new_name', 'child_panel_name', 'component_price', 'route_length', 'plumb_new_name', 'plumb_route_length', 'work_new_qty', 'work_edit_value', 'group_load_watt', 'measure_first_dim', 'measure_second_dim', 'wall_angle_value', 'wall_niche_width', 'wall_niche_depth', 'wall_niche_height', 'room_height_point', 'room_height_same', 'wall_round_length', 'wall_round_angle_val', 'wall_round_plane_bottom', 'wall_round_plane_middle', 'wall_round_plane_top', 'opening_width', 'opening_height', 'opening_sill', 'opening_offset', 'opening_edit_value', 'comm_offset_x', 'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_edit_value', 'comm_size', 'comm_size_w', 'comm_size_h', 'comm_size_d', 'comm_edit_size_part', 'wall_round_opening_width', 'wall_round_opening_height', 'comm_offset_x', 'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_edit_value',
+    # Дневник работ — шаг 1: часы
+    if context.user_data.get("waiting_for") == "task_progress_hours":
+        try:
+            _h = float((text or "").strip().replace(",", "."))
+        except ValueError:
+            await update.message.reply_text("⚠️ Нужно число. Сколько часов? Например: 8")
+            return
+        context.user_data["task_progress_h"] = _h
+        context.user_data["waiting_for"] = "task_progress_desc"
+        try:
+            await update.message.reply_text(
+                "📝 Что делал? (одно предложение, можно коротко)",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⏭ Пропустить", callback_data=f"taskaddprogskip_{context.user_data.get("task_progress_id",0)}")],
+                ])
+            )
+        except Exception:
+            pass
+        return
+
+    # Дневник работ — шаг 2: описание
+    if context.user_data.get("waiting_for") == "task_progress_desc":
+        _tid = context.user_data.get("task_progress_id")
+        _h = context.user_data.get("task_progress_h")
+        _desc = (text or "").strip()
+        if _tid and _h:
+            try:
+                from modules import tasks as _tasks
+                _tasks.add_progress(_tid, hours=_h, description=_desc, source="text")
+            except Exception as _e:
+                print("add_progress fail: " + str(_e), flush=True)
+        for _k in ("task_progress_id", "task_progress_h", "waiting_for"):
+            context.user_data.pop(_k, None)
+        await update.message.reply_text(
+            "✅ Записано: " + str(_h) + "ч — " + (_desc or "без описания"),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📓 Дневник", callback_data=f"taskjournal_{_tid}")],
+                [InlineKeyboardButton("⬅️ К задаче", callback_data=f"task_{_tid}")],
+            ])
+        )
+        try:
+            from handlers.commands import handle_task_action
+            # Показать дневник заново
+            from modules import tasks as _tasks2
+            _rows = _tasks2.get_task_progress(_tid)
+            _hrs = _tasks2.calc_task_hours(_tid)
+            await update.message.reply_text("📓 Часов всего: " + str(_hrs) + "\n" + _tasks2.format_task_progress(_tid))
+        except Exception:
+            pass
+        return
+
+    if context.user_data.get('waiting_for') in ('floor_new_name', 'panel_new_name', 'child_panel_name', 'component_price', 'route_length', 'plumb_new_name', 'plumb_route_length', 'work_new_qty', 'work_edit_value', 'task_progress_hours', 'task_progress_desc', 'group_load_watt', 'measure_first_dim', 'measure_second_dim', 'wall_angle_value', 'wall_niche_width', 'wall_niche_depth', 'wall_niche_height', 'room_height_point', 'room_height_same', 'wall_round_length', 'wall_round_angle_val', 'wall_round_plane_bottom', 'wall_round_plane_middle', 'wall_round_plane_top', 'opening_width', 'opening_height', 'opening_sill', 'opening_offset', 'opening_edit_value', 'comm_offset_x', 'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_edit_value', 'comm_size', 'comm_size_w', 'comm_size_h', 'comm_size_d', 'comm_edit_size_part', 'wall_round_opening_width', 'wall_round_opening_height', 'comm_offset_x', 'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_edit_value',
                                                   'wall_round_length', 'wall_round_angle_val', 'wall_round_plane_bottom', 'wall_round_plane_middle', 'wall_round_plane_top'):
         from interfaces.telegram.rooms import handle_measure_input
         await handle_measure_input(update, context)
@@ -3341,6 +3392,7 @@ def task_card_keyboard(task_id, deadline=None):
     if deadline:
         buttons.append([InlineKeyboardButton("🚫 Убрать срок", callback_data=f"tasknodate_{task_id}")])
     buttons += [
+        [InlineKeyboardButton("📝 Дневник работ", callback_data=f"taskjournal_{task_id}")],
         [InlineKeyboardButton("👤 Назначить", callback_data=f"taskassign_{task_id}")],
         [InlineKeyboardButton("🔴 Приоритет", callback_data=f"taskprio_{task_id}")],
         [InlineKeyboardButton("✏️ Название", callback_data=f"taskrename_{task_id}")],
@@ -3451,6 +3503,73 @@ async def handle_task_action(update: Update, context: ContextTypes.DEFAULT_TYPE)
     from datetime import date, timedelta
 
     # Назначить исполнителя
+    if data.startswith("taskaddprogskip_"):
+        task_id = int(data.replace("taskaddprogskip_", ""))
+        _h = context.user_data.get("task_progress_h")
+        if task_id and _h:
+            try:
+                from modules import tasks as _tasks
+                _tasks.add_progress(task_id, hours=_h, source="text")
+            except Exception as _e:
+                print("add_progress fail: " + str(_e), flush=True)
+        for _k in ("task_progress_id", "task_progress_h", "waiting_for"):
+            context.user_data.pop(_k, None)
+        try:
+            from modules import tasks as _tasks2
+            _hrs = _tasks2.calc_task_hours(task_id)
+            await query.edit_message_text("✅ Записано: " + str(_h) + "ч\n📓 Часов всего: " + str(_hrs))
+        except Exception:
+            pass
+        return
+
+    if data.startswith("taskaddprog_"):
+        task_id = int(data.replace("taskaddprog_", ""))
+        context.user_data["task_progress_id"] = task_id
+        context.user_data["waiting_for"] = "task_progress_hours"
+        try:
+            await query.edit_message_text(
+                "⏱ Сколько часов сегодня работал? (например: 8)",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"taskjournal_{task_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return
+
+    if data.startswith("taskjournal_"):
+        task_id = int(data.replace("taskjournal_", ""))
+        from modules import tasks as _tasks
+        from core.db import fetchone as _fetchone
+        _r = _fetchone("SELECT title, progress_percent, planned_qty, planned_unit FROM tasks WHERE id = ?", (task_id,))
+        _title = _r["title"] if _r else "?"
+        _prog = (_r["progress_percent"] if _r else 0) or 0
+        _plan_q = _r["planned_qty"] if _r else None
+        _plan_u = _r["planned_unit"] if _r else None
+        _hours = _tasks.calc_task_hours(task_id)
+        _qty = _tasks.calc_task_qty(task_id)
+        _rework = _tasks.calc_task_rework(task_id)
+        text = "📓 *Дневник работ*\n\n"
+        text += "📋 " + str(_title) + "\n\n"
+        text += _tasks.format_progress_bar(_prog) + "\n\n"
+        text += "⏱ Часов: " + str(_hours) + "\n"
+        if _qty:
+            text += "📐 Факт: " + str(_qty) + " " + str(_plan_u or "") + "\n"
+        if _plan_q:
+            text += "🎯 План: " + str(_plan_q) + " " + str(_plan_u or "") + "\n"
+        if _rework:
+            text += "🔄 Переделок: " + str(_rework) + "\n"
+        text += "\n" + _tasks.format_task_progress(task_id)
+        kb_rows = [
+            [InlineKeyboardButton("➕ Отметить работу", callback_data=f"taskaddprog_{task_id}")],
+            [InlineKeyboardButton("⬅️ К задаче", callback_data=f"task_{task_id}")],
+        ]
+        try:
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb_rows))
+        except Exception:
+            pass
+        return
+
     if data.startswith("taskassign_"):
         from modules.users import get_all_users
         task_id = int(data.replace("taskassign_", ""))
