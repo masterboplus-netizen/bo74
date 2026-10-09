@@ -4062,6 +4062,66 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
     data = query.data
     print(f"🔍 ROOMS: data={data!r}", flush=True)
 
+    # ─── УНИВЕРСАЛЬНОЕ ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ ───
+    import re as _re_del
+    _m_del = _re_del.match(r"^(room|works|plumb|plumb_route|panel_comp|panel)_del_(\d+)$", data)
+    if _m_del:
+        _prefix = _m_del.group(1)
+        _item_id = int(_m_del.group(2))
+        _spec = None
+        try:
+            if _prefix == "room":
+                from core import rooms as core_rooms_mod ; _o = core_rooms_mod.get_room(_item_id)
+                if _o:
+                    _name = "комнату «" + str(_o.get("name") or "?") + "»"
+                    _cancel_cb = "room_" + str(_item_id)
+                    _spec = ("комнату", _name, _cancel_cb, "room_delok_")
+            elif _prefix == "works":
+                from core import object_works as _ow_del
+                _o = _ow_del.get_work(_item_id)
+                if _o:
+                    _name = "работу «" + str(_o.get("work_label") or _o.get("work_type") or "?") + "»"
+                    _cancel_cb = "works_list_" + str(_o.get("object_id"))
+                    _spec = ("работу", _name, _cancel_cb, "works_delok_")
+            elif _prefix == "plumb":
+                _o = core_plumbing.get_panel(_item_id)
+                if _o:
+                    _name = "коллектор «" + str(_o.get("name") or "?") + "»"
+                    _cancel_cb = "plumb_" + str(_item_id)
+                    _spec = ("коллектор", _name, _cancel_cb, "plumb_delok_")
+            elif _prefix == "plumb_route":
+                _o = core_plumbing.get_route(_item_id)
+                if _o:
+                    _name = "трассу"
+                    _cancel_cb = "plumb_route_" + str(_item_id)
+                    _spec = ("трассу", _name, _cancel_cb, "plumb_route_delok_")
+            elif _prefix == "panel_comp":
+                _o = core_elec_panels.get_component(_item_id)
+                if _o:
+                    _pid = _o.get("panel_id")
+                    _name = "компонент"
+                    _cancel_cb = "panel_comp_item_" + str(_item_id)
+                    _spec = ("компонент", _name, _cancel_cb, "panel_comp_delok_")
+            elif _prefix == "panel":
+                _o = core_elec_panels.get_panel(_item_id)
+                if _o:
+                    _name = "щит «" + str(_o.get("name") or "?") + "»"
+                    _cancel_cb = "panel_" + str(_item_id)
+                    _spec = ("щит", _name, _cancel_cb, "panel_delok_")
+        except Exception as _e:
+            print("del interceptor: " + str(_e), flush=True)
+            _spec = None
+        if _spec:
+            _, _name, _cancel_cb, _ok_prefix = _spec
+            try:
+                await _safe_edit(query, "🗑 *Удалить " + _name + "?*\n\nДействие нельзя отменить.", InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⚠️ Да, удалить", callback_data=_ok_prefix + str(_item_id))],
+                    [InlineKeyboardButton("❌ Отмена", callback_data=_cancel_cb)],
+                ]))
+            except Exception:
+                pass
+            return
+
     # --- Объекты ---
     if data == "obj_archive_list":
         try:
@@ -5880,6 +5940,50 @@ async def handle_panels_callback(query, context, data):
     if not core_elec_panels:
         try:
             await query.edit_message_text("Модуль щитов не загружен")
+        except Exception:
+            pass
+        return True
+
+    # ─── ПОДТВЕРЖДЁННОЕ УДАЛЕНИЕ (ДА) ───
+    import re as _re_delok
+    _m_delok = _re_delok.match(r"^(plumb|plumb_route|panel_comp|panel|works)_delok_(\d+)$", data)
+    if _m_delok:
+        _prefix = _m_delok.group(1)
+        _item_id = int(_m_delok.group(2))
+        _back = "menu_back"
+        try:
+            if _prefix == "plumb":
+                _o = core_plumbing.get_panel(_item_id)
+                _obj_id = _o.get("object_id") if _o else None
+                core_plumbing.delete_panel(_item_id)
+                _back = "plumb_list_" + str(_obj_id)
+            elif _prefix == "plumb_route":
+                _o = core_plumbing.get_route(_item_id)
+                _pid = _o.get("panel_id") if _o else None
+                core_plumbing.delete_route(_item_id)
+                _back = "plumb_routes_" + str(_pid)
+            elif _prefix == "panel_comp":
+                _o = core_elec_panels.get_component(_item_id)
+                _pid = _o.get("panel_id") if _o else None
+                core_elec_panels.delete_component(_item_id)
+                _back = "panel_comp_" + str(_pid)
+            elif _prefix == "panel":
+                _o = core_elec_panels.get_panel(_item_id)
+                _obj_id = _o.get("object_id") if _o else None
+                core_elec_panels.delete_panel(_item_id)
+                _back = "panels_list_" + str(_obj_id)
+            elif _prefix == "works":
+                from core import object_works as _ow_del
+                _o = _ow_del.get_work(_item_id)
+                _obj_id = _o.get("object_id") if _o else None
+                _ow_del.delete_work(_item_id)
+                _back = "works_list_" + str(_obj_id)
+        except Exception as _e:
+            print("delok fail: " + str(_e), flush=True)
+        try:
+            await _safe_edit(query, "✅ Удалено", InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Назад", callback_data=_back)],
+            ]))
         except Exception:
             pass
         return True

@@ -116,6 +116,13 @@ def get_routes_by_panel(panel_id):
     return [dict(r) for r in rows]
 
 
+
+
+def get_route(route_id):
+    """Одна трасса сантехники по id."""
+    row = fetchone("SELECT * FROM plumbing_routes WHERE id = ?", (route_id,))
+    return dict(row) if row else None
+
 def delete_route(route_id):
     commit("DELETE FROM plumbing_routes WHERE id = ?", (route_id,))
     return True
