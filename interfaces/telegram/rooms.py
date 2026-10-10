@@ -5559,12 +5559,13 @@ async def _comm_save_and_reply(message, context, room_id):
     diameter = context.user_data.get('comm_diameter')
     voltage = context.user_data.get('comm_voltage')
 
+    world_x = world_y = world_z = None
     try:
         walls = get_walls_ordered(room_id)
         coords = calc_wall_coords(walls)
         wc = next((c for c in coords if c.get('wall_pos') == wall), None)
         if wc and offset_x is not None:
-            wall_offset_to_world(wc, offset_x, offset_y or 0)
+            world_x, world_y, world_z = wall_offset_to_world(wc, offset_x, offset_y or 0)
     except Exception as e:
         print(f"⚠️ world calc: {e}", flush=True)
 
@@ -5573,6 +5574,7 @@ async def _comm_save_and_reply(message, context, room_id):
             room_id=room_id, comm_type=ctype, wall=wall,
             offset_x=offset_x, offset_y=offset_y,
             diameter=diameter, voltage=voltage,
+            world_x=world_x, world_y=world_y, world_z=world_z,
         )
     except Exception as e:
         print(f"⚠️ add_comm: {e}", flush=True)

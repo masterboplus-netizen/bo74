@@ -42,7 +42,8 @@ def add_comm(room_id, comm_type, label=None, wall=None,
              offset_x=None, offset_y=None, depth=None,
              diameter=None, voltage=None, size=None, note=None,
              photo_id=None, tenant_id=1, created_by=None,
-            session_id=None):
+             session_id=None,
+             world_x=None, world_y=None, world_z=None):
     """Добавляет коммуникацию. Возвращает comm_id."""
     return commit(
         "INSERT INTO room_comms "
@@ -52,7 +53,7 @@ def add_comm(room_id, comm_type, label=None, wall=None,
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (room_id, comm_type, label, wall, offset_x, offset_y, depth,
          diameter, voltage, size, note, photo_id, tenant_id, created_by,
-         session_id, None, None, None)
+         session_id, world_x, world_y, world_z)
     )
 
 
