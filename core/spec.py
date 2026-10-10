@@ -889,6 +889,76 @@ WORK_TYPES_DEFAULT = {
 }
 
 
+# ============================================================
+# МАТЕРИАЛЫ (дефолтные, для смет отделки)
+# ============================================================
+
+MATERIALS_DEFAULT = {
+    # code: (name, category, unit, norm_per_sqm, price)
+    # Отделка стен
+    'plaster_gips':      ('Штукатурка гипсовая',   'Штукатурка', 'кг', 15,  8),
+    'plaster_cement':    ('Штукатурка цементная',  'Штукатурка', 'кг', 16,  10),
+    'putty_start':       ('Шпаклёвка старт',       'Шпаклёвка',  'кг', 8,   18),
+    'putty_finish':      ('Шпаклёвка финишная',    'Шпаклёвка',  'кг', 1.5, 25),
+    'primer_deep':       ('Грунтовка глубокопроникающая', 'Грунтовка', 'л', 0.15, 200),
+    'primer_beton':      ('Бетон-контакт',         'Грунтовка',  'л', 0.2,  350),
+    # Окраска
+    'paint_interior':    ('Краска интерьерная',    'Краска',     'л', 0.3,  600),
+    'paint_moisture':    ('Краска влагостойкая',   'Краска',     'л', 0.3,  800),
+    'paint_ceiling':     ('Краска для потолка',    'Краска',     'л', 0.25, 500),
+    # Обои
+    'wallpaper_simple':  ('Обои простые',          'Обои',       'м²', 1.1, 500),
+    'wallpaper_premium': ('Обои премиум',          'Обои',       'м²', 1.1, 1500),
+    'glue_wallpaper':    ('Клей для обоев',        'Клей',       'кг', 0.3,  150),
+    # Плитка
+    'tile_ceramic':      ('Плитка керамическая',   'Плитка',     'м²', 1.1, 1200),
+    'tile_porcelain':    ('Керамогранит',          'Плитка',     'м²', 1.1, 1800),
+    'tile_glue':         ('Клей для плитки',       'Клей',       'кг', 5,    30),
+    'tile_grout':        ('Затирка',               'Затирка',    'кг', 0.5,  150),
+    'tile_cross':        ('Крестики для плитки',   'Крепёж',     'шт', 30,   2),
+    # Полы
+    'screed_cement':     ('Стяжка цементная',      'Стяжка',     'кг', 20,   12),
+    'screed_self':       ('Наливной пол',          'Стяжка',     'кг', 1.6,  35),
+    'laminate':          ('Ламинат',               'Ламинат',    'м²', 1.1,  1500),
+    'parquet':           ('Паркет',                'Паркет',     'м²', 1.1,  3500),
+    'substrate':         ('Подложка',              'Подложка',   'м²', 1.05, 200),
+    # Потолок
+    'ceiling_str':       ('Натяжной потолок',      'Потолок',    'м²', 1,    900),
+    'ceiling_dry':       ('Гипсокартон',           'Потолок',    'м²', 1.1,  350),
+    'ceiling_profile':   ('Профиль для ГКЛ',       'Потолок',    'м.п.', 2.5, 80),
+    # Плинтус, двери
+    'plinth':            ('Плинтус',               'Плинтус',    'м.п.', 1.05, 150),
+    'door_interior':     ('Дверь межкомнатная',    'Двери',      'шт', 1,    15000),
+    'door_handle':       ('Ручка дверная',         'Двери',      'шт', 1,    1500),
+    # Декор
+    'mirror':            ('Зеркало',               'Декор',      'шт', 1,    3000),
+    'cornice':           ('Карниз',                'Декор',      'м.п.', 1,  500),
+}
+
+def get_material_label(code):
+    if code in MATERIALS_DEFAULT:
+        return MATERIALS_DEFAULT[code][0]
+    return code
+
+def get_material_unit(code):
+    if code in MATERIALS_DEFAULT:
+        return MATERIALS_DEFAULT[code][2]
+    return 'шт'
+
+def get_material_norm(code):
+    if code in MATERIALS_DEFAULT:
+        return MATERIALS_DEFAULT[code][3]
+    return 0
+
+def get_material_price(code):
+    if code in MATERIALS_DEFAULT:
+        return MATERIALS_DEFAULT[code][4]
+    return 0
+
+def list_materials():
+    return [(k, v) for k, v in MATERIALS_DEFAULT.items()]
+
+
 def get_work_label(code):
     if code in WORK_TYPES_DEFAULT:
         return WORK_TYPES_DEFAULT[code][0]
