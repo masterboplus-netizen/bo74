@@ -77,6 +77,11 @@ def parse_message(text: str) -> dict:
             for w in ['в', 'на', 'для']:
                 title = title.replace(w, '', 1)
             title = title.replace(obj['name'].lower(), '')
+        simple = obj['name'].lower().split('(')[0].strip()
+        if simple:
+            title = title.replace(simple, '')
+        title = title.strip() or text
+        return {'action': 'add_task', 'object': obj, 'title': title}
     # === ДОХОД ===
     income_words = ['получил', 'заработал', 'оплатили', 'перевели', 'пришло', 'доход', 'приход', 'заплатили']
     has_income_word = any(w in text_lower for w in income_words)
@@ -99,12 +104,6 @@ def parse_message(text: str) -> dict:
                 'amount': amount_inc,
                 'category': 'доход'
             }
-
-            simple = obj['name'].lower().split('(')[0].strip()
-            if simple:
-                title = title.replace(simple, '')
-            title = title.strip() or text
-            return {'action': 'add_task', 'object': obj, 'title': title}
 
     # === РАСХОД ===
     expense_words = ['потратил', 'расход', 'заплатил', 'купил', 'оплатил', 'ушло', 'отдал', 'цена']
