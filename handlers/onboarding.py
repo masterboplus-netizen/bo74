@@ -22,6 +22,7 @@ def role_menu_keyboard(role: str):
             [InlineKeyboardButton("🏗️ Объекты",  callback_data="menu_objects")],
             [InlineKeyboardButton("📋 Задачи",   callback_data="menu_tasks")],
             [InlineKeyboardButton("💰 Финансы",  callback_data="menu_finance")],
+            [InlineKeyboardButton("💵 Сметы", callback_data="menu_estimates")],
             [InlineKeyboardButton("📊 Отчёты",   callback_data="menu_reports")],
             [InlineKeyboardButton("📊 KPI",      callback_data="menu_kpi")],
             [InlineKeyboardButton("💸 Личные",   callback_data="menu_personal")],
