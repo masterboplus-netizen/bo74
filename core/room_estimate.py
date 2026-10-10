@@ -60,11 +60,15 @@ def _calc_materials_for_area(area_sqm, material_codes):
 
 
 def _calc_works_for_area(area_sqm, work_codes):
-    """Считает работы для площади по списку кодов."""
+    """Считает работы для площади по списку кодов. Без дублей."""
     result = []
     total = 0.0
     total_hours = 0.0
+    seen = set()
     for code in work_codes:
+        if code in seen:
+            continue
+        seen.add(code)
         info = spec.WORK_TYPES_DEFAULT.get(code)
         if not info:
             continue
