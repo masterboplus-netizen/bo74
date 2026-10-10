@@ -1,3 +1,139 @@
+    # === ВСЕ CRM-ОЖИДАНИЯ — В САМОМ НАЧАЛЕ, ДО ПАРСЕРА ===
+
+    # CRM: ждём имя нового клиента (для сделки)
+    if context.user_data.get('waiting_for') == 'crm_deal_new_client_name':
+        name = text.strip()
+        context.user_data['crm_new_client_name'] = name
+        context.user_data['waiting_for'] = None
+        await update.message.reply_text(
+            f"👤 Создать клиента «{name}»?",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Создать и продолжить сделку", callback_data="crm_new_client_for_deal")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="menu_crm")],
+            ])
+        )
+        print(f"⚠️ RETURN на строке 2330", flush=True)
+        return
+
+    # CRM: ждём имя клиента (обычный сценарий)
+    if context.user_data.get('waiting_for') == 'crm_client_name':
+        context.user_data['crm_new_client_name'] = text.strip()
+        context.user_data['waiting_for'] = 'crm_client_phone'
+        await update.message.reply_text(
+            f"👤 Имя: «{text.strip()}»\n\n📞 Теперь телефон (или Пропустить):",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_phone")],
+            ])
+        )
+        print(f"⚠️ RETURN на строке 2342", flush=True)
+        return
+
+    if context.user_data.get('waiting_for') == 'crm_client_phone':
+        from modules.phone_utils import parse_phone, get_country_label
+        raw = text.strip()
+        result = parse_phone(raw)
+        status = result.get('status')
+
+        if status == 'ok':
+            normalized = result['phone']
+            country = get_country_label(normalized)
+            context.user_data['crm_new_client_phone'] = normalized
+            context.user_data['waiting_for'] = 'crm_client_address'
+            await update.message.reply_text(
+                f"✅ Телефон распознан: {normalized}\n"
+                f"{country}\n\n"
+                f"📍 Теперь адрес (или Пропустить):",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✏️ Изменить телефон", callback_data="crm_phone_edit")],
+                    [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_address")],
+                ])
+            )
+            print(f"⚠️ RETURN на строке 2364", flush=True)
+            return
+
+        if status == 'suggest':
+            variants = result.get('variants', [])
+            context.user_data['phone_variants'] = variants
+            buttons = []
+            for v in variants:
+                label = f"📞 {v}"
+                buttons.append([InlineKeyboardButton(label, callback_data=f"crm_phone_pick_{v}")])
+            buttons.append([InlineKeyboardButton("✏️ Ввести заново", callback_data="crm_phone_edit")])
+            buttons.append([InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_phone")])
+            await update.message.reply_text(
+                f"🤔 Номер «{raw}» нестандартный.\n\n"
+                f"Выбери подходящий вариант:",
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+            print(f"⚠️ RETURN на строке 2380", flush=True)
+            return
+
+        # invalid
+        await update.message.reply_text(
+            f"❌ Номер «{raw}» слишком короткий или не распознан.\n\n"
+            f"Введи в формате:\n"
+            f"• +79991234567 (Россия)\n"
+            f"• 89991234567 (Россия)\n"
+            f"• 9991234567 (Россия, 10 цифр)\n"
+            f"• +491234567890 (Европа)\n\n"
+            f"Или нажми «Пропустить».",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✏️ Ввести заново", callback_data="crm_phone_edit")],
+                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_phone")],
+            ])
+        )
+        print(f"⚠️ RETURN на строке 2396", flush=True)
+        return
+
+    if context.user_data.get('waiting_for') == 'crm_client_address':
+        context.user_data['crm_new_client_address'] = text.strip()
+        context.user_data['waiting_for'] = 'crm_client_source'
+        phone = context.user_data.get('crm_new_client_phone')
+        phone_line = f"📞 Телефон: {phone}\n" if phone else "📞 Телефон: —\n"
+        await update.message.reply_text(
+            f"📍 Адрес: {text.strip()}\n\n"
+            f"{phone_line}\n"
+            f"🔗 Откуда узнал? Или Пропустить:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✏️ Изменить телефон", callback_data="crm_phone_edit")],
+                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_source")],
+            ])
+        )
+        print(f"⚠️ RETURN на строке 2412", flush=True)
+        return
+
+    if context.user_data.get('waiting_for') == 'crm_client_source':
+        context.user_data['crm_new_client_source'] = text.strip()
+        await _finalize_new_client(update, context)
+        print(f"⚠️ RETURN на строке 2417", flush=True)
+        return
+
+    # CRM: ждём бюджет сделки — ВАЖНО до парсера
+    if context.user_data.get('waiting_for') == 'crm_deal_budget':
+        try:
+            from modules.parser import parse_amount
+            budget = parse_amount(text) or 0
+        except Exception:
+            budget = 0
+        client_id = context.user_data.get('crm_deal_client_id')
+        if not client_id:
+            await update.message.reply_text("❌ Клиент потерялся. Начни заново.")
+            context.user_data['waiting_for'] = None
+            print(f"⚠️ RETURN на строке 2430", flush=True)
+            return
+        from modules.crm import add_deal, get_client
+        deal_id = add_deal(client_id=client_id, object_id=None, status='new', budget=budget)
+        c = get_client(client_id)
+        context.user_data['waiting_for'] = None
+        context.user_data['crm_deal_client_id'] = None
+        await update.message.reply_text(
+            f"✅ Сделка #{deal_id} создана!\n\n"
+            f"👤 Клиент: {c['name'] if c else '—'}\n"
+            f"💼 Бюджет: {budget} ₽\n"
+            f"📊 Статус: 🆕 Новая",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("👥 К клиентам", callback_data="crm_clients")],
+                [InlineKeyboardButton("💼 К сделкам", callback_data="crm_deals")],
                 [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
             ])
         )
@@ -362,139 +498,3 @@
             conn.close()
             title = row['title'] if row else '?'
             obj = row['obj'] if row and row['obj'] else 'Без объекта'
-            await update.message.reply_text(
-                f"📋 {title}\n{obj}\n\n📅 Дата: {d.strftime('%d.%m.%Y')}\n\nПодтверди:",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("✅ Да", callback_data=f"confirmdate_yes_{setdate_task}_{d.strftime('%Y-%m-%d')}")],
-                    [InlineKeyboardButton("❌ Нет", callback_data=f"confirmdate_no_{setdate_task}")],
-                ])
-            )
-            # Автоподтверждение через 30 секунд
-            context.job_queue.run_once(
-                auto_confirm_date,
-                30,
-                data={
-                    'chat_id': update.effective_chat.id,
-                    'task_id': setdate_task,
-                    'date': d.strftime('%Y-%m-%d'),
-                    'date_str': d.strftime('%d.%m.%Y')
-                },
-                name=f"confirm_{setdate_task}"
-            )
-            print(f"⚠️ RETURN на строке 2801", flush=True)
-            return
-        else:
-            await update.message.reply_text(
-                "❌ Не понял дату. Попробуй: «завтра», «20.09», «пн», «+3»"
-            )
-            print(f"⚠️ RETURN на строке 2806", flush=True)
-            return
-
-    # Обработка переименования задачи
-    rename_task = context.user_data.get('rename_task')
-    if rename_task:
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("UPDATE tasks SET title = ? WHERE id = ?", (text, rename_task))
-        conn.commit()
-        conn.close()
-        context.user_data['rename_task'] = None
-        await update.message.reply_text(f"✅ Задача переименована: «{text}»")
-        print(f"⚠️ RETURN на строке 2818", flush=True)
-        return
-
-    result = parse_message(text)
-    action = result.get('action')
-
-    if action == 'ask_expense_type':
-        amount = result['amount']
-        context.user_data['ask_expense_amount'] = amount
-        await update.message.reply_text(
-            f"💰 {amount} ₽ — куда записать?",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💸 Личный расход", callback_data=f"exp_type_personal_{amount}")],
-                [InlineKeyboardButton("🏗️ Расход по объекту", callback_data=f"exp_type_object_{amount}")],
-                [InlineKeyboardButton("❌ Отмена", callback_data="menu_back")],
-            ])
-        )
-        print(f"⚠️ RETURN на строке 2834", flush=True)
-        return
-
-    if action == 'income':
-        from modules.finance import add_income
-        obj = result['object']
-        amount = result['amount']
-        category = result.get('category', 'доход')
-        add_income(obj['id'], amount, category)
-        await update.message.reply_text(
-            f"💰 Доход {amount} ₽ ({category}) добавлен в «{obj['name']}»"
-        )
-        print(f"⚠️ RETURN на строке 2845", flush=True)
-        return
-
-    if action == 'expense':
-        obj = result['object']
-        amount = result['amount']
-        category = result['category']
-        # Известные категории
-        known_categories = ['материалы', 'еда', 'транспорт', 'инструмент', 'сантехника', 'электрика', 'покраска']
-        # Если категория явно из списка — записываем сразу
-        if category and category in known_categories:
-            add_expense(obj['id'], amount, category)
-            await update.message.reply_text(
-                f"✅ Расход {amount} ₽ ({category}) добавлен в «{obj['name']}»"
-            )
-            print(f"⚠️ RETURN на строке 2859", flush=True)
-            return
-        # Иначе — спрашиваем категорию
-        context.user_data['pending_expense'] = {
-            'object_id': obj['id'],
-            'object_name': obj['name'],
-            'amount': amount
-        }
-        await update.message.reply_text(
-            f"💰 Расход {amount} ₽ в «{obj['name']}»\n\nЗа что?",
-            reply_markup=expense_category_keyboard()
-        )
-        print(f"⚠️ RETURN на строке 2870", flush=True)
-        return
-
-    if action == 'add_task':
-        obj = result['object']
-        title = result['title']
-        tid = create_task(obj['id'], title)
-        await update.message.reply_text(
-            f"✅ Задача «{title}» добавлена в «{obj['name']}». ID: {tid}"
-        )
-        print(f"⚠️ RETURN на строке 2879", flush=True)
-        return
-
-    if action == 'done_task':
-        obj = result['object']
-        task = result['task']
-        close_task(task['id'], user_id=update.effective_user.id)
-        await update.message.reply_text(
-            f"✅ Задача «{task['title']}» в «{obj['name']}» выполнена!"
-        )
-        print(f"⚠️ RETURN на строке 2888", flush=True)
-        return
-
-    if action == 'done_task_not_found':
-        obj = result['object']
-        await update.message.reply_text(
-            f"❌ В «{obj['name']}» не нашёл задачу с «{result['query']}». Посмотри /tasks"
-        )
-        print(f"⚠️ RETURN на строке 2895", flush=True)
-        return
-
-    if action == 'finance':
-        obj = result['object']
-        f = get_finance_summary(obj['id'])
-        await update.message.reply_text(
-            f"💰 {obj['name']}\n\nДоход: {f['income']} ₽\nРасход: {f['expense']} ₽\nБаланс: {f['balance']} ₽"
-        )
-        print(f"⚠️ RETURN на строке 2903", flush=True)
-        return
-
-    if action == 'list_tasks':
-        tasks = get_active_tasks()

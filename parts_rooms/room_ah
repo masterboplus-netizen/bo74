@@ -1,3 +1,154 @@
+            "Автомат: " + str(_breaker) + chr(10) +
+            "Кабель: " + str(_cable)
+        )
+        if _panel_id:
+            text += chr(10) + "Щит: " + (core_elec_panels.get_panel(_panel_id).get("name") if (core_elec_panels and core_elec_panels.get_panel(_panel_id)) else ("#" + str(_panel_id)))
+        kb_rows = [
+            [InlineKeyboardButton("📏 Трассы", callback_data="group_routes_" + str(group_id))],
+        ]
+        if _panel_id:
+            kb_rows.append([InlineKeyboardButton("⚡ К щиту", callback_data="panel_" + str(_panel_id))])
+            kb_rows.append([InlineKeyboardButton("⚡ Сменить щит", callback_data="group_panel_pick_" + str(group_id))])
+            kb_rows.append([InlineKeyboardButton("⚡ Отвязать", callback_data="group_panel_unset_" + str(group_id))])
+        else:
+            kb_rows.append([InlineKeyboardButton("⚡ Привязать к щиту", callback_data="group_panel_pick_" + str(group_id))])
+        kb_rows.append([InlineKeyboardButton("⬅️ К группам", callback_data="room_groups_" + str(g.get('room_id') or 0))])
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("group card: " + str(e), flush=True)
+        return True
+
+    # --- СПИСОК ГРУПП КОМНАТЫ ---
+    if data.startswith("room_groups_"):
+        room_id = int(data.replace("room_groups_", ""))
+        room = get_room(room_id)
+        name = room.get('name', '?') if room else '?'
+
+        # Новая архитектура: группы через точки (room_comms.group_id)
+        # Fallback на legacy (room_id) — если точек с группой ещё нет
+        groups = core_elec.get_groups_by_room(room_id)
+        if not groups:
+            groups = core_elec.get_groups(room_id)
+        lines = ["📋 Группы ЭОМ «" + str(name) + "»", ""]
+        if not groups:
+            lines.append("_Пока групп нет._\n")
+        else:
+            total_w = 0
+            for g in groups:
+                lines.append(core_elec.format_group(g))
+                total_w += g.get('load_watt') or 0
+            lines.append(f"\n📊 *Групп: {len(groups)} · Σ {int(total_w)} Вт*")
+
+        kb_rows = []
+        for g in groups:
+            gname = (g.get('name') or ('Группа #' + str(g['id'])))[:40]
+            kb_rows.append([InlineKeyboardButton(
+                "⚡ " + gname,
+                callback_data="group_" + str(g['id'])
+            )])
+        kb_rows.append([InlineKeyboardButton("➕ Создать группу", callback_data=f"group_new_{room_id}")])
+        kb_rows.append([InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")])
+        kb = InlineKeyboardMarkup(kb_rows)
+        try:
+            await query.edit_message_text(
+                "\n".join(lines), parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+        except Exception:
+            pass
+        return True
+
+    # --- СОЗДАНИЕ ГРУППЫ (шаг 1: назначение) ---
+    if data.startswith("group_new_"):
+        room_id = int(data.replace("group_new_", ""))
+        buttons = []
+        for code, label in core_spec.PURPOSE_TYPES.items():
+            buttons.append([InlineKeyboardButton(label, callback_data=f"group_purpose_{room_id}_{code}")])
+        buttons.append([InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_groups_{room_id}")])
+        try:
+            await query.edit_message_text(
+                "⚡ *Новая группа*\n\nВыбери назначение:",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        except Exception:
+            pass
+        return True
+
+    # --- ВЫБОР НАЗНАЧЕНИЯ (шаг 2: фаза) ---
+    if data.startswith("group_purpose_"):
+        parts = data.replace("group_purpose_", "").rsplit("_", 1)
+        room_id = int(parts[0])
+        purpose = parts[1]
+        context.user_data['group_room_id'] = room_id
+        context.user_data['group_purpose'] = purpose
+        label = core_spec.PURPOSE_TYPES.get(purpose, purpose)
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("1-фазная", callback_data=f"group_phase_{room_id}_1")],
+            [InlineKeyboardButton("3-фазная", callback_data=f"group_phase_{room_id}_3")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_groups_{room_id}")],
+        ])
+        try:
+            await query.edit_message_text(
+                f"⚡ *{label}*\n\nФаза:",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=kb
+            )
+        except Exception:
+            pass
+        return True
+
+    # --- ВЫБОР ФАЗЫ (шаг 3: ввод мощности) ---
+    if data.startswith("group_phase_"):
+        parts = data.replace("group_phase_", "").rsplit("_", 1)
+        room_id = int(parts[0])
+        phase = int(parts[1])
+        context.user_data['group_phase'] = phase
+        context.user_data['waiting_for'] = 'group_load_watt'
+        try:
+            await query.edit_message_text(
+                f"⚡ Мощность группы в *Вт*?\n\n_Например: 2000_",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_groups_{room_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    return False
+
+
+async def handle_reports_callback(query, context, data):
+    """Меню планов и отчётов."""
+    if data.startswith("room_reports_"):
+        room_id = int(data.replace("room_reports_", ""))
+        room = get_room(room_id)
+        name = room.get('name', '?') if room else '?'
+
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📐 Обмерный план", callback_data=f"room_plan_{room_id}")],
+            [InlineKeyboardButton("⚡ Электрика", callback_data=f"room_report_electric_{room_id}")],
+            [InlineKeyboardButton("🚿 Сантехника", callback_data=f"room_report_plumbing_{room_id}")],
+            [InlineKeyboardButton("🧱 Плитка", callback_data=f"room_report_tiler_{room_id}")],
+            [InlineKeyboardButton("🎨 Покраска", callback_data=f"room_report_painter_{room_id}")],
+            [InlineKeyboardButton("📋 Ведомость", callback_data=f"room_report_spec_{room_id}")],
+            [InlineKeyboardButton("📄 PDF-проект", callback_data=f"room_report_pdf_{room_id}")],
+            [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
+        ])
+
+        try:
+            await query.edit_message_text(
+                f"📊 *Планы и отчёты* — «{name}»\n\nВыбери:",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=kb
+            )
+        except Exception:
+            pass
         return True
 
     if data.startswith("room_report_electric_"):
@@ -347,154 +498,3 @@ async def _do_export_csv(query, context, room_id):
         print(f"⚠️ _do_export_csv: {e}", flush=True)
         try:
             await query.edit_message_text(
-                f"❌ Ошибка CSV: {e}",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔁 Попробовать снова", callback_data=f"room_export_csv_{room_id}")],
-                    [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
-                ])
-            )
-        except Exception:
-            pass
-
-
-async def _do_export_json(query, context, room_id):
-    """Генерирует JSON и отправляет."""
-    # --- Проверка: есть ли замеры? ---
-    from core.measures import get_walls_ordered
-    try:
-        walls = get_walls_ordered(room_id)
-    except Exception:
-        walls = []
-    if not walls:
-        try:
-            await query.edit_message_text(
-                "⚠️ *В комнате нет замеров*\n\n"
-                "Сначала пройди мастер замеров.\nJSON будет содержать пустую модель.",
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📐 Начать замер", callback_data=f"room_start_{room_id}")],
-                    [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
-                ])
-            )
-        except Exception:
-            pass
-        return
-
-    if save_json is None:
-        try:
-            await query.edit_message_text("❌ Модуль JSON не загружен")
-        except Exception:
-            pass
-        return
-
-    try:
-        import tempfile
-        tmp_dir = tempfile.gettempdir()
-        target_path = os.path.join(tmp_dir, f"export_room_{room_id}.json")
-        path = save_json(room_id, path=target_path)
-        if not path or not os.path.exists(path):
-            path = save_json(room_id)
-        if not path or not os.path.exists(path):
-            raise Exception("Файл не создан")
-        room = get_room(room_id)
-        name = room.get('name', f'room_{room_id}') if room else f'room_{room_id}'
-        with open(path, "rb") as f:
-            await query.message.chat.send_document(
-                document=f,
-                filename=f"{name}.json",
-                caption=f"📦 JSON-экспорт комнаты «{name}»\n\nЦифровой двойник: геометрия + замеры + проёмы + ниши",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
-                ])
-            )
-    except Exception as e:
-        print(f"⚠️ _do_export_json: {e}", flush=True)
-        try:
-            await query.edit_message_text(
-                f"❌ Ошибка JSON: {e}",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔁 Попробовать снова", callback_data=f"room_export_json_{room_id}")],
-                    [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
-                ])
-            )
-        except Exception:
-            pass
-
-
-# ============================================================
-# ГЛАВНЫЙ РОУТЕР CALLBACK'ОВ
-# ============================================================
-
-async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Роутер всех callback'ов комнат."""
-    query = update.callback_query
-    print(f"🔴 HANDLE_ROOMS_CALLBACK ВЫЗВАН: {query.data!r}", flush=True)
-    await query.answer()
-    data = query.data
-    print(f"🔍 ROOMS: data={data!r}", flush=True)
-
-    # --- Объекты ---
-    if data.startswith(("obj_del_", "obj_delok_", "obj_rename_")):
-        handled = await handle_object_callback(update, context, data)
-        if handled:
-            return
-
-    # --- obj_<id> — карточка объекта ---
-    # --- Помещения ---
-    if data.startswith("obj_floors_"):
-        handled = await handle_floors_callback(query, context, data)
-        if handled:
-            return
-
-    # --- ЭОМ объекта ---
-    if data.startswith("obj_elec_"):
-        handled = await handle_obj_elec_callback(query, context, data)
-        if handled:
-            return
-
-    if data.startswith("obj_") and not data.startswith(("obj_del_", "obj_delok_", "obj_rename_", "obj_floor_", "obj_floors_", "obj_elec_")):
-        try:
-            object_id = int(data.replace("obj_", ""))
-        except ValueError:
-            return
-        from modules.objects import get_object
-        from handlers.commands import object_detail_keyboard
-        obj = get_object(object_id)
-        if not obj:
-            try:
-                await query.edit_message_text("❌ Объект не найден")
-            except Exception:
-                pass
-            return
-        text = (
-            f"🏗️ *{obj['name']}*\n\n"
-            f"📍 {obj.get('address') or '—'}\n"
-            f"📊 Статус: {obj.get('status') or '—'}"
-        )
-        try:
-            kb = object_detail_keyboard(object_id)
-        except Exception as e:
-            print(f"⚠️ object_detail_keyboard: {e}", flush=True)
-            kb = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ К объектам", callback_data="menu_objects")]])
-        try:
-            await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
-        except Exception:
-            try:
-                await query.message.delete()
-            except Exception:
-                pass
-            await query.message.chat.send_message(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
-        return
-
-    # --- Переименование комнаты ---
-    if data.startswith("room_rename_"):
-        room_id = int(data.replace("room_rename_", ""))
-        context.user_data['waiting_for'] = 'room_rename'
-        context.user_data['room_rename_id'] = room_id
-        try:
-            await query.edit_message_text(
-                "✏️ *Новое имя комнаты:*",
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
-                ])

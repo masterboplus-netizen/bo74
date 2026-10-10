@@ -1,3 +1,57 @@
+
+    if ftype == "date":
+        date_str = extra or ''
+        c.execute("""
+            SELECT p.id, p.file_id, p.stage, p.caption, p.taken_at, p.task_id,
+                   t.title as task_title
+            FROM photos p
+            LEFT JOIN tasks t ON p.task_id = t.id
+            WHERE p.object_id = ? AND DATE(p.taken_at) = ?
+            ORDER BY p.taken_at DESC
+        """, (obj_id, date_str))
+        photos = [dict(r) for r in c.fetchall()]
+        conn.close()
+        context.user_data['photo_filter_key'] = f"date_{obj_id}_{date_str}"
+        context.user_data['photo_back'] = f"photofilt_dates_{obj_id}"
+        context.user_data['photo_cache'] = photos
+        await query.edit_message_text(f"📅 Фото за {date_str}\nВсего: {len(photos)}")
+        await _show_photos_batch(update, context, photos, page=0, header=f"📅 Фото за {date_str}")
+        return
+
+    if ftype == "uploaders":
+        c.execute("""
+            SELECT p.uploaded_by, COUNT(*) as cnt, u.name
+            FROM photos p
+            LEFT JOIN users u ON u.tg_id = p.uploaded_by
+            WHERE p.object_id = ?
+            GROUP BY p.uploaded_by
+            ORDER BY cnt DESC
+        """, (obj_id,))
+        rows = c.fetchall()
+        conn.close()
+        buttons = []
+        for r in rows[:25]:
+            name = r['name'] or f"id{r['uploaded_by']}"
+            buttons.append([InlineKeyboardButton(
+                f"👤 {name} ({r['cnt']})",
+                callback_data=f"photofilt_upl_{obj_id}_{r['uploaded_by']}"
+            )])
+        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"objphotos_{obj_id}")])
+        await query.edit_message_text(
+            f"👤 Кто загрузил фото «{obj_name}»:",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    if ftype == "upl":
+        tg_id = int(extra) if extra else 0
+        c.execute("""
+            SELECT p.id, p.file_id, p.stage, p.caption, p.taken_at, p.task_id,
+                   t.title as task_title
+            FROM photos p
+            LEFT JOIN tasks t ON p.task_id = t.id
+            WHERE p.object_id = ? AND p.uploaded_by = ?
+            ORDER BY p.taken_at DESC
         """, (obj_id, tg_id))
         photos = [dict(r) for r in c.fetchall()]
         c.execute("SELECT name FROM users WHERE tg_id = ?", (tg_id,))
@@ -328,7 +382,89 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-    if context.user_data.get('waiting_for') in ('floor_new_name', 'group_load_watt', 'measure_first_dim', 'measure_second_dim', 'wall_angle_value', 'wall_niche_width', 'wall_niche_depth', 'wall_niche_height', 'room_height_point', 'room_height_same', 'wall_round_length', 'wall_round_angle_val', 'wall_round_plane_bottom', 'wall_round_plane_middle', 'wall_round_plane_top', 'opening_width', 'opening_height', 'opening_sill', 'opening_offset', 'opening_edit_value', 'comm_offset_x', 'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_edit_value', 'comm_size', 'comm_size_w', 'comm_size_h', 'comm_size_d', 'comm_edit_size_part', 'wall_round_opening_width', 'wall_round_opening_height', 'comm_offset_x', 'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_edit_value',
+    if context.user_data.get("waiting_for") == "panel_comp_rating":
+        from core import elec_panels as core_elec_panels
+        panel_id = context.user_data.get("panel_comp_panel_id")
+        ctype = context.user_data.get("panel_comp_type")
+        text_in = text.strip()
+        if not panel_id or not ctype:
+            await update.message.reply_text("Потерялись данные. Начни заново.")
+            context.user_data["waiting_for"] = None
+            return
+        try:
+                import re as _re
+                _m = _re.search(r"[0-9]+", text_in)
+                if _m is None:
+                    await update.message.reply_text("Не нашёл число. Введи номинал, например 16:")
+                    return
+                rating = int(_m.group())
+        except ValueError:
+            await update.message.reply_text("Нужно число, например 16. Попробуй ещё раз.")
+            return
+        try:
+            core_elec_panels.add_component(panel_id, component_type=ctype, rating=rating, is_manual=1)
+        except Exception as e:
+            print("panel comp add: " + str(e), flush=True)
+        for k in ["panel_comp_panel_id", "panel_comp_type", "waiting_for"]:
+            context.user_data[k] = None
+        await update.message.reply_text("✅ Компонент добавлен", reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⚡ К щиту", callback_data="panel_" + str(panel_id))],
+            [InlineKeyboardButton("📦 К компонентам", callback_data="panel_comp_" + str(panel_id))],
+        ]))
+        return
+
+    # Дневник работ — шаг 1: часы
+    if context.user_data.get("waiting_for") == "task_progress_hours":
+        try:
+            _h = float((text or "").strip().replace(",", "."))
+        except ValueError:
+            await update.message.reply_text("⚠️ Нужно число. Сколько часов? Например: 8")
+            return
+        context.user_data["task_progress_h"] = _h
+        context.user_data["waiting_for"] = "task_progress_desc"
+        try:
+            await update.message.reply_text(
+                "📝 Что делал? (одно предложение, можно коротко)",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⏭ Пропустить", callback_data=f"taskaddprogskip_{context.user_data.get("task_progress_id",0)}")],
+                ])
+            )
+        except Exception:
+            pass
+        return
+
+    # Дневник работ — шаг 2: описание
+    if context.user_data.get("waiting_for") == "task_progress_desc":
+        _tid = context.user_data.get("task_progress_id")
+        _h = context.user_data.get("task_progress_h")
+        _desc = (text or "").strip()
+        if _tid and _h:
+            try:
+                from modules import tasks as _tasks
+                _tasks.add_progress(_tid, hours=_h, description=_desc, source="text")
+            except Exception as _e:
+                print("add_progress fail: " + str(_e), flush=True)
+        for _k in ("task_progress_id", "task_progress_h", "waiting_for"):
+            context.user_data.pop(_k, None)
+        await update.message.reply_text(
+            "✅ Записано: " + str(_h) + "ч — " + (_desc or "без описания"),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("📓 Дневник", callback_data=f"taskjournal_{_tid}")],
+                [InlineKeyboardButton("⬅️ К задаче", callback_data=f"task_{_tid}")],
+            ])
+        )
+        try:
+            from handlers.commands import handle_task_action
+            # Показать дневник заново
+            from modules import tasks as _tasks2
+            _rows = _tasks2.get_task_progress(_tid)
+            _hrs = _tasks2.calc_task_hours(_tid)
+            await update.message.reply_text("📓 Часов всего: " + str(_hrs) + "\n" + _tasks2.format_task_progress(_tid))
+        except Exception:
+            pass
+        return
+
+    if context.user_data.get('waiting_for') in ('floor_new_name', 'panel_new_name', 'child_panel_name', 'component_price', 'route_length', 'plumb_new_name', 'plumb_route_length', 'work_new_qty', 'work_edit_value', 'task_progress_hours', 'task_progress_desc', 'group_load_watt', 'measure_first_dim', 'measure_second_dim', 'wall_angle_value', 'wall_niche_width', 'wall_niche_depth', 'wall_niche_height', 'room_height_point', 'room_height_same', 'wall_round_length', 'wall_round_angle_val', 'wall_round_plane_bottom', 'wall_round_plane_middle', 'wall_round_plane_top', 'opening_width', 'opening_height', 'opening_sill', 'opening_offset', 'opening_edit_value', 'comm_offset_x', 'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_edit_value', 'comm_size', 'comm_size_w', 'comm_size_h', 'comm_size_d', 'comm_edit_size_part', 'wall_round_opening_width', 'wall_round_opening_height', 'comm_offset_x', 'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_edit_value',
                                                   'wall_round_length', 'wall_round_angle_val', 'wall_round_plane_bottom', 'wall_round_plane_middle', 'wall_round_plane_top'):
         from interfaces.telegram.rooms import handle_measure_input
         await handle_measure_input(update, context)
@@ -362,139 +498,3 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print(f"⚠️ RETURN на строке 2314", flush=True)
             return
 
-    # === ВСЕ CRM-ОЖИДАНИЯ — В САМОМ НАЧАЛЕ, ДО ПАРСЕРА ===
-
-    # CRM: ждём имя нового клиента (для сделки)
-    if context.user_data.get('waiting_for') == 'crm_deal_new_client_name':
-        name = text.strip()
-        context.user_data['crm_new_client_name'] = name
-        context.user_data['waiting_for'] = None
-        await update.message.reply_text(
-            f"👤 Создать клиента «{name}»?",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ Создать и продолжить сделку", callback_data="crm_new_client_for_deal")],
-                [InlineKeyboardButton("❌ Отмена", callback_data="menu_crm")],
-            ])
-        )
-        print(f"⚠️ RETURN на строке 2330", flush=True)
-        return
-
-    # CRM: ждём имя клиента (обычный сценарий)
-    if context.user_data.get('waiting_for') == 'crm_client_name':
-        context.user_data['crm_new_client_name'] = text.strip()
-        context.user_data['waiting_for'] = 'crm_client_phone'
-        await update.message.reply_text(
-            f"👤 Имя: «{text.strip()}»\n\n📞 Теперь телефон (или Пропустить):",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_phone")],
-            ])
-        )
-        print(f"⚠️ RETURN на строке 2342", flush=True)
-        return
-
-    if context.user_data.get('waiting_for') == 'crm_client_phone':
-        from modules.phone_utils import parse_phone, get_country_label
-        raw = text.strip()
-        result = parse_phone(raw)
-        status = result.get('status')
-
-        if status == 'ok':
-            normalized = result['phone']
-            country = get_country_label(normalized)
-            context.user_data['crm_new_client_phone'] = normalized
-            context.user_data['waiting_for'] = 'crm_client_address'
-            await update.message.reply_text(
-                f"✅ Телефон распознан: {normalized}\n"
-                f"{country}\n\n"
-                f"📍 Теперь адрес (или Пропустить):",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("✏️ Изменить телефон", callback_data="crm_phone_edit")],
-                    [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_address")],
-                ])
-            )
-            print(f"⚠️ RETURN на строке 2364", flush=True)
-            return
-
-        if status == 'suggest':
-            variants = result.get('variants', [])
-            context.user_data['phone_variants'] = variants
-            buttons = []
-            for v in variants:
-                label = f"📞 {v}"
-                buttons.append([InlineKeyboardButton(label, callback_data=f"crm_phone_pick_{v}")])
-            buttons.append([InlineKeyboardButton("✏️ Ввести заново", callback_data="crm_phone_edit")])
-            buttons.append([InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_phone")])
-            await update.message.reply_text(
-                f"🤔 Номер «{raw}» нестандартный.\n\n"
-                f"Выбери подходящий вариант:",
-                reply_markup=InlineKeyboardMarkup(buttons)
-            )
-            print(f"⚠️ RETURN на строке 2380", flush=True)
-            return
-
-        # invalid
-        await update.message.reply_text(
-            f"❌ Номер «{raw}» слишком короткий или не распознан.\n\n"
-            f"Введи в формате:\n"
-            f"• +79991234567 (Россия)\n"
-            f"• 89991234567 (Россия)\n"
-            f"• 9991234567 (Россия, 10 цифр)\n"
-            f"• +491234567890 (Европа)\n\n"
-            f"Или нажми «Пропустить».",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("✏️ Ввести заново", callback_data="crm_phone_edit")],
-                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_phone")],
-            ])
-        )
-        print(f"⚠️ RETURN на строке 2396", flush=True)
-        return
-
-    if context.user_data.get('waiting_for') == 'crm_client_address':
-        context.user_data['crm_new_client_address'] = text.strip()
-        context.user_data['waiting_for'] = 'crm_client_source'
-        phone = context.user_data.get('crm_new_client_phone')
-        phone_line = f"📞 Телефон: {phone}\n" if phone else "📞 Телефон: —\n"
-        await update.message.reply_text(
-            f"📍 Адрес: {text.strip()}\n\n"
-            f"{phone_line}\n"
-            f"🔗 Откуда узнал? Или Пропустить:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("✏️ Изменить телефон", callback_data="crm_phone_edit")],
-                [InlineKeyboardButton("⏭️ Пропустить", callback_data="crm_skip_source")],
-            ])
-        )
-        print(f"⚠️ RETURN на строке 2412", flush=True)
-        return
-
-    if context.user_data.get('waiting_for') == 'crm_client_source':
-        context.user_data['crm_new_client_source'] = text.strip()
-        await _finalize_new_client(update, context)
-        print(f"⚠️ RETURN на строке 2417", flush=True)
-        return
-
-    # CRM: ждём бюджет сделки — ВАЖНО до парсера
-    if context.user_data.get('waiting_for') == 'crm_deal_budget':
-        try:
-            from modules.parser import parse_amount
-            budget = parse_amount(text) or 0
-        except Exception:
-            budget = 0
-        client_id = context.user_data.get('crm_deal_client_id')
-        if not client_id:
-            await update.message.reply_text("❌ Клиент потерялся. Начни заново.")
-            context.user_data['waiting_for'] = None
-            print(f"⚠️ RETURN на строке 2430", flush=True)
-            return
-        from modules.crm import add_deal, get_client
-        deal_id = add_deal(client_id=client_id, object_id=None, status='new', budget=budget)
-        c = get_client(client_id)
-        context.user_data['waiting_for'] = None
-        context.user_data['crm_deal_client_id'] = None
-        await update.message.reply_text(
-            f"✅ Сделка #{deal_id} создана!\n\n"
-            f"👤 Клиент: {c['name'] if c else '—'}\n"
-            f"💼 Бюджет: {budget} ₽\n"
-            f"📊 Статус: 🆕 Новая",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("👥 К клиентам", callback_data="crm_clients")],
-                [InlineKeyboardButton("💼 К сделкам", callback_data="crm_deals")],

@@ -76,6 +76,58 @@ try:
 except Exception:
     core_elec = None
 
+try:
+    from core import elec_panels as core_elec_panels
+except Exception:
+    core_elec_panels = None
+
+try:
+    from core import elec_routes as core_elec_routes
+except Exception:
+    core_elec_routes = None
+
+try:
+    from core import elec_prices as core_elec_prices
+except Exception:
+    core_elec_prices = None
+
+try:
+    from core.export.spec_export import (
+        save_panel_spec, export_panel_spec, export_object_spec
+    )
+except Exception:
+    save_panel_spec = export_panel_spec = None
+    export_object_spec = None
+
+try:
+    from core.export.estimate_export import (
+        export_panel_estimate_csv, export_object_estimate_csv, save_estimate_csv,
+        export_plumbing_object_csv
+    )
+except Exception:
+    export_panel_estimate_csv = export_object_estimate_csv = save_estimate_csv = None
+    export_plumbing_object_csv = None
+
+try:
+    from core.export.spec_export import export_plumbing_panel_spec
+except Exception:
+    export_plumbing_panel_spec = None
+
+try:
+    from core import marketplaces as core_marketplaces
+except Exception:
+    core_marketplaces = None
+
+try:
+    from core import plumbing_panels as core_plumbing
+except Exception:
+    core_plumbing = None
+
+try:
+    from core import object_works as core_works
+except Exception:
+    core_works = None
+
 # --- Помещения (этажи / зоны) ---
 try:
     from core import floors as core_floors
@@ -89,6 +141,43 @@ try:
     from core.export.csv_export import save_csv, export_csv
 except Exception:
     save_csv = export_csv = None
+
+
+# ============================================================
+# БЕЗОПАСНЫЙ EDIT
+# ============================================================
+
+async def _safe_edit(query, text, kb=None):
+    """Универсальный edit: text -> caption -> delete+send.
+
+    Используется для надёжного обновления сообщения независимо от того,
+    текст это или фото."""
+    is_photo = bool(getattr(query.message, "photo", None))
+    try:
+        if is_photo:
+            await query.edit_message_caption(caption=text, parse_mode=None, reply_markup=kb)
+        else:
+            await query.edit_message_text(text, parse_mode=None, reply_markup=kb)
+        return True
+    except Exception as e1:
+        err = str(e1).lower()
+        if "message is not modified" in err:
+            return True
+        print("_safe_edit edit failed: " + str(e1), flush=True)
+    try:
+        await query.message.delete()
+    except Exception:
+        pass
+    try:
+        await query.get_bot().send_message(
+            chat_id=query.message.chat_id, text=text, reply_markup=kb
+        )
+        print("_safe_edit send_message OK", flush=True)
+        return True
+    except Exception as e2:
+        print("_safe_edit send failed: " + str(e2), flush=True)
+        return False
+
 
 
 # ============================================================
@@ -409,92 +498,3 @@ def room_card_keyboard(room_id):
 async def show_rooms_list(update, context, object_id):
     """Показ списка комнат объекта."""
     from modules.objects import get_object
-    obj = get_object(object_id)
-    obj_name = obj['name'] if obj else '—'
-    text = f"📦 *Комнаты «{obj_name}»*\n\n{format_rooms_list(object_id)}"
-    kb = rooms_list_keyboard(object_id)
-    if update.callback_query:
-        try:
-            await update.callback_query.edit_message_text(
-                text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
-            )
-        except Exception:
-            try:
-                await update.callback_query.message.delete()
-            except Exception:
-                pass
-            await update.callback_query.message.chat.send_message(
-                text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
-            )
-    else:
-        await update.message.reply_text(
-            text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
-        )
-
-
-async def show_room_card(update, context, room_id):
-    """Показ карточки комнаты."""
-    room = get_room(room_id)
-    if not room:
-        if update.callback_query:
-            await update.callback_query.edit_message_text("❌ Комната не найдена")
-        else:
-            await update.message.reply_text("❌ Комната не найдена")
-        return
-    text = format_room_card(room_id)
-    kb = room_card_keyboard(room_id)
-
-    if update.callback_query:
-        query = update.callback_query
-        has_photo = bool(getattr(query.message, "photo", None))
-        if has_photo:
-            try:
-                await query.message.delete()
-            except Exception:
-                pass
-            await query.message.chat.send_message(
-                text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
-            )
-        else:
-            try:
-                await query.edit_message_text(
-                    text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
-                )
-            except Exception as e:
-                if "message is not modified" in str(e).lower():
-                    return
-                try:
-                    await query.message.delete()
-                except Exception:
-                    pass
-                await query.message.chat.send_message(
-                    text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
-                )
-    else:
-        await update.message.reply_text(
-            text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
-        )
-
-
-# ============================================================
-# МАСТЕР ВЫСОТЫ (3 точки)
-# ============================================================
-
-async def _send_height_scheme(message, context, room_id, step, caption, kb_extra=None):
-    """Отправка PNG-схемы высоты."""
-    kb_rows = list(kb_extra or [])
-    kb_rows.append([InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")])
-    kb = InlineKeyboardMarkup(kb_rows)
-    png = _image_path(f"height_scheme_step{step}.png")
-    if png and os.path.exists(png):
-        try:
-            with open(png, "rb") as f:
-                await message.reply_photo(
-                    photo=f, caption=caption,
-                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb
-                )
-            return
-        except Exception as e:
-            print(f"⚠️ height scheme: {e}", flush=True)
-    await message.reply_text(caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
-

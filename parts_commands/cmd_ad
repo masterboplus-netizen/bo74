@@ -1,3 +1,57 @@
+        return
+
+    if data.startswith("objexp_cat_"):
+        # objexp_cat_<amount>_<obj_id>_<category>
+        parts = data.replace("objexp_cat_", "").split("_", 2)
+        amount = int(parts[0])
+        obj_id = int(parts[1])
+        category = parts[2] if len(parts) > 2 else 'прочее'
+        obj = get_object(obj_id)
+        add_expense(obj_id, amount, category)
+        context.user_data['pending_object_expense_amount'] = None
+        await query.edit_message_text(
+            f"✅ Расход {amount} ₽ ({category}) в «{obj['name']}»",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🏗️ К объекту", callback_data=f"obj_{obj_id}")],
+                [InlineKeyboardButton("💰 К финансам", callback_data="menu_finance")],
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    # === ОТЧЁТЫ ===
+    if data == "menu_reports":
+        await query.edit_message_text(
+            "📊 ОТЧЁТЫ\n\nВыбери тип:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Что сделано (неделя)", callback_data="report_closed_week")],
+                [InlineKeyboardButton("✅ Что сделано (месяц)", callback_data="report_closed_month")],
+                [InlineKeyboardButton("🔄 Что в работе", callback_data="report_open")],
+                [InlineKeyboardButton("📈 Финансы за месяц", callback_data="report_summary_month")],
+                [InlineKeyboardButton("📈 Финансы за неделю", callback_data="report_summary_week")],
+                [InlineKeyboardButton("📈 Финансы за всё время", callback_data="report_summary_all")],
+                [InlineKeyboardButton("🏗️ Отчёт по объекту", callback_data="report_choose_object")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    if data.startswith("report_summary_"):
+        period = data.replace("report_summary_", "")
+        from modules.reports import get_summary_report, format_summary_report
+        report = get_summary_report(period)
+        text = format_summary_report(report)
+        await query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ К отчётам", callback_data="menu_reports")],
+                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+            ])
+        )
+        return
+
+    if data == "report_closed_week" or data == "report_closed_month":
+        period = 'week' if data == "report_closed_week" else 'month'
         from modules.reports import get_closed_tasks_report, format_closed_tasks_report
         report = get_closed_tasks_report(period)
         text = format_closed_tasks_report(report)
@@ -444,57 +498,3 @@ async def handle_photo_filter(update: Update, context: ContextTypes.DEFAULT_TYPE
             reply_markup=InlineKeyboardMarkup(buttons)
         )
         return
-
-    if ftype == "date":
-        date_str = extra or ''
-        c.execute("""
-            SELECT p.id, p.file_id, p.stage, p.caption, p.taken_at, p.task_id,
-                   t.title as task_title
-            FROM photos p
-            LEFT JOIN tasks t ON p.task_id = t.id
-            WHERE p.object_id = ? AND DATE(p.taken_at) = ?
-            ORDER BY p.taken_at DESC
-        """, (obj_id, date_str))
-        photos = [dict(r) for r in c.fetchall()]
-        conn.close()
-        context.user_data['photo_filter_key'] = f"date_{obj_id}_{date_str}"
-        context.user_data['photo_back'] = f"photofilt_dates_{obj_id}"
-        context.user_data['photo_cache'] = photos
-        await query.edit_message_text(f"📅 Фото за {date_str}\nВсего: {len(photos)}")
-        await _show_photos_batch(update, context, photos, page=0, header=f"📅 Фото за {date_str}")
-        return
-
-    if ftype == "uploaders":
-        c.execute("""
-            SELECT p.uploaded_by, COUNT(*) as cnt, u.name
-            FROM photos p
-            LEFT JOIN users u ON u.tg_id = p.uploaded_by
-            WHERE p.object_id = ?
-            GROUP BY p.uploaded_by
-            ORDER BY cnt DESC
-        """, (obj_id,))
-        rows = c.fetchall()
-        conn.close()
-        buttons = []
-        for r in rows[:25]:
-            name = r['name'] or f"id{r['uploaded_by']}"
-            buttons.append([InlineKeyboardButton(
-                f"👤 {name} ({r['cnt']})",
-                callback_data=f"photofilt_upl_{obj_id}_{r['uploaded_by']}"
-            )])
-        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"objphotos_{obj_id}")])
-        await query.edit_message_text(
-            f"👤 Кто загрузил фото «{obj_name}»:",
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
-        return
-
-    if ftype == "upl":
-        tg_id = int(extra) if extra else 0
-        c.execute("""
-            SELECT p.id, p.file_id, p.stage, p.caption, p.taken_at, p.task_id,
-                   t.title as task_title
-            FROM photos p
-            LEFT JOIN tasks t ON p.task_id = t.id
-            WHERE p.object_id = ? AND p.uploaded_by = ?
-            ORDER BY p.taken_at DESC

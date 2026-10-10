@@ -40,21 +40,44 @@ def objects_keyboard():
             f"{icon} {obj['name']}",
             callback_data=f"obj_{obj['id']}"
         )])
+    try:
+        from modules.objects import get_archived_objects
+        _arch = get_archived_objects()
+        if _arch:
+            buttons.append([InlineKeyboardButton("📦 Архив (" + str(len(_arch)) + ")", callback_data="obj_archive_list")])
+    except Exception:
+        pass
     buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
     return InlineKeyboardMarkup(buttons)
 
 
 def object_detail_keyboard(object_id):
+    try:
+        from modules.objects import get_object
+        _obj_data = get_object(object_id)
+        _status = (_obj_data or {}).get("status") or "active"
+    except Exception:
+        _status = "active"
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🏠 Помещения", callback_data=f"obj_floors_{object_id}")],
-        [InlineKeyboardButton("📦 Комнаты", callback_data=f"rooms_list_obj_{object_id}")],
+        [InlineKeyboardButton("⚡ Щиты объекта", callback_data=f"panels_list_{object_id}")],
         [InlineKeyboardButton("⚡ ЭОМ объекта", callback_data=f"obj_elec_{object_id}")],
+        [InlineKeyboardButton("💰 Смета ЭОМ", callback_data=f"obj_elec_cost_{object_id}")],
+        [InlineKeyboardButton("👷 Работы (часы)", callback_data=f"obj_elec_labor_{object_id}")],
+        [InlineKeyboardButton("📊 Смета ЭОМ (CSV)", callback_data=f"obj_est_csv_{object_id}")],
+        [InlineKeyboardButton("📄 Спецификация ЭОМ", callback_data=f"obj_spec_{object_id}")],
+        [InlineKeyboardButton("📄 PDF-смета ЭОМ", callback_data=f"obj_elec_pdf_{object_id}")],
+        [InlineKeyboardButton("🔧 Сантехника", callback_data=f"plumb_list_{object_id}")],
+            [InlineKeyboardButton("📄 PDF-смета сантехники", callback_data=f"plumb_pdf_obj_{object_id}")],
+        [InlineKeyboardButton("🔨 Работы", callback_data=f"works_list_{object_id}")],
+        [InlineKeyboardButton("💱 Импорт цен", callback_data=f"prices_import_{object_id}")],
         [InlineKeyboardButton("📋 Задачи объекта", callback_data=f"objtasks_{object_id}")],
         [InlineKeyboardButton("💰 Финансы", callback_data=f"objfin_{object_id}")],
         [InlineKeyboardButton("📸 Фото объекта", callback_data=f"objphotos_{object_id}")],
         [InlineKeyboardButton("✏️ Переименовать", callback_data=f"obj_rename_{object_id}")],
+        [InlineKeyboardButton(("📤 Из архива" if _status == "archived" else "📦 В архив"), callback_data=(f"obj_unarchive_{object_id}" if _status == "archived" else f"obj_archive_{object_id}"))],
         [InlineKeyboardButton("🗑 Удалить объект", callback_data=f"obj_del_{object_id}")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="menu_objects")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data=("obj_archive_list" if _status == "archived" else "menu_objects"))],
     ])
 
 
@@ -77,6 +100,30 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
+
+    if data == "tasks_archive_list":
+        try:
+            from modules import tasks as _t_arch
+            _arch = _t_arch.get_archived_tasks()
+        except Exception as _e:
+            print("archive list fail: " + str(_e), flush=True)
+            _arch = []
+        if not _arch:
+            try:
+                await query.edit_message_text("🗑 Архив пуст.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")]]))
+            except Exception:
+                pass
+            return
+        kb = []
+        for _a in _arch[:30]:
+            _t = (_a.get("title") or "?")[:40]
+            kb.append([InlineKeyboardButton("🗑 " + _t, callback_data=f"task_{_a["id"]}")])
+        kb.append([InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")])
+        try:
+            await query.edit_message_text("🗑 *Архив задач (" + str(len(_arch)) + ")*\n\nУдалённые задачи (хранятся 60 дней):", parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(kb))
+        except Exception:
+            pass
+        return
 
     if data == "menu_back":
         await query.edit_message_text(
@@ -152,6 +199,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )])
         buttons.append([InlineKeyboardButton("👤 Мои задачи", callback_data="my_tasks"),
                         InlineKeyboardButton("👥 По исполнителям", callback_data="by_assignee")])
+        try:
+            from modules import tasks as _t_arch
+            _arch_n = len(_t_arch.get_archived_tasks())
+        except Exception:
+            _arch_n = 0
+        if _arch_n:
+            buttons.append([InlineKeyboardButton("🗑 Архив (" + str(_arch_n) + ")", callback_data="tasks_archive_list")])
         buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
 
         await query.edit_message_text(
@@ -444,57 +498,3 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("❌ Отмена", callback_data="menu_back")],
             ])
         )
-        return
-
-    if data.startswith("objexp_cat_"):
-        # objexp_cat_<amount>_<obj_id>_<category>
-        parts = data.replace("objexp_cat_", "").split("_", 2)
-        amount = int(parts[0])
-        obj_id = int(parts[1])
-        category = parts[2] if len(parts) > 2 else 'прочее'
-        obj = get_object(obj_id)
-        add_expense(obj_id, amount, category)
-        context.user_data['pending_object_expense_amount'] = None
-        await query.edit_message_text(
-            f"✅ Расход {amount} ₽ ({category}) в «{obj['name']}»",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🏗️ К объекту", callback_data=f"obj_{obj_id}")],
-                [InlineKeyboardButton("💰 К финансам", callback_data="menu_finance")],
-                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-            ])
-        )
-        return
-
-    # === ОТЧЁТЫ ===
-    if data == "menu_reports":
-        await query.edit_message_text(
-            "📊 ОТЧЁТЫ\n\nВыбери тип:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ Что сделано (неделя)", callback_data="report_closed_week")],
-                [InlineKeyboardButton("✅ Что сделано (месяц)", callback_data="report_closed_month")],
-                [InlineKeyboardButton("🔄 Что в работе", callback_data="report_open")],
-                [InlineKeyboardButton("📈 Финансы за месяц", callback_data="report_summary_month")],
-                [InlineKeyboardButton("📈 Финансы за неделю", callback_data="report_summary_week")],
-                [InlineKeyboardButton("📈 Финансы за всё время", callback_data="report_summary_all")],
-                [InlineKeyboardButton("🏗️ Отчёт по объекту", callback_data="report_choose_object")],
-                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")],
-            ])
-        )
-        return
-
-    if data.startswith("report_summary_"):
-        period = data.replace("report_summary_", "")
-        from modules.reports import get_summary_report, format_summary_report
-        report = get_summary_report(period)
-        text = format_summary_report(report)
-        await query.edit_message_text(
-            text,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⬅️ К отчётам", callback_data="menu_reports")],
-                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-            ])
-        )
-        return
-
-    if data == "report_closed_week" or data == "report_closed_month":
-        period = 'week' if data == "report_closed_week" else 'month'

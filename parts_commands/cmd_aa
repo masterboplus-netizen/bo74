@@ -226,7 +226,7 @@ async def tasks_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         SELECT t.id, t.title, t.deadline, o.name as object_name
         FROM tasks t
         LEFT JOIN objects o ON t.object_id = o.id
-        WHERE t.status IN ('open', 'in_progress')
+        WHERE t.deleted_at IS NULL AND t.status IN ('open', 'in_progress')
         ORDER BY t.deadline IS NULL, t.deadline ASC
     """)
     rows = c.fetchall()

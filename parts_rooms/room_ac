@@ -1,3 +1,92 @@
+        caption += f"\n\n{hint}"
+    image = spec_step.get('image', 'niche_depth.png')
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, image)
+
+
+async def _show_niche_height(query, context, room_id):
+    """Высота ниши."""
+    state = _get_wall_state(context)
+    state['step_name'] = 'niche_height'
+    _save_wall_draft(context, room_id)
+    context.user_data['waiting_for'] = 'wall_niche_height'
+
+    spec_step = spec.get_niche_step('height')
+    caption = spec_step.get('title', '🕳 *Ниша — ВЫСОТА* (СМ):')
+    example = spec_step.get('example')
+    if example:
+        caption += f"\n\n_Например: {example}_"
+    image = spec_step.get('image', 'niche_height.png')
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, image)
+
+
+async def _show_niche_plane(query, context, room_id):
+    """Ниша ровная или неровная?"""
+    state = _get_wall_state(context)
+    state['step_name'] = 'niche_plane'
+    _save_wall_draft(context, room_id)
+    context.user_data['waiting_for'] = None
+
+    spec_step = spec.get_niche_step('plane')
+    caption = spec_step.get('title', '🕳 *Ниша ровная или неровная по высоте?*')
+    hint = spec_step.get('hint')
+    if hint:
+        caption += f"\n\n{hint}"
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Ровная", callback_data=f"wall_niche_plane_rect_{room_id}")],
+        [InlineKeyboardButton("📏 Неровная", callback_data=f"wall_niche_plane_irr_{room_id}")],
+        [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, None)
+
+
+async def _show_niche_top_width(query, context, room_id):
+    """Ширина ниши СВЕРХУ (для неровной)."""
+    state = _get_wall_state(context)
+    state['step_name'] = 'niche_top_width'
+    _save_wall_draft(context, room_id)
+    context.user_data['waiting_for'] = 'wall_niche_top_width'
+
+    spec_step = spec.get_niche_step('top_width')
+    caption = spec_step.get('title', '🕳 *Ширина СВЕРХУ* (СМ):')
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, None)
+
+
+async def _show_niche_top_depth(query, context, room_id):
+    """Глубина ниши СВЕРХУ (для неровной)."""
+    state = _get_wall_state(context)
+    state['step_name'] = 'niche_top_depth'
+    _save_wall_draft(context, room_id)
+    context.user_data['waiting_for'] = 'wall_niche_top_depth'
+
+    spec_step = spec.get_niche_step('top_depth')
+    caption = spec_step.get('title', '🕳 *Глубина сверху* (СМ):')
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],
+    ])
+    await _send_png_or_edit(query, caption, kb, None)
+
+
+# ============================================================
+# СОХРАНЕНИЕ СТЕНЫ
+# ============================================================
+
+
+async def _wall_save_and_next(query, context, room_id, step):
+    """Сохраняет текущую стену, чистит черновик, идёт к следующей."""
+    state = _get_wall_state(context)
+    pos = WALL_NAMES.get(step, '?')
+    length = state.get('length') or 0
+    angle = state.get('angle_value') or 90
     angle_method = state.get('angle_method') or '90'
     flags = state.get('flags') or {}
 
@@ -409,92 +498,3 @@ async def _wall_round_start(query, context, room_id):
         )
         return
 
-    start_walls_round(room_id)
-    next_step = progress['current_step']
-
-    # Пытаемся восстановить черновик
-    step_name = _load_wall_draft(context, room_id)
-    print(f"🔍 _wall_round_start: room_id={room_id}, next_step={next_step}, step_name={step_name!r}", flush=True)
-
-    state = _get_wall_state(context)
-    # Если черновика нет — начинаем с начала
-    if step_name is None:
-        state['step_num'] = next_step
-        state['step_name'] = 'flags'
-        _save_wall_draft(context, room_id)
-        # Первый вход — фото
-        await _show_wall_step(query, context, room_id, next_step, phase='flags', use_photo=True)
-        return
-
-    # Восстанавливаем step_num из черновика
-    step_num = state.get('step_num') or next_step
-    context.user_data['wall_room_id'] = room_id
-
-    # === ОБРАБОТКА ВСЕХ step_name ===
-    if step_name == 'flags':
-        # Восстановление — показываем фото как при первом входе
-        await _show_wall_step(query, context, room_id, step_num, phase='flags', use_photo=True)
-        return
-
-    if step_name == 'plane':
-        await _show_wall_plane(query, context, room_id)
-        return
-
-    if step_name == 'plane_wavy':
-        context.user_data['waiting_for'] = 'wall_round_plane_bottom'
-        try:
-            await query.message.delete()
-        except Exception:
-            pass
-        await query.message.chat.send_message(
-            f"🧱 *Стена {step_num}*\n\n"
-            f"📏 *Продолжаем замер в 3 точках:*\n\n"
-            f"Введи НИЗ стены (СМ):",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
-
-    if step_name == 'length':
-        await _show_wall_length(query, context, room_id, step_num)
-        return
-
-    if step_name == 'openings':
-        await _show_wall_openings(query, context, room_id, step_num)
-        return
-
-    if step_name == 'angle':
-        # Восстановление — edit_caption (без пересоздания)
-        await _show_wall_angle(query, context, room_id, step_num, use_photo=False)
-        return
-
-    if step_name == 'angle_done':
-        await _after_angle(query, context, room_id)
-        return
-
-    # === ВОТ ОН, ТОТ САМЫЙ БАГ — niche_width !!! ===
-    if step_name == 'niche_width':
-        await _show_niche_width(query, context, room_id)
-        return
-
-    if step_name == 'niche_depth':
-        await _show_niche_depth(query, context, room_id)
-        return
-
-    if step_name == 'niche_height':
-        await _show_niche_height(query, context, room_id)
-        return
-
-    if step_name == 'niche_plane':
-        await _show_niche_plane(query, context, room_id)
-        return
-
-    if step_name == 'niche_top_width':
-        await _show_niche_top_width(query, context, room_id)
-        return
-
-    if step_name == 'niche_top_depth':
-        await _show_niche_top_depth(query, context, room_id)
-        return
-
-    if step_name == 'niche_count':
-        await _show_niche_count(query, context, room_id)

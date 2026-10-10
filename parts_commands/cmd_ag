@@ -1,3 +1,139 @@
+            await update.message.reply_text(
+                f"📋 {title}\n{obj}\n\n📅 Дата: {d.strftime('%d.%m.%Y')}\n\nПодтверди:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Да", callback_data=f"confirmdate_yes_{setdate_task}_{d.strftime('%Y-%m-%d')}")],
+                    [InlineKeyboardButton("❌ Нет", callback_data=f"confirmdate_no_{setdate_task}")],
+                ])
+            )
+            # Автоподтверждение через 30 секунд
+            context.job_queue.run_once(
+                auto_confirm_date,
+                30,
+                data={
+                    'chat_id': update.effective_chat.id,
+                    'task_id': setdate_task,
+                    'date': d.strftime('%Y-%m-%d'),
+                    'date_str': d.strftime('%d.%m.%Y')
+                },
+                name=f"confirm_{setdate_task}"
+            )
+            print(f"⚠️ RETURN на строке 2801", flush=True)
+            return
+        else:
+            await update.message.reply_text(
+                "❌ Не понял дату. Попробуй: «завтра», «20.09», «пн», «+3»"
+            )
+            print(f"⚠️ RETURN на строке 2806", flush=True)
+            return
+
+    # Обработка переименования задачи
+    rename_task = context.user_data.get('rename_task')
+    if rename_task:
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("UPDATE tasks SET title = ? WHERE id = ?", (text, rename_task))
+        conn.commit()
+        conn.close()
+        context.user_data['rename_task'] = None
+        await update.message.reply_text(f"✅ Задача переименована: «{text}»")
+        print(f"⚠️ RETURN на строке 2818", flush=True)
+        return
+
+    result = parse_message(text)
+    action = result.get('action')
+
+    if action == 'ask_expense_type':
+        amount = result['amount']
+        context.user_data['ask_expense_amount'] = amount
+        await update.message.reply_text(
+            f"💰 {amount} ₽ — куда записать?",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("💸 Личный расход", callback_data=f"exp_type_personal_{amount}")],
+                [InlineKeyboardButton("🏗️ Расход по объекту", callback_data=f"exp_type_object_{amount}")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="menu_back")],
+            ])
+        )
+        print(f"⚠️ RETURN на строке 2834", flush=True)
+        return
+
+    if action == 'income':
+        from modules.finance import add_income
+        obj = result['object']
+        amount = result['amount']
+        category = result.get('category', 'доход')
+        add_income(obj['id'], amount, category)
+        await update.message.reply_text(
+            f"💰 Доход {amount} ₽ ({category}) добавлен в «{obj['name']}»"
+        )
+        print(f"⚠️ RETURN на строке 2845", flush=True)
+        return
+
+    if action == 'expense':
+        obj = result['object']
+        amount = result['amount']
+        category = result['category']
+        # Известные категории
+        known_categories = ['материалы', 'еда', 'транспорт', 'инструмент', 'сантехника', 'электрика', 'покраска']
+        # Если категория явно из списка — записываем сразу
+        if category and category in known_categories:
+            add_expense(obj['id'], amount, category)
+            await update.message.reply_text(
+                f"✅ Расход {amount} ₽ ({category}) добавлен в «{obj['name']}»"
+            )
+            print(f"⚠️ RETURN на строке 2859", flush=True)
+            return
+        # Иначе — спрашиваем категорию
+        context.user_data['pending_expense'] = {
+            'object_id': obj['id'],
+            'object_name': obj['name'],
+            'amount': amount
+        }
+        await update.message.reply_text(
+            f"💰 Расход {amount} ₽ в «{obj['name']}»\n\nЗа что?",
+            reply_markup=expense_category_keyboard()
+        )
+        print(f"⚠️ RETURN на строке 2870", flush=True)
+        return
+
+    if action == 'add_task':
+        obj = result['object']
+        title = result['title']
+        tid = create_task(obj['id'], title)
+        await update.message.reply_text(
+            f"✅ Задача «{title}» добавлена в «{obj['name']}». ID: {tid}"
+        )
+        print(f"⚠️ RETURN на строке 2879", flush=True)
+        return
+
+    if action == 'done_task':
+        obj = result['object']
+        task = result['task']
+        close_task(task['id'], user_id=update.effective_user.id)
+        await update.message.reply_text(
+            f"✅ Задача «{task['title']}» в «{obj['name']}» выполнена!"
+        )
+        print(f"⚠️ RETURN на строке 2888", flush=True)
+        return
+
+    if action == 'done_task_not_found':
+        obj = result['object']
+        await update.message.reply_text(
+            f"❌ В «{obj['name']}» не нашёл задачу с «{result['query']}». Посмотри /tasks"
+        )
+        print(f"⚠️ RETURN на строке 2895", flush=True)
+        return
+
+    if action == 'finance':
+        obj = result['object']
+        f = get_finance_summary(obj['id'])
+        await update.message.reply_text(
+            f"💰 {obj['name']}\n\nДоход: {f['income']} ₽\nРасход: {f['expense']} ₽\nБаланс: {f['balance']} ₽"
+        )
+        print(f"⚠️ RETURN на строке 2903", flush=True)
+        return
+
+    if action == 'list_tasks':
+        tasks = get_active_tasks()
         if not tasks:
             await update.message.reply_text("✅ Нет активных задач")
             print(f"⚠️ RETURN на строке 2909", flush=True)
@@ -280,21 +416,32 @@ def tasks_keyboard_by_object():
 # === КАРТОЧКА ЗАДАЧИ ===
 
 def task_card_keyboard(task_id, deadline=None):
-    """Клавиатура карточки задачи"""
+    """Клавиатура карточки задачи."""
+    from core.db import fetchone as _fo
+    _r = _fo("SELECT deleted_at FROM tasks WHERE id = ?", (task_id,))
+    _is_deleted = bool(_r and _r["deleted_at"])
     buttons = [
         [InlineKeyboardButton("📅 Срок", callback_data=f"taskdate_{task_id}")],
     ]
     if deadline:
         buttons.append([InlineKeyboardButton("🚫 Убрать срок", callback_data=f"tasknodate_{task_id}")])
     buttons += [
+        [InlineKeyboardButton("📝 Дневник работ", callback_data=f"taskjournal_{task_id}")],
         [InlineKeyboardButton("👤 Назначить", callback_data=f"taskassign_{task_id}")],
         [InlineKeyboardButton("🔴 Приоритет", callback_data=f"taskprio_{task_id}")],
         [InlineKeyboardButton("✏️ Название", callback_data=f"taskrename_{task_id}")],
-        [InlineKeyboardButton("✅ Выполнить", callback_data=f"taskdone_{task_id}")],
-        [InlineKeyboardButton("❌ Удалить", callback_data=f"taskdel_{task_id}")],
-        [InlineKeyboardButton("⬅ К задачам", callback_data="menu_tasks")],
     ]
+    if _is_deleted:
+        buttons.append([InlineKeyboardButton("♻️ Восстановить", callback_data=f"taskrestore_{task_id}")])
+        buttons.append([InlineKeyboardButton("🗑 Удалить навсегда", callback_data=f"taskdelhard_{task_id}")])
+        buttons.append([InlineKeyboardButton("⬅️ К архиву", callback_data="tasks_archive_list")])
+    else:
+        buttons.append([InlineKeyboardButton("✅ Выполнить", callback_data=f"taskdone_{task_id}")])
+        buttons.append([InlineKeyboardButton("❌ Удалить", callback_data=f"taskdel_{task_id}")])
+        buttons.append([InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")])
     return InlineKeyboardMarkup(buttons)
+
+
 def task_date_keyboard(task_id):
     """Клавиатура выбора срока"""
     from datetime import date, timedelta
@@ -351,150 +498,3 @@ async def show_task_card(query, task_id, message=None):
             deadline_str = row['deadline']
 
     text = f"📋 {row['title']}\n\n"
-    text += f"Объект: {row['object_name'] or 'Без объекта'}\n"
-    # Диапазон (если задан)
-    try:
-        conn2 = get_connection()
-        cc = conn2.cursor()
-        cc.execute('SELECT deadline_start, deadline_end FROM tasks WHERE id = ?', (task_id,))
-        rr = cc.fetchone()
-        conn2.close()
-        if rr and rr['deadline_start'] and rr['deadline_end']:
-            from datetime import datetime as _dt
-            try:
-                d1 = _dt.strptime(rr['deadline_start'], '%Y-%m-%d').date()
-                d2 = _dt.strptime(rr['deadline_end'], '%Y-%m-%d').date()
-                days = (d2 - d1).days + 1
-                deadline_str = f"{d1.strftime('%d.%m.%Y')} — {d2.strftime('%d.%m.%Y')} ({days} дн.)"
-            except Exception:
-                pass
-    except Exception:
-        pass
-    text += f"Срок: {deadline_str}\n"
-    text += f"Приоритет: {priority_map.get(row['priority'], row['priority'])}\n"
-    # Исполнитель
-    assigned = row['assigned_to'] if 'assigned_to' in row.keys() else None
-    if assigned:
-        try:
-            from modules.users import get_user
-            u = get_user(assigned)
-            uname = u.get('name') if u else f'id{assigned}'
-        except Exception:
-            uname = f'id{assigned}'
-        text += f"👤 Исполнитель: {uname}\n"
-    else:
-        text += f"👤 Исполнитель: —\n"
-
-    await query.edit_message_text(text, reply_markup=task_card_keyboard(task_id, row['deadline']))
-
-
-
-async def handle_task_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка действий с задачей"""
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-    from datetime import date, timedelta
-
-    # Назначить исполнителя
-    if data.startswith("taskassign_"):
-        from modules.users import get_all_users
-        task_id = int(data.replace("taskassign_", ""))
-        all_users = get_all_users()
-        # Только master/prorab/designer
-        workers = [u for u in all_users if u.get('role') in ('master', 'prorab', 'designer', 'admin')]
-        buttons = []
-        for u in workers:
-            label = f"👤 {u.get('name', '—')[:30]}"
-            buttons.append([InlineKeyboardButton(label, callback_data=f"setassigned_{task_id}_{u['tg_id']}")])
-        buttons.append([InlineKeyboardButton("🚫 Снять назначение", callback_data=f"setassigned_{task_id}_none")])
-        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"task_{task_id}")])
-        if not workers:
-            await query.edit_message_text(
-                f"👤 Некому назначить.\n\nДобавь юзеров через /users.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ Назад", callback_data=f"task_{task_id}")],
-                ])
-            )
-            return
-        await query.edit_message_text(
-            f"👤 Назначить задачу #{task_id} на:",
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
-        return
-
-    if data.startswith("setassigned_"):
-        from modules.tasks import assign_task
-        from modules.users import get_user
-        parts = data.replace("setassigned_", "").split("_")
-        task_id = int(parts[0])
-        if parts[1] == "none":
-            assign_task(task_id, None)
-            await show_task_card(query, task_id)
-            return
-        tg_id = int(parts[1])
-        assign_task(task_id, tg_id)
-        u = get_user(tg_id)
-        uname = u.get('name') if u else f'id{tg_id}'
-        await show_task_card(query, task_id)
-        return
-
-    # Диапазон — старт
-    if data.startswith("setrange_"):
-        from datetime import date as _date
-        task_id = int(data.replace("setrange_", ""))
-        context.user_data['range_task'] = task_id
-        context.user_data['range_step'] = 'start'
-        today = _date.today()
-        text_cal, kb = build_calendar(today.year, today.month, callback_prefix='cal')
-        await query.edit_message_text(
-            "📆 Диапазон — выбери дату СТАРТА:\n\n" + text_cal,
-            reply_markup=kb
-        )
-        return
-
-    # Длительность — старт
-    if data.startswith("setduration_"):
-        from datetime import date as _date
-        task_id = int(data.replace("setduration_", ""))
-        context.user_data['duration_task'] = task_id
-        context.user_data['duration_step'] = 'start'
-        today = _date.today()
-        text_cal, kb = build_calendar(today.year, today.month, callback_prefix='cal')
-        await query.edit_message_text(
-            "⏳ Длительность — выбери дату СТАРТА:\n\n" + text_cal,
-            reply_markup=kb
-        )
-        return
-
-    # Календарь: игнор
-    if data == "cal_ignore":
-        return
-
-    # Календарь: навигация
-    if data.startswith("cal_nav_"):
-        parts = data.replace("cal_nav_", "").split("_")
-        year, month = int(parts[0]), int(parts[1])
-        text, kb = build_calendar(year, month)
-        await query.edit_message_text(text, reply_markup=kb)
-        return
-
-    # Календарь: выбор дня
-    if data.startswith("cal_day_") or data.startswith("cal_quick_"):
-        if data.startswith("cal_day_"):
-            parts = data.replace("cal_day_", "").split("_")
-            year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
-            date_iso = f"{year:04d}-{month:02d}-{day:02d}"
-        else:
-            date_iso = data.replace("cal_quick_", "")
-        # Определяем контекст: диапазон или длительность
-        from datetime import datetime as _dt
-        d = _dt.strptime(date_iso, "%Y-%m-%d").date()
-        if context.user_data.get('range_step') == 'start':
-            context.user_data['range_start'] = date_iso
-            context.user_data['range_step'] = 'end'
-            text, kb = build_calendar(d.year, d.month)
-            await query.edit_message_text(
-                f"📆 Старт: {d.strftime('%d.%m.%Y')}\n\nТеперь дата конца:",
-                reply_markup=kb
-            )

@@ -1,0 +1,500 @@
+    text += f"Объект: {row['object_name'] or 'Без объекта'}\n"
+    # Диапазон (если задан)
+    try:
+        conn2 = get_connection()
+        cc = conn2.cursor()
+        cc.execute('SELECT deadline_start, deadline_end FROM tasks WHERE id = ?', (task_id,))
+        rr = cc.fetchone()
+        conn2.close()
+        if rr and rr['deadline_start'] and rr['deadline_end']:
+            from datetime import datetime as _dt
+            try:
+                d1 = _dt.strptime(rr['deadline_start'], '%Y-%m-%d').date()
+                d2 = _dt.strptime(rr['deadline_end'], '%Y-%m-%d').date()
+                days = (d2 - d1).days + 1
+                deadline_str = f"{d1.strftime('%d.%m.%Y')} — {d2.strftime('%d.%m.%Y')} ({days} дн.)"
+            except Exception:
+                pass
+    except Exception:
+        pass
+    text += f"Срок: {deadline_str}\n"
+    text += f"Приоритет: {priority_map.get(row['priority'], row['priority'])}\n"
+    # Исполнитель
+    assigned = row['assigned_to'] if 'assigned_to' in row.keys() else None
+    if assigned:
+        try:
+            from modules.users import get_user
+            u = get_user(assigned)
+            uname = u.get('name') if u else f'id{assigned}'
+        except Exception:
+            uname = f'id{assigned}'
+        text += f"👤 Исполнитель: {uname}\n"
+    else:
+        text += f"👤 Исполнитель: —\n"
+
+    await query.edit_message_text(text, reply_markup=task_card_keyboard(task_id, row['deadline']))
+
+
+
+async def handle_task_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка действий с задачей"""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    from datetime import date, timedelta
+
+    # Назначить исполнителя
+    if data.startswith("taskaddprogskip_"):
+        task_id = int(data.replace("taskaddprogskip_", ""))
+        _h = context.user_data.get("task_progress_h")
+        if task_id and _h:
+            try:
+                from modules import tasks as _tasks
+                _tasks.add_progress(task_id, hours=_h, source="text")
+            except Exception as _e:
+                print("add_progress fail: " + str(_e), flush=True)
+        for _k in ("task_progress_id", "task_progress_h", "waiting_for"):
+            context.user_data.pop(_k, None)
+        try:
+            from modules import tasks as _tasks2
+            _hrs = _tasks2.calc_task_hours(task_id)
+            await query.edit_message_text("✅ Записано: " + str(_h) + "ч\n📓 Часов всего: " + str(_hrs))
+        except Exception:
+            pass
+        return
+
+    if data.startswith("taskaddprog_"):
+        task_id = int(data.replace("taskaddprog_", ""))
+        context.user_data["task_progress_id"] = task_id
+        context.user_data["waiting_for"] = "task_progress_hours"
+        try:
+            await query.edit_message_text(
+                "⏱ Сколько часов сегодня работал? (например: 8)",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"taskjournal_{task_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return
+
+    if data.startswith("taskjournal_"):
+        task_id = int(data.replace("taskjournal_", ""))
+        from modules import tasks as _tasks
+        from core.db import fetchone as _fetchone
+        _r = _fetchone("SELECT title, progress_percent, planned_qty, planned_unit FROM tasks WHERE id = ?", (task_id,))
+        _title = _r["title"] if _r else "?"
+        _prog = (_r["progress_percent"] if _r else 0) or 0
+        _plan_q = _r["planned_qty"] if _r else None
+        _plan_u = _r["planned_unit"] if _r else None
+        _hours = _tasks.calc_task_hours(task_id)
+        _qty = _tasks.calc_task_qty(task_id)
+        _rework = _tasks.calc_task_rework(task_id)
+        text = "📓 *Дневник работ*\n\n"
+        text += "📋 " + str(_title) + "\n\n"
+        text += _tasks.format_progress_bar(_prog) + "\n\n"
+        text += "⏱ Часов: " + str(_hours) + "\n"
+        if _qty:
+            text += "📐 Факт: " + str(_qty) + " " + str(_plan_u or "") + "\n"
+        if _plan_q:
+            text += "🎯 План: " + str(_plan_q) + " " + str(_plan_u or "") + "\n"
+        if _rework:
+            text += "🔄 Переделок: " + str(_rework) + "\n"
+        text += "\n" + _tasks.format_task_progress(task_id)
+        kb_rows = [
+            [InlineKeyboardButton("➕ Отметить работу", callback_data=f"taskaddprog_{task_id}")],
+            [InlineKeyboardButton("⬅️ К задаче", callback_data=f"task_{task_id}")],
+        ]
+        try:
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb_rows))
+        except Exception:
+            pass
+        return
+
+    if data.startswith("taskassign_"):
+        from modules.users import get_all_users
+        task_id = int(data.replace("taskassign_", ""))
+        all_users = get_all_users()
+        # Только master/prorab/designer
+        workers = [u for u in all_users if u.get('role') in ('master', 'prorab', 'designer', 'admin')]
+        buttons = []
+        for u in workers:
+            label = f"👤 {u.get('name', '—')[:30]}"
+            buttons.append([InlineKeyboardButton(label, callback_data=f"setassigned_{task_id}_{u['tg_id']}")])
+        buttons.append([InlineKeyboardButton("🚫 Снять назначение", callback_data=f"setassigned_{task_id}_none")])
+        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"task_{task_id}")])
+        if not workers:
+            await query.edit_message_text(
+                f"👤 Некому назначить.\n\nДобавь юзеров через /users.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Назад", callback_data=f"task_{task_id}")],
+                ])
+            )
+            return
+        await query.edit_message_text(
+            f"👤 Назначить задачу #{task_id} на:",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+        return
+
+    if data.startswith("setassigned_"):
+        from modules.tasks import assign_task
+        from modules.users import get_user
+        parts = data.replace("setassigned_", "").split("_")
+        task_id = int(parts[0])
+        if parts[1] == "none":
+            assign_task(task_id, None)
+            await show_task_card(query, task_id)
+            return
+        tg_id = int(parts[1])
+        assign_task(task_id, tg_id)
+        u = get_user(tg_id)
+        uname = u.get('name') if u else f'id{tg_id}'
+        await show_task_card(query, task_id)
+        return
+
+    # Диапазон — старт
+    if data.startswith("setrange_"):
+        from datetime import date as _date
+        task_id = int(data.replace("setrange_", ""))
+        context.user_data['range_task'] = task_id
+        context.user_data['range_step'] = 'start'
+        today = _date.today()
+        text_cal, kb = build_calendar(today.year, today.month, callback_prefix='cal')
+        await query.edit_message_text(
+            "📆 Диапазон — выбери дату СТАРТА:\n\n" + text_cal,
+            reply_markup=kb
+        )
+        return
+
+    # Длительность — старт
+    if data.startswith("setduration_"):
+        from datetime import date as _date
+        task_id = int(data.replace("setduration_", ""))
+        context.user_data['duration_task'] = task_id
+        context.user_data['duration_step'] = 'start'
+        today = _date.today()
+        text_cal, kb = build_calendar(today.year, today.month, callback_prefix='cal')
+        await query.edit_message_text(
+            "⏳ Длительность — выбери дату СТАРТА:\n\n" + text_cal,
+            reply_markup=kb
+        )
+        return
+
+    # Календарь: игнор
+    if data == "cal_ignore":
+        return
+
+    # Календарь: навигация
+    if data.startswith("cal_nav_"):
+        parts = data.replace("cal_nav_", "").split("_")
+        year, month = int(parts[0]), int(parts[1])
+        text, kb = build_calendar(year, month)
+        await query.edit_message_text(text, reply_markup=kb)
+        return
+
+    # Календарь: выбор дня
+    if data.startswith("cal_day_") or data.startswith("cal_quick_"):
+        if data.startswith("cal_day_"):
+            parts = data.replace("cal_day_", "").split("_")
+            year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
+            date_iso = f"{year:04d}-{month:02d}-{day:02d}"
+        else:
+            date_iso = data.replace("cal_quick_", "")
+        # Определяем контекст: диапазон или длительность
+        from datetime import datetime as _dt
+        d = _dt.strptime(date_iso, "%Y-%m-%d").date()
+        if context.user_data.get('range_step') == 'start':
+            context.user_data['range_start'] = date_iso
+            context.user_data['range_step'] = 'end'
+            text, kb = build_calendar(d.year, d.month)
+            await query.edit_message_text(
+                f"📆 Старт: {d.strftime('%d.%m.%Y')}\n\nТеперь дата конца:",
+                reply_markup=kb
+            )
+            return
+        if context.user_data.get('range_step') == 'end':
+            task_id = context.user_data.get('range_task')
+            start = context.user_data.get('range_start')
+            from modules.tasks import set_task_range
+            d_start = _dt.strptime(start, '%Y-%m-%d').date()
+            if d < d_start:
+                await query.edit_message_text('❌ Конец раньше старта. Выбери ещё раз:')
+                return
+            set_task_range(task_id, start, date_iso)
+            days = (d - d_start).days + 1
+            context.user_data['range_step'] = None
+            context.user_data['range_task'] = None
+            context.user_data['range_start'] = None
+            await query.edit_message_text(
+                f"✅ Срок: {d_start.strftime('%d.%m.%Y')} — {d.strftime('%d.%m.%Y')} ({days} дн.)",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton('📋 К задаче', callback_data=f'task_{task_id}')],
+                    [InlineKeyboardButton('🏠 Меню', callback_data='menu_back')],
+                ])
+            )
+            return
+        if context.user_data.get('duration_step') == 'start':
+            context.user_data['duration_start'] = date_iso
+            context.user_data['duration_step'] = 'days'
+            await query.edit_message_text(
+                f"⏳ Старт: {d.strftime('%d.%m.%Y')}\n\nСколько дней? Напиши число:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton('1', callback_data=f'dur_days_{date_iso}_1'),
+                     InlineKeyboardButton('3', callback_data=f'dur_days_{date_iso}_3'),
+                     InlineKeyboardButton('5', callback_data=f'dur_days_{date_iso}_5')],
+                    [InlineKeyboardButton('7', callback_data=f'dur_days_{date_iso}_7'),
+                     InlineKeyboardButton('14', callback_data=f'dur_days_{date_iso}_14'),
+                     InlineKeyboardButton('30', callback_data=f'dur_days_{date_iso}_30')],
+                ])
+            )
+            return
+        # Если контекста нет — просто ничего
+        await query.edit_message_text(f'📅 {d.strftime("%d.%m.%Y")}')
+        return
+
+    # Длительность: установка через кнопки
+    if data.startswith("dur_days_"):
+        parts = data.replace("dur_days_", "").rsplit("_", 1)
+        date_iso = parts[0]
+        n = int(parts[1])
+        task_id = context.user_data.get('duration_task')
+        from modules.tasks import set_task_range
+        from datetime import datetime as _dt, timedelta
+        d_start = _dt.strptime(date_iso, '%Y-%m-%d').date()
+        d_end = d_start + timedelta(days=n - 1)
+        set_task_range(task_id, date_iso, d_end.strftime('%Y-%m-%d'))
+        context.user_data['duration_step'] = None
+        context.user_data['duration_task'] = None
+        context.user_data['duration_start'] = None
+        await query.edit_message_text(
+            f"✅ Срок: {d_start.strftime('%d.%m.%Y')} — {d_end.strftime('%d.%m.%Y')} ({n} дн.)",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton('📋 К задаче', callback_data=f'task_{task_id}')],
+                [InlineKeyboardButton('🏠 Меню', callback_data='menu_back')],
+            ])
+        )
+        return
+
+    # Выполнить
+    if data.startswith("taskdone_"):
+        task_id = int(data.split("_")[1])
+        close_task(task_id, user_id=update.effective_user.id)
+        await query.edit_message_text(
+            "✅ Задача выполнена!",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")]
+            ])
+        )
+        return
+
+    # Удалить
+    if data.startswith("taskrestore_"):
+        task_id = int(data.replace("taskrestore_", ""))
+        try:
+            from modules import tasks as _tasks
+            _tasks.restore_task(task_id)
+        except Exception as _e:
+            print("restore fail: " + str(_e), flush=True)
+        try:
+            await query.answer("✅ Восстановлена", show_alert=False)
+        except Exception:
+            pass
+        await show_task_card(query, task_id)
+        return
+
+    if data.startswith("taskdelhardconfirm_"):
+        task_id = int(data.replace("taskdelhardconfirm_", ""))
+        try:
+            from modules import tasks as _tasks
+            _tasks.hard_delete_task(task_id)
+        except Exception as _e:
+            print("hard delete fail: " + str(_e), flush=True)
+        try:
+            await query.edit_message_text("🗑 Задача удалена НАВСЕГДА.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ К архиву", callback_data="tasks_archive_list")]]))
+        except Exception:
+            pass
+        return
+
+    if data.startswith("taskdelhard_"):
+        task_id = int(data.replace("taskdelhard_", ""))
+        try:
+            await query.edit_message_text(
+                "⚠️ *Удалить НАВСЕГДА?*\n\nВсе работы, дневник и связи будут потеряны. Отменить будет НЕЛЬЗЯ.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⚠️ Да, удалить навсегда", callback_data=f"taskdelhardconfirm_{task_id}")],
+                    [InlineKeyboardButton("❌ Отмена", callback_data=f"task_{task_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return
+
+    if data.startswith("taskdel_"):
+        task_id = int(data.split("_")[1])
+        from core.db import fetchone as _fo
+        _r = _fo("SELECT title FROM tasks WHERE id = ?", (task_id,))
+        _title = (_r["title"] if _r else "?")
+        try:
+            await query.edit_message_text(
+                "🗑 *Удалить задачу?*\n\n" + str(_title) + "\n\nЗадача переместится в архив на 60 дней. Её можно будет восстановить.",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Да, в архив", callback_data=f"taskdelconfirm_{task_id}")],
+                    [InlineKeyboardButton("❌ Отмена", callback_data=f"task_{task_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return
+
+    if data.startswith("taskdelconfirm_"):
+        task_id = int(data.replace("taskdelconfirm_", ""))
+        try:
+            from modules import tasks as _tasks
+            _tasks.soft_delete_task(task_id)
+        except Exception as _e:
+            print("soft_delete fail: " + str(_e), flush=True)
+        try:
+            await query.edit_message_text(
+                "🗑 Задача в архиве. Можно восстановить в течение 60 дней.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")],
+                ])
+            )
+        except Exception:
+            pass
+        return
+
+
+    # Показать карточку
+    if data.startswith("task_") and not any(data.startswith(p) for p in ["taskdate_", "taskdone_", "taskdel_", "taskprio_", "taskrename_"]):
+        try:
+            task_id = int(data.split("_")[1])
+            await show_task_card(query, task_id)
+        except:
+            pass
+        return
+
+    # Выбор срока
+    if data.startswith("taskdate_"):
+        parts = data.split("_")
+        # taskdate_manual_<id> — ручной ввод
+        if len(parts) >= 2 and parts[1] == "manual":
+            task_id = int(parts[2])
+            context.user_data['setdate_task'] = task_id
+            # Показываем задачу
+            conn = get_connection()
+            c = conn.cursor()
+            c.execute("SELECT t.title, o.name as obj FROM tasks t LEFT JOIN objects o ON t.object_id = o.id WHERE t.id = ?", (task_id,))
+            row = c.fetchone()
+            conn.close()
+            title = row['title'] if row else '?'
+            obj = row['obj'] if row and row['obj'] else 'Без объекта'
+            await query.edit_message_text(
+                f"📋 {title}\n{obj}\n\nНапиши дату:"
+            )
+            return
+        # taskdate_<id> — обычный выбор
+        task_id = int(parts[1])
+        await query.edit_message_text(
+            "📅 Выбери срок:",
+            reply_markup=task_date_keyboard(task_id)
+        )
+        return
+
+
+    # Убрать срок
+    if data.startswith("tasknodate_"):
+        task_id = int(data.replace("tasknodate_", ""))
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("UPDATE tasks SET deadline = NULL WHERE id = ?", (task_id,))
+        conn.commit()
+        c.execute("SELECT t.title, o.name as obj FROM tasks t LEFT JOIN objects o ON t.object_id = o.id WHERE t.id = ?", (task_id,))
+        row = c.fetchone()
+        conn.close()
+        title = row['title'] if row else '?'
+        obj = row['obj'] if row and row['obj'] else 'Без объекта'
+        await query.edit_message_text(
+            f"🚫 Срок убран у задачи «{title}» ({obj})"
+        )
+        return
+    # Установка срока
+    if data.startswith("setdate_"):
+        parts = data.split("_")
+        task_id = int(parts[1])
+        mode = parts[2]
+        today = date.today()
+        if mode == "today":
+            new_date = today
+        elif mode == "tomorrow":
+            new_date = today + timedelta(days=1)
+        elif mode == "dayafter":
+            new_date = today + timedelta(days=2)
+        elif mode == "3days":
+            new_date = today + timedelta(days=3)
+        elif mode == "week":
+            new_date = today + timedelta(days=7)
+        else:
+            new_date = today
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("UPDATE tasks SET deadline = ? WHERE id = ?", (new_date.strftime('%Y-%m-%d'), task_id))
+        conn.commit()
+        conn.close()
+        await show_task_card(query, task_id)
+        return
+
+    # Выбор приоритета
+    if data.startswith("taskprio_"):
+        task_id = int(data.split("_")[1])
+        await query.edit_message_text(
+            "🔴 Выбери приоритет:",
+            reply_markup=task_priority_keyboard(task_id)
+        )
+        return
+
+    # Установка приоритета
+    if data.startswith("setprio_"):
+        parts = data.split("_")
+        task_id = int(parts[1])
+        prio = parts[2]
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("UPDATE tasks SET priority = ? WHERE id = ?", (prio, task_id))
+        conn.commit()
+        conn.close()
+        await show_task_card(query, task_id)
+        return
+
+    # Переименовать
+    if data.startswith("taskrename_"):
+        task_id = int(data.split("_")[1])
+        context.user_data['rename_task'] = task_id
+        await query.edit_message_text("✏️ Напиши новое название задачи:")
+        return
+
+
+
+
+import calendar as _cal
+from datetime import date as _date
+
+def build_calendar(year: int, month: int, callback_prefix: str = 'cal'):
+    """Строит (text, keyboard) для календаря месяца."""
+    month_names = ['', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+    text = f'📅 {month_names[month]} {year}\n\nВыбери дату:'
+
+    # Навигация
+    prev_month = month - 1
+    prev_year = year
+    if prev_month < 1:
+        prev_month = 12
+        prev_year -= 1
+    next_month = month + 1
+    next_year = year
+    if next_month > 12:
+        next_month = 1

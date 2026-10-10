@@ -1,0 +1,138 @@
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("panel_del_"):
+        panel_id = int(data.replace("panel_del_", ""))
+        try:
+            p = core_elec_panels.get_panel(panel_id)
+            object_id = p.get('object_id') if p else None
+            core_elec_panels.delete_panel(panel_id)
+        except Exception as e:
+            print("panel del: " + str(e), flush=True)
+            object_id = None
+        if object_id:
+            try:
+                await query.edit_message_text(
+                    "✅ Щит удалён",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К щитам", callback_data="panels_list_" + str(object_id))],
+                    ])
+                )
+            except Exception:
+                pass
+        return True
+
+    # --- СОЗДАНИЕ ЩИТА: ШАГ 1 (тип) ---
+    if data.startswith("panel_add_type_"):
+        parts = data.replace("panel_add_type_", "").rsplit("_", 1)
+        object_id = int(parts[0])
+        ptype = parts[1]
+        context.user_data['panel_new_object_id'] = object_id
+        context.user_data['panel_new_type'] = ptype
+        context.user_data['waiting_for'] = 'panel_new_name'
+        type_labels = {
+            'vru': 'ВРУ (вводно-распределительное)',
+            'floor': 'Щит этажа',
+            'apartment': 'Щит квартиры',
+            'outdoor': 'Уличный щит',
+        }
+        tlabel = type_labels.get(ptype, ptype)
+        kb_rows = [
+            [InlineKeyboardButton("⬅️ Отмена", callback_data="panels_list_" + str(object_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                "⚡ Новый щит: " + tlabel + chr(10) + chr(10) +
+                "Напиши название (например «Щит 1 этажа», «ВРУ на столбе»):",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("panel_add_"):
+        object_id = int(data.replace("panel_add_", ""))
+        context.user_data['panel_new_object_id'] = object_id
+        kb_rows = [
+            [InlineKeyboardButton("🔌 ВРУ (ввод)", callback_data="panel_add_type_" + str(object_id) + "_vru")],
+            [InlineKeyboardButton("⚡ Щит этажа", callback_data="panel_add_type_" + str(object_id) + "_floor")],
+            [InlineKeyboardButton("🏢 Щит квартиры", callback_data="panel_add_type_" + str(object_id) + "_apartment")],
+            [InlineKeyboardButton("🌳 Уличный щит", callback_data="panel_add_type_" + str(object_id) + "_outdoor")],
+            [InlineKeyboardButton("⬅️ Отмена", callback_data="panels_list_" + str(object_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                "⚡ Новый щит" + chr(10) + chr(10) + "Выбери тип:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("panel_"):
+        panel_id = int(data.replace("panel_", ""))
+        try:
+            summary = core_elec_panels.get_panel_summary(panel_id)
+        except Exception as e:
+            print("panel card: " + str(e), flush=True)
+            summary = None
+        if not summary:
+            try:
+                await query.edit_message_text("Щит не найден")
+            except Exception:
+                pass
+            return True
+        p = summary['panel']
+        ptype = core_elec_panels.get_panel_type_label(p.get('panel_type'))
+        mount = core_elec_panels.get_mount_type_label(p.get('mount_type'))
+        lines = ["⚡ *" + str(p.get('name') or '?') + "*", ""]
+        lines.append("Тип: " + str(ptype))
+        lines.append("Монтаж: " + str(mount))
+        if p.get('input_breaker'):
+            lines.append("Вводной: " + str(p['input_breaker']))
+        if p.get('meter_type'):
+            lines.append("Счётчик: " + str(p['meter_type']))
+        lines.append("")
+        lines.append("📋 Групп: " + str(summary['groups_count']))
+        lines.append("📊 Нагрузка: " + str(summary['total_load_watt']) + " Вт")
+        parent = summary.get('parent')
+        if parent:
+            lines.append("⬆️ Питается от: " + str(parent.get('name')))
+        children = summary.get('children') or []
+        if children:
+            lines.append("⬇️ Питает: " + ", ".join(c.get('name') or '?' for c in children))
+        kb_rows = []
+        try:
+            _children_count = len(core_elec_panels.get_child_panels(panel_id))
+        except Exception:
+            _children_count = 0
+        if _children_count > 0:
+            kb_rows.append([InlineKeyboardButton("⬇️ Дочерние щиты (" + str(_children_count) + ")", callback_data="panel_children_" + str(panel_id))])
+        kb_rows.extend([
+            [InlineKeyboardButton("🔌 Вводной автомат", callback_data="panel_input_" + str(panel_id))],
+            [InlineKeyboardButton("🪄 Автокомплектация", callback_data="panel_auto_" + str(panel_id))],
+            [InlineKeyboardButton("📏 Трассы щита", callback_data="panel_routes_" + str(panel_id))],
+            [InlineKeyboardButton("🪄 Трассировать все группы", callback_data="panel_routes_auto_" + str(panel_id))],
+            [InlineKeyboardButton("🔧 Смета монтажа", callback_data="panel_montage_" + str(panel_id))],
+            [InlineKeyboardButton("💰 Общая смета щита", callback_data="panel_total_" + str(panel_id))],
+            [InlineKeyboardButton("📄 Спецификация (TXT)", callback_data="panel_spec_" + str(panel_id))],
+            [InlineKeyboardButton("📄 PDF-спецификация", callback_data="panel_pdf_" + str(panel_id))],
+            [InlineKeyboardButton("📊 Смета (CSV)", callback_data="panel_est_csv_" + str(panel_id))],
+            [InlineKeyboardButton("📋 Комплектация", callback_data="panel_comp_" + str(panel_id))],
+            [InlineKeyboardButton("📊 Статистика", callback_data="panel_stats_" + str(panel_id))],
+            [InlineKeyboardButton("📋 Группы щита", callback_data="panel_groups_" + str(panel_id))],
+            [InlineKeyboardButton("🗑 Удалить щит", callback_data="panel_del_" + str(panel_id))],
+            [InlineKeyboardButton("⬅️ К щитам", callback_data="panels_list_" + str(p.get('object_id')))],
+        ])
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("panel card show: " + str(e), flush=True)
+        return True
+
+    return False

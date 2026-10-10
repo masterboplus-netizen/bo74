@@ -1,134 +1,3 @@
-            )
-        except Exception:
-            pass
-        return
-
-    # --- Список комнат объекта ---
-    if data.startswith("rooms_list_obj_"):
-        object_id = int(data.replace("rooms_list_obj_", ""))
-        await show_rooms_list(update, context, object_id)
-        return
-
-    # --- Добавление комнаты ---
-    if data.startswith("room_add_"):
-        object_id = int(data.replace("room_add_", ""))
-        context.user_data['waiting_for'] = 'room_name'
-        context.user_data['room_object_id'] = object_id
-        try:
-            await query.edit_message_text(
-                "📦 *Новая комната*\n\nНапиши название:",
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"rooms_list_obj_{object_id}")]
-                ])
-            )
-        except Exception:
-            pass
-        return
-
-    if data.startswith("room_type_"):
-        parts = data.replace("room_type_", "").split("_", 1)
-        object_id = int(parts[0])
-        room_type = parts[1] if len(parts) > 1 else 'rough'
-        name = context.user_data.get('room_name_pending') or 'Комната'
-        new_room_id = create_room(object_id, name, room_type=room_type)
-        if new_room_id:
-            context.user_data['room_name_pending'] = None
-            context.user_data['waiting_for'] = None
-            await show_room_card(update, context, new_room_id)
-        else:
-            try:
-                await query.edit_message_text("❌ Не удалось создать комнату")
-            except Exception:
-                pass
-        return
-
-    # --- Удаление комнаты ---
-    if data.startswith("room_del_"):
-        room_id = int(data.replace("room_del_", ""))
-        room = get_room(room_id)
-        if not room:
-            return
-        try:
-            await query.edit_message_text(
-                f"🗑 *Удалить «{room['name']}»?*",
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🗑 Да, удалить", callback_data=f"room_delok_{room_id}")],
-                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
-                ])
-            )
-        except Exception:
-            pass
-        return
-
-    if data.startswith("room_delok_"):
-        room_id = int(data.replace("room_delok_", ""))
-        room = get_room(room_id)
-        if room:
-            object_id = room['object_id']
-            delete_room(room_id)
-            await show_rooms_list(update, context, object_id)
-        return
-
-    # --- Прогресс / размеры / комм / мебель / задачи / фото ---
-    if data.startswith("room_progress_"):
-        room_id = int(data.replace("room_progress_", ""))
-        await _show_room_progress(query, context, room_id)
-        return
-
-    if data.startswith("room_measures_"):
-        room_id = int(data.replace("room_measures_", ""))
-        await _show_room_measures(query, context, room_id)
-        return
-
-    if data.startswith("room_objects_"):
-        room_id = int(data.replace("room_objects_", ""))
-        await _show_room_objects(query, context, room_id)
-        return
-
-    if data.startswith("room_tasks_"):
-        room_id = int(data.replace("room_tasks_", ""))
-        try:
-            await query.edit_message_text(
-                "📋 Задачи комнаты — в разработке.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ Назад", callback_data=f"room_{room_id}")]
-                ])
-            )
-        except Exception:
-            pass
-        return
-
-    if data.startswith("room_photos_"):
-        room_id = int(data.replace("room_photos_", ""))
-        try:
-            await query.edit_message_text(
-                "📸 Фото комнаты — в разработке.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ Назад", callback_data=f"room_{room_id}")]
-                ])
-            )
-        except Exception:
-            pass
-        return
-
-    # --- План комнаты (PNG) ---    # --- Помещения ---
-    if data.startswith("obj_floors_") or data.startswith("obj_floor_") or data.startswith("floor_"):
-        handled = await handle_floors_callback(query, context, data)
-        if handled:
-            return
-
-    # --- ЭОМ объекта ---
-    if data.startswith("obj_elec_"):
-        handled = await handle_obj_elec_callback(query, context, data)
-        if handled:
-            return
-    # --- Помещения ---
-
-    if data.startswith("obj_floors_") or data.startswith("floor_"):
-
-        handled = await handle_floors_callback(query, context, data)
 
         if handled:
 
@@ -498,3 +367,134 @@ async def _handle_height_callback(query, context, data):
         context.user_data['height_middle'] = None
         context.user_data['height_top'] = None
         context.user_data['waiting_for'] = 'room_height_point'
+        context.user_data['height_mode'] = 'three'
+        await _show_height_step(query, context, room_id, step=1)
+        return True
+
+    if data.startswith("room_height_same_"):
+        # Старое — уже обрабатывается вводом
+        return True
+
+    return False
+
+
+# ============================================================
+# ОБРАБОТЧИК ВВОДА (главный)
+# ============================================================
+
+async def _handle_group_load_input(update, context):
+    """Обработка ввода мощности группы ЭОМ."""
+    if not core_elec:
+        await update.message.reply_text("❌ Модуль ЭОМ не загружен")
+        context.user_data['waiting_for'] = None
+        return
+
+    floor_id = context.user_data.get('group_floor_id')
+    room_id = context.user_data.get('group_room_id')
+    purpose = context.user_data.get('group_purpose')
+    phase = context.user_data.get('group_phase') or 1
+
+    object_id = None
+    if floor_id:
+        try:
+            from core.floors import get_floor
+            floor = get_floor(floor_id)
+            object_id = floor.get('object_id') if floor else None
+        except Exception:
+            pass
+    if not object_id and room_id:
+        try:
+            from core.rooms import get_room
+            room = get_room(room_id)
+            object_id = room.get('object_id') if room else None
+            if not floor_id and room:
+                floor_id = room.get('floor_id')
+        except Exception:
+            pass
+
+    if not (object_id and purpose):
+        await update.message.reply_text("❌ Потерялись данные группы")
+        context.user_data['waiting_for'] = None
+        return
+
+    text_val = (update.message.text or '').strip().replace(',', '.')
+    try:
+        load_watt = float(text_val)
+    except ValueError:
+        await update.message.reply_text("❌ Нужно число (Вт)")
+        return
+
+    if load_watt <= 0 or load_watt > 100000:
+        await update.message.reply_text("❌ Мощность от 1 до 100 000 Вт")
+        return
+
+    supply = core_elec.get_supply(object_id)
+    if not supply:
+        core_elec.set_supply(object_id, phase_count=1, voltage=220)
+
+    voltage = 380 if phase == 3 else 220
+    current = core_elec.calc_current(load_watt, phase, voltage)
+    rating, curve = core_elec.pick_breaker(load_watt, phase, 'C')
+    cable = core_elec.pick_cable(load_watt, phase, voltage)
+    breaker_type = f"{'3P' if phase == 3 else '1P'} {curve}{rating}"
+
+    purpose_label = core_spec.PURPOSE_TYPES.get(purpose, purpose).split(' ', 1)[-1]
+    name = f"{purpose_label} {int(load_watt)}Вт"
+
+    try:
+        group_id = core_elec.create_group(
+            object_id=object_id,
+            room_id=None,
+            name=name,
+            phase=phase,
+            purpose=purpose,
+            cable_type=cable,
+            load_watt=load_watt,
+            breaker_type=breaker_type,
+            breaker_curve=curve,
+            floor_id=floor_id,
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Ошибка создания группы: {e}")
+        context.user_data['waiting_for'] = None
+        return
+
+    for k in ['group_room_id', 'group_floor_id', 'group_purpose', 'group_phase']:
+        context.user_data[k] = None
+    context.user_data['waiting_for'] = None
+
+    _object_panels = []
+    try:
+        if core_elec_panels:
+            _object_panels = core_elec_panels.get_panels(object_id)
+            if len(_object_panels) == 1:
+                core_elec_panels.assign_group_to_panel(group_id, _object_panels[0]["id"])
+                core_elec_panels.recalc_panel_safe(_object_panels[0]["id"])
+    except Exception as _e:
+        print("auto assign: " + str(_e), flush=True)
+
+    text = (
+        f"✅ *Группа создана*\n\n"
+        f"⚡ *{name}*\n"
+        f"Фаза: {phase}ф ({voltage}В)\n"
+        f"Мощность: {int(load_watt)} Вт\n"
+        f"Ток: {current} А\n"
+        f"Автомат: *{breaker_type}*\n"
+        f"Кабель: *{core_spec.get_cable_label(cable)}*"
+        f"Щит: " + (core_elec_panels.get_panel(_object_panels[0]["id"])["name"] if (_object_panels and len(_object_panels) == 1 and core_elec_panels) else "не привязан") + "\n"
+    )
+
+    # Кнопки — ведём к группам этажа
+    kb_btns = []
+    if floor_id:
+        kb_btns.append([InlineKeyboardButton("➕ Ещё группу", callback_data=f"floor_group_new_{floor_id}")])
+        kb_btns.append([InlineKeyboardButton("⚡ К группам этажа", callback_data=f"floor_groups_{floor_id}")])
+    if room_id:
+        kb_btns.append([InlineKeyboardButton("⚡ К группам комнаты", callback_data=f"room_groups_{room_id}")])
+
+        if len(_object_panels) > 1:
+            kb_btns.append([InlineKeyboardButton("⚡ Привязать к щиту", callback_data="group_panel_pick_" + str(group_id))])
+
+    await update.message.reply_text(
+        text, parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(kb_btns) if kb_btns else None
