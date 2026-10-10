@@ -482,6 +482,7 @@ def room_card_keyboard(room_id):
         [InlineKeyboardButton("🪑 Мебель", callback_data=f"room_objects_{room_id}")],
         [InlineKeyboardButton("📋 Задачи", callback_data=f"room_tasks_{room_id}"),
          InlineKeyboardButton("📸 Фото", callback_data=f"room_photos_{room_id}")],
+        [InlineKeyboardButton("💰 Смета комнаты", callback_data=f"room_estimate_{room_id}")],
         [InlineKeyboardButton("📊 Отчёты", callback_data=f"room_reports_{room_id}"),
          InlineKeyboardButton("📤 Экспорт", callback_data=f"room_export_{room_id}")],
         [InlineKeyboardButton("⚡ Группы ЭОМ", callback_data=f"room_groups_{room_id}")],
@@ -3632,6 +3633,23 @@ async def handle_groups_callback(query, context, data):
 
 async def handle_reports_callback(query, context, data):
     """Меню планов и отчётов."""
+    if data.startswith("room_estimate_"):
+        room_id = int(data.replace("room_estimate_", ""))
+        from core.room_estimate import format_room_estimate
+        text = format_room_estimate(room_id)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + chr(10) + "..."
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К комнате", callback_data=f"room_{room_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return
+
     if data.startswith("room_reports_"):
         room_id = int(data.replace("room_reports_", ""))
         room = get_room(room_id)

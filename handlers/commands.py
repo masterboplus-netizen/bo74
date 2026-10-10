@@ -1086,6 +1086,7 @@ def main_menu_keyboard():
         [InlineKeyboardButton("🏗️ Объекты", callback_data="menu_objects")],
         [InlineKeyboardButton("📋 Задачи", callback_data="menu_tasks")],
         [InlineKeyboardButton("💰 Финансы", callback_data="menu_finance")],
+        [InlineKeyboardButton("💵 Сметы", callback_data="menu_estimates")],
         [InlineKeyboardButton("📊 Отчёты", callback_data="menu_reports")],
         [InlineKeyboardButton("📊 KPI", callback_data="menu_kpi")],
         [InlineKeyboardButton("💸 Личные", callback_data="menu_personal")],
@@ -1131,6 +1132,41 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=main_menu_keyboard(),
             parse_mode=ParseMode.MARKDOWN
         )
+        return
+
+    if data == "menu_estimates":
+        try:
+            from modules.objects import get_all_objects
+            objs = get_all_objects()
+        except Exception as e:
+            print("menu_estimates objs: " + str(e), flush=True)
+            objs = []
+        if not objs:
+            try:
+                await query.edit_message_text(
+                    "💰 Сметы\n\nПока нет объектов.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")],
+                    ])
+                )
+            except Exception:
+                pass
+            return
+        kb_rows = []
+        for o in objs[:20]:
+            kb_rows.append([InlineKeyboardButton(
+                "🏗️ " + str(o.get('name') or '?')[:40],
+                callback_data="est_object_" + str(o['id'])
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
+        try:
+            await query.edit_message_text(
+                "💰 *Сметы*\n\nВыбери объект:",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
         return
 
     if data == "menu_objects":
