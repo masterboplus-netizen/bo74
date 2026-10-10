@@ -16,7 +16,7 @@ from core import spec
 # Карта: категория площади -> список (material_code, work_code)
 # Для каждой площади применяем соответствующие материалы и работы.
 FINISH_MAP = {
-    'wall': [
+    'walls_net': [
         ('plaster_gips', 'finish_plaster'),
         ('putty_finish', 'finish_putty'),
         ('primer_deep', 'finish_grout'),
