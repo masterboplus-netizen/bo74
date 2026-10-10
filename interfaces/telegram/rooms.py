@@ -2414,11 +2414,18 @@ async def handle_comm_callback(query, context, data):
     if data.startswith("comm_skip_"):
         # Пропуск шагов — сохраняем как есть
         parts = data.replace("comm_skip_", "").split("_")
-        # comm_skip_size_<room> / comm_skip_diam_<room> / comm_skip_depth_<room>
+        # comm_skip_diameter_<room> / comm_skip_voltage_<room>
         try:
             room_id = int(parts[-1])
         except ValueError:
             return True
+        skip_type = parts[0] if parts else None
+        if skip_type == 'diameter':
+            context.user_data['comm_diameter'] = None
+        elif skip_type == 'voltage':
+            context.user_data['comm_voltage'] = None
+        await _comm_save_and_reply(query.message, context, room_id)
+        return True
     # === ПРИВЯЗКА К ГРУППЕ ЭОМ ===
     if data.startswith("comm_group_unset_"):
         comm_id = int(data.replace("comm_group_unset_", ""))
