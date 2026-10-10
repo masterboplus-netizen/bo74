@@ -1134,6 +1134,29 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    if data.startswith("est_object_"):
+        try:
+            object_id = int(data.replace("est_object_", ""))
+        except ValueError:
+            return
+        from core.object_estimate import format_object_estimate
+        text = format_object_estimate(object_id)
+        if len(text) > 4000:
+            text = text[:3900] + "\n\n..."
+        try:
+            await query.edit_message_text(
+                text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⚡ Смета ЭОМ", callback_data="obj_elec_cost_" + str(object_id))],
+                    [InlineKeyboardButton("🔧 Смета сантехники", callback_data="plumb_cost_obj_" + str(object_id))],
+                    [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
+                ])
+            )
+        except Exception as e:
+            print("est_object: " + str(e), flush=True)
+        return
+
     if data == "menu_estimates":
         try:
             from modules.objects import get_all_objects
