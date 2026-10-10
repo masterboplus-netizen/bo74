@@ -294,3 +294,23 @@
 - [ ] Редактирование цен (UI)
 - [ ] Экспорт PDF/CSV
 - [ ] Отдельные работы (доп работы)
+
+## ✅ СЕССИЯ 12 (10.10.2026) — закрыто
+
+### Смета объекта
+- [x] core/object_estimate.py — сводная смета объекта
+- [x] calc_object_estimate(21) — работает: 679 253 ₽
+- [x] format_object_estimate — текст для UI
+- [x] Обработчик est_object_ в handle_callback
+- [x] UI: Сметы → объект → смета (679 253 ₽)
+
+### Что осталось
+- [ ] est_object_rooms_<id> — по комнатам
+- [ ] est_object_elec_<id> — ЭОМ
+- [ ] est_object_plumb_<id> — сантехника
+- [ ] est_object_prices_<id> — редактирование цен
+- [ ] est_object_export_<id> — PDF/CSV
+- [ ] core/floor_estimate.py — смета этажа
+
+### Коммиты
+- bd29ba7, 3766187, c482d33
