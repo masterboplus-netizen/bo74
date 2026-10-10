@@ -1,18 +1,8 @@
 """core.openings — проёмы (окна, двери, вентиляция)."""
 from core.db import fetchone, fetchall, commit
 
-OPENING_TYPES = {
-    "window": "🪟 Окно",
-    "door_interior": "🚪 Дверь межкомнатная",
-    "door_entrance": "🚪 Дверь входная",
-    "door_glass": "🚪 Стеклянная дверь",
-    "vent": "💨 Вентиляция",
-    "arch": "🏛 Арка",
-    "portal": "🚪 Портал",
-    "skylight": "☀️ Световое окно",
-    "garage_door": "🚗 Ворота гаражные",
-    "gate": "🚧 Ворота",
-}
+from core import spec as _spec
+OPENING_TYPES = _spec.OPENING_TYPES
 
 
 def add_opening(room_id, opening_type, wall_pos, offset_x=None,

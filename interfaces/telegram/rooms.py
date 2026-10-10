@@ -184,7 +184,7 @@ async def _safe_edit(query, text, kb=None):
 # КОНСТАНТЫ
 # ============================================================
 
-WALL_NAMES = {1: "напротив", 2: "слева", 3: "у входа", 4: "справа"}
+WALL_NAMES = core_spec.WALL_NAMES
 WALL_NAMES_REVERSE = {v: k for k, v in WALL_NAMES.items()}
 
 DEFAULT_FLAGS = {"niche": False, "rounded": False, "wavy": False, "hidden": False}
