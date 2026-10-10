@@ -5454,9 +5454,147 @@ async def handle_measure_input(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def _handle_comm_input(update, context, step):
-    """Ввод коммуникаций — заглушка, реализуем отдельно при необходимости."""
+    """Обработка ввода коммуникаций: offset_x → offset_y → финал."""
+    from core.comms import get_comm_type_label
+
+    room_id = context.user_data.get('comm_room_id')
+    ctype = context.user_data.get('comm_type')
+    wall = context.user_data.get('comm_wall')
+
+    if not (room_id and ctype and wall):
+        context.user_data['waiting_for'] = None
+        await update.message.reply_text("❌ Потерялись данные. Начни заново.")
+        return
+
+    text_val = (update.message.text or '').strip().replace(',', '.')
+    try:
+        val = float(text_val)
+    except ValueError:
+        await update.message.reply_text("❌ Введи число")
+        return
+
+    if step == 'comm_offset_x':
+        if val < 0 or val > 50000:
+            await update.message.reply_text("❌ От 0 до 50000 см")
+            return
+        context.user_data['comm_offset_x'] = val
+        context.user_data['waiting_for'] = 'comm_offset_y'
+        await update.message.reply_text(
+            "📏 *Высота от пола* (СМ):\n\n_Например: 30_",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_comms_{room_id}")],
+            ])
+        )
+        return
+
+    if step == 'comm_offset_y':
+        if val < 0 or val > 5000:
+            await update.message.reply_text("❌ От 0 до 5000 см")
+            return
+        context.user_data['comm_offset_y'] = val
+
+        if ctype in ('water_cold', 'water_hot', 'sewer', 'drain', 'heating', 'gas', 'vent'):
+            context.user_data['waiting_for'] = 'comm_diameter'
+            await update.message.reply_text(
+                "⭕ *Диаметр* (ММ):\n\n_Например: 20_",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⏭ Пропустить", callback_data=f"comm_skip_diameter_{room_id}")],
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_comms_{room_id}")],
+                ])
+            )
+            return
+        if ctype in ('elec_socket', 'elec_switch', 'elec_panel', 'elec_cable', 'net_internet', 'net_tv', 'net_phone', 'net_cctv'):
+            context.user_data['waiting_for'] = 'comm_voltage'
+            await update.message.reply_text(
+                "⚡ *Напряжение* (В):\n\n_Например: 220_",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⏭ Пропустить", callback_data=f"comm_skip_voltage_{room_id}")],
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_comms_{room_id}")],
+                ])
+            )
+            return
+        await _comm_save_and_reply(update.message, context, room_id)
+        return
+
+    if step == 'comm_diameter':
+        if val < 1 or val > 500:
+            await update.message.reply_text("❌ От 1 до 500 мм")
+            return
+        context.user_data['comm_diameter'] = val
+        await _comm_save_and_reply(update.message, context, room_id)
+        return
+
+    if step == 'comm_voltage':
+        if val < 1 or val > 10000:
+            await update.message.reply_text("❌ От 1 до 10000 В")
+            return
+        context.user_data['comm_voltage'] = val
+        await _comm_save_and_reply(update.message, context, room_id)
+        return
+
     context.user_data['waiting_for'] = None
-    await update.message.reply_text("⚠️ Ввод коммуникаций временно отключён — используйте кнопки.")
+    await update.message.reply_text("⚠️ Неизвестный шаг: " + str(step))
+
+
+async def _comm_save_and_reply(message, context, room_id):
+    """Сохраняет коммуникацию и отвечает."""
+    from core.comms import add_comm, get_comm_type_label
+    from core.geometry import wall_offset_to_world, calc_wall_coords
+    from core.measures import get_walls_ordered
+
+    ctype = context.user_data.get('comm_type')
+    wall = context.user_data.get('comm_wall')
+    offset_x = context.user_data.get('comm_offset_x')
+    offset_y = context.user_data.get('comm_offset_y')
+    diameter = context.user_data.get('comm_diameter')
+    voltage = context.user_data.get('comm_voltage')
+
+    try:
+        walls = get_walls_ordered(room_id)
+        coords = calc_wall_coords(walls)
+        wc = next((c for c in coords if c.get('wall_pos') == wall), None)
+        if wc and offset_x is not None:
+            wall_offset_to_world(wc, offset_x, offset_y or 0)
+    except Exception as e:
+        print(f"⚠️ world calc: {e}", flush=True)
+
+    try:
+        add_comm(
+            room_id=room_id, comm_type=ctype, wall=wall,
+            offset_x=offset_x, offset_y=offset_y,
+            diameter=diameter, voltage=voltage,
+        )
+    except Exception as e:
+        print(f"⚠️ add_comm: {e}", flush=True)
+        await message.reply_text(f"❌ Ошибка сохранения: {e}")
+        return
+
+    for k in ['comm_room_id', 'comm_type', 'comm_wall', 'comm_offset_x',
+              'comm_offset_y', 'comm_diameter', 'comm_voltage', 'comm_size',
+              'comm_size_w', 'comm_size_h', 'comm_size_d', 'waiting_for']:
+        context.user_data[k] = None
+
+    label = get_comm_type_label(ctype)
+    text = f"✅ *{label}* добавлена!\n\n🧱 Стена: {wall}\n"
+    if offset_x is not None:
+        text += f"📐 От угла: {int(offset_x)} см\n"
+    if offset_y is not None:
+        text += f"📏 От пола: {int(offset_y)} см\n"
+    if diameter:
+        text += f"⭕ Ø {int(diameter)} мм\n"
+    if voltage:
+        text += f"⚡ {int(voltage)} В\n"
+
+    await message.reply_text(
+        text, parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Ещё", callback_data=f"comm_add_{room_id}")],
+            [InlineKeyboardButton("✅ К списку", callback_data=f"room_comms_{room_id}")],
+        ])
+    )
 
 
 async def _handle_opening_input(update, context, step):
