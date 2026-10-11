@@ -1137,6 +1137,36 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    if data.startswith("est_pdf_"):
+        try:
+            object_id = int(data.replace("est_pdf_", ""))
+        except ValueError:
+            return
+        from core.export.pdf_export import export_object_estimate_pdf
+        from modules.objects import get_object
+        path = export_object_estimate_pdf(object_id)
+        if not path:
+            try:
+                await query.edit_message_text("❌ PDF не создан")
+            except Exception:
+                pass
+            return
+        obj = get_object(object_id)
+        name = obj.get("name") if obj else ("obj_" + str(object_id))
+        try:
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=str(name) + "_smeta.pdf",
+                    caption="📄 PDF-смета объекта «" + str(name) + "»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                    ])
+                )
+        except Exception as e:
+            print("est_pdf: " + str(e), flush=True)
+        return
+
     if data.startswith("est_export_"):
         try:
             object_id = int(data.replace("est_export_", ""))
@@ -1386,6 +1416,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("🏠 По комнатам", callback_data="est_object_rooms_" + str(object_id))],
                     [InlineKeyboardButton("🔨 Отдельные работы", callback_data="est_extra_" + str(object_id))],
                     [InlineKeyboardButton("📄 Экспорт (TXT)", callback_data="est_export_" + str(object_id))],
+                    [InlineKeyboardButton("📄 PDF-смета", callback_data="est_pdf_" + str(object_id))],
                     [InlineKeyboardButton("✏️ Редактировать цены", callback_data="est_prices_" + str(object_id))],
                     [InlineKeyboardButton("⚡ Смета ЭОМ", callback_data="obj_elec_cost_" + str(object_id))],
                     [InlineKeyboardButton("🔧 Смета сантехники", callback_data="plumb_cost_obj_" + str(object_id))],

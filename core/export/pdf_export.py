@@ -162,3 +162,61 @@ def export_plumbing_estimate_pdf(object_id):
 
     doc.build(story)
     return path
+
+
+def export_object_estimate_pdf(object_id):
+    """Экспорт полной сметы объекта в PDF."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+    from core.object_estimate import calc_object_estimate
+    from modules.objects import get_object
+    import os
+
+    obj = get_object(object_id)
+    data = calc_object_estimate(object_id)
+    if not data:
+        return None
+
+    out_dir = "/tmp"
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, "obj_estimate_" + str(object_id) + ".pdf")
+
+    c = canvas.Canvas(path, pagesize=A4)
+    w, h = A4
+    y = h - 50
+
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(50, y, "СМЕТА ОБЪЕКТА")
+    y -= 30
+
+    c.setFont("Helvetica", 12)
+    c.drawString(50, y, "Объект: " + str(obj.get("name") if obj else "?"))
+    y -= 20
+    c.drawString(50, y, "Комнат: " + str(data.get("rooms_count", 0)))
+    y -= 30
+
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "По комнатам:")
+    y -= 20
+    c.setFont("Helvetica", 10)
+    for r in data.get("rooms", [])[:25]:
+        c.drawString(60, y, "• " + str(r["name"])[:40] + " — " + str(r["total"]) + " ₽")
+        y -= 15
+        if y < 60:
+            c.showPage()
+            y = h - 50
+
+    y -= 10
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "ИТОГИ:")
+    y -= 20
+    c.setFont("Helvetica", 11)
+    c.drawString(50, y, "Материалы:  " + str(data["total_materials"]) + " ₽"); y -= 15
+    c.drawString(50, y, "Работы:     " + str(data["total_works"]) + " ₽ (" + str(data["total_hours"]) + " ч)"); y -= 15
+    c.drawString(50, y, "ЭОМ:        " + str(data["elec"]) + " ₽"); y -= 15
+    c.drawString(50, y, "Сантехника: " + str(data["plumbing"]) + " ₽"); y -= 25
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(50, y, "ВСЕГО: " + str(data["total"]) + " ₽")
+
+    c.save()
+    return path
