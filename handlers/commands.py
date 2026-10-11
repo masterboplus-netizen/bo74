@@ -2127,6 +2127,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 callback_data="est_object_" + str(o['id'])
             )])
         kb_rows.append([InlineKeyboardButton("📊 Дашборд смет", callback_data="est_dash")])
+        kb_rows.append([InlineKeyboardButton("📤 Экспорт всех смет", callback_data="est_export_all")])
         kb_rows.append([InlineKeyboardButton("📋 Все сметы (сводка)", callback_data="est_all")])
         kb_rows.append([InlineKeyboardButton("📥 Импорт прайса (CSV)", callback_data="est_import")])
         kb_rows.append([InlineKeyboardButton("🏷 По типу объекта", callback_data="est_bykind")])
@@ -2292,6 +2293,37 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
         except Exception as e:
             print("est_import: " + str(e), flush=True)
+        return
+
+    if data == "est_export_all":
+        from modules.objects import get_all_objects
+        from core.object_estimate import format_object_estimate
+        objs = get_all_objects()
+        all_text = []
+        for o in objs[:30]:
+            try:
+                t = format_object_estimate(o["id"]).replace("*", "")
+                all_text.append(t)
+                all_text.append("")
+                all_text.append("=" * 60)
+                all_text.append("")
+            except Exception:
+                pass
+        path = "/tmp/all_estimates.txt"
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(chr(10).join(all_text))
+        try:
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename="all_estimates.txt",
+                    caption="📤 Все сметы объектов",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
+                    ])
+                )
+        except Exception as e:
+            print("est_export_all: " + str(e), flush=True)
         return
 
     if data == "est_dash":
