@@ -464,7 +464,7 @@ def room_card_keyboard(room_id):
     object_id = room['object_id'] if room else 0
     walls = get_walls_ordered(room_id)
     height_ok = bool(room.get('height_bottom') and room.get('height_middle') and room.get('height_top'))
-    walls_ok = len(walls) >= 4
+    walls_ok = len(walls) >= core_spec.get_total_walls()
 
     if not height_ok and not walls:
         start_btn = InlineKeyboardButton("🚀 Начать замер", callback_data=f"room_start_{room_id}")
@@ -1151,14 +1151,14 @@ async def _wall_save_and_next(query, context, room_id, step):
                 print(f"⚠️ add_niche: {e}", flush=True)
 
     _clear_wall_draft(room_id)
-    next_step = step + 1 if step < 4 else 1
+    next_step = step + 1 if step < core_spec.get_total_walls() else 1
     _reset_wall_state(context, keep_step_num=next_step)
 
     summary = f"✅ *Стена {step} ({pos}) сохранена!*\n\n📏 Длина: {length} см\n📐 Угол: {angle}°"
     if niches:
         summary += f"\n🕳 Нишей: {len(niches)}"
 
-    if step >= 4:
+    if step >= core_spec.get_total_walls():
         complete_walls_round(room_id)
         await _wall_finish(query, context, room_id, summary)
         return
@@ -1281,7 +1281,7 @@ async def handle_wall_round_callback(query, context, data):
         room_id = int(data.replace("wall_round_skip_", ""))
         state = _get_wall_state(context)
         step = state.get('step_num') or 1
-        if step >= 4:
+        if step >= core_spec.get_total_walls():
             complete_walls_round(room_id)
             _clear_wall_draft(room_id)
             _reset_wall_state(context)
@@ -1488,7 +1488,7 @@ async def handle_wall_round_callback(query, context, data):
 async def _wall_round_start(query, context, room_id):
     """Главный вход в обход стен. Восстанавливает прогресс из БД."""
     progress = get_walls_progress(room_id)
-    if progress['walls_count'] >= 4:
+    if progress['walls_count'] >= core_spec.get_total_walls():
         await query.edit_message_text(
             "✅ Все 4 стены уже замерены.",
             reply_markup=InlineKeyboardMarkup([
@@ -2088,13 +2088,13 @@ async def _wall_save_and_next_from_update(update, context, room_id, step):
                 print(f"⚠️ add_niche: {e}", flush=True)
 
     _clear_wall_draft(room_id)
-    next_step = step + 1 if step < 4 else 1
+    next_step = step + 1 if step < core_spec.get_total_walls() else 1
     _reset_wall_state(context, keep_step_num=next_step)
 
     summary = f"✅ *Стена {step} ({pos}) сохранена!*\n\n📏 Длина: {length} см\n📐 Угол: {angle}°"
     if niches: summary += f"\n🕳 Нишей: {len(niches)}"
 
-    if step >= 4:
+    if step >= core_spec.get_total_walls():
         complete_walls_round(room_id)
         areas = calculate_room_areas(room_id)
         text = summary + "\n\n🎉 *Все 4 стены замерены!*\n\n"
@@ -3676,6 +3676,41 @@ async def handle_groups_callback(query, context, data):
 
 async def handle_reports_callback(query, context, data):
     """Меню планов и отчётов."""
+    if data.startswith("room_total_walls_"):
+        parts = data.replace("room_total_walls_", "").split("_")
+        try:
+            room_id = int(parts[0])
+            val = parts[1]
+        except (ValueError, IndexError):
+            return
+        if val == "other":
+            context.user_data['waiting_for'] = 'total_walls'
+            try:
+                await query.edit_message_text(
+                    "📐 Введи количество стен (число):",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+                    ])
+                )
+            except Exception:
+                pass
+            return
+        n = int(val)
+        core_spec.set_total_walls(n)
+        context.user_data['total_walls_asked'] = False
+        context.user_data['waiting_for'] = None
+        # Продолжаем замер
+        try:
+            await query.message.chat.send_message(
+                "✅ Стён: " + str(n) + chr(10) + "Начинаем обход.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("▶️ Продолжить", callback_data=f"room_start_{room_id}")],
+                ])
+            )
+        except Exception as e:
+            print("total_walls_set: " + str(e), flush=True)
+        return
+
     if data.startswith("room_estimate_"):
         room_id = int(data.replace("room_estimate_", ""))
         from core.room_estimate import format_room_estimate
@@ -4659,7 +4694,7 @@ async def _show_room_progress(query, context, room_id):
     h_bottom = room.get('height_bottom')
     h_avg = room.get('height')
     height_ok = bool(h_bottom and room.get('height_middle') and room.get('height_top'))
-    walls_ok = len(walls) >= 4
+    walls_ok = len(walls) >= core_spec.get_total_walls()
     try:
         r = fetchone("SELECT COUNT(*) as cnt FROM openings WHERE room_id = ?", (room_id,))
         openings_count = r['cnt'] if r else 0
@@ -4778,7 +4813,7 @@ async def _handle_room_start(query, context, room_id):
     h_top = room.get('height_top')
     height_ok = bool(h_bottom and h_middle and h_top)
     walls = get_walls_ordered(room_id)
-    walls_ok = len(walls) >= 4
+    walls_ok = len(walls) >= core_spec.get_total_walls()
 
     # === ЭТАП ВЫСОТЫ ===
     if not height_ok:
@@ -4822,6 +4857,25 @@ async def _handle_room_start(query, context, room_id):
 
     # === ЭТАП ОБХОДА СТЕН ===
     if not walls_ok:
+        # Спросить количество стен (если ещё не задано в этом сеансе)
+        if not context.user_data.get('total_walls_asked'):
+            context.user_data['total_walls_asked'] = True
+            context.user_data['waiting_for'] = 'total_walls'
+            try:
+                await query.edit_message_text(
+                    "📐 Сколько стен в комнате?",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("3", callback_data=f"room_total_walls_{room_id}_3")],
+                        [InlineKeyboardButton("4", callback_data=f"room_total_walls_{room_id}_4")],
+                        [InlineKeyboardButton("5", callback_data=f"room_total_walls_{room_id}_5")],
+                        [InlineKeyboardButton("6", callback_data=f"room_total_walls_{room_id}_6")],
+                        [InlineKeyboardButton("Другое", callback_data=f"room_total_walls_{room_id}_other")],
+                        [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+                    ])
+                )
+            except Exception as e:
+                print("total_walls ask: " + str(e), flush=True)
+            return
         # ⬇⬇⬇ ГЛАВНЫЙ ФИКС ⬇⬇⬇
         # Проверяем черновик — если есть незавершённая стена, восстанавливаем её
         try:
@@ -5434,6 +5488,26 @@ async def handle_measure_input(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     # --- Высота ---
+    if step == 'total_walls':
+        try:
+            n = int((update.message.text or '').strip())
+        except ValueError:
+            await update.message.reply_text("❌ Нужно число")
+            return
+        if n < 3 or n > 12:
+            await update.message.reply_text("❌ От 3 до 12")
+            return
+        core_spec.set_total_walls(n)
+        context.user_data['total_walls_asked'] = False
+        context.user_data['waiting_for'] = None
+        await update.message.reply_text(
+            "✅ Стён: " + str(n),
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("▶️ Начать обход", callback_data="wall_round_start_" + str(context.user_data.get('wall_room_id') or 0))],
+            ])
+        )
+        return
+
     if step == 'room_height_point':
         room_id = context.user_data.get('height_room_id')
         if not room_id:
