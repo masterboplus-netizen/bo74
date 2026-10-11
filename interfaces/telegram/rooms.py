@@ -2804,6 +2804,23 @@ async def handle_floors_callback(query, context, data):
         return True
 
     # --- СПИСОК ПОМЕЩЕНИЙ ---
+    if data.startswith("floor_estimate_"):
+        try:
+            floor_id = int(data.replace("floor_estimate_", ""))
+        except ValueError:
+            return
+        from core.floor_estimate import format_floor_estimate
+        text = format_floor_estimate(floor_id).replace("*", "")
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + chr(10) + "..."
+        try:
+            await _safe_edit(query, text, InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ К помещению", callback_data=f"floor_{floor_id}")],
+            ]))
+        except Exception as e:
+            print("floor_estimate: " + str(e), flush=True)
+        return
+
     if data.startswith("obj_floors_"):
         object_id = int(data.replace("obj_floors_", ""))
         await _show_floors_list(query, object_id)
@@ -3072,6 +3089,7 @@ async def _show_floor_card(query, floor_id):
 
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("📦 Комнаты", callback_data=f"floor_rooms_{floor_id}")],
+        [InlineKeyboardButton("💰 Смета этажа", callback_data=f"floor_estimate_{floor_id}")],
         [InlineKeyboardButton("⚡ Группы этажа", callback_data=f"floor_groups_{floor_id}")],
         [InlineKeyboardButton("⚡ ЭОМ объекта", callback_data=f"obj_elec_{object_id}")],
         [InlineKeyboardButton("✏️ Переименовать", callback_data=f"floor_rename_{floor_id}")],
