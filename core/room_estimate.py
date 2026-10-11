@@ -241,6 +241,42 @@ def format_room_estimate(room_id, session_id=None):
     return "\n".join(lines)
 
 
+def format_room_materials_only(room_id):
+    """Только материалы комнаты (без работ)."""
+    data = calc_room_estimate(room_id)
+    if not data:
+        return "❌ Комната не найдена"
+    room = data["room"]
+    name = room.get("name") or f"Комната #{room_id}"
+    lines = [f"🧱 Материалы комнаты «{name}»", ""]
+    total = 0.0
+    for m in data.get("materials", []):
+        lines.append(f"   • {m['name']}: {m['qty']} {m['unit']} × {m['price']} ₽ = {m['cost']} ₽")
+        total += m["cost"]
+    lines.append("")
+    lines.append(f"💰 Итого материалы: {round(total, 2)} ₽")
+    return "\n".join(lines)
+
+
+def format_room_works_only(room_id):
+    """Только работы комнаты (без материалов)."""
+    data = calc_room_estimate(room_id)
+    if not data:
+        return "❌ Комната не найдена"
+    room = data["room"]
+    name = room.get("name") or f"Комната #{room_id}"
+    lines = [f"👷 Работы комнаты «{name}»", ""]
+    total = 0.0
+    hours = 0.0
+    for w in data.get("works", []):
+        lines.append(f"   • {w['name']}: {w['qty']} {w['unit']} × {w['price']} ₽ = {w['cost']} ₽ ({w['hours']} ч)")
+        total += w["cost"]
+        hours += w["hours"]
+    lines.append("")
+    lines.append(f"💰 Итого работы: {round(total, 2)} ₽ ({round(hours, 2)} ч)")
+    return "\n".join(lines)
+
+
 def get_room_estimate_summary(room_id):
     """Краткая сводка сметы комнаты."""
     data = calc_room_estimate(room_id)
