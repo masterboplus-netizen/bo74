@@ -7792,10 +7792,7 @@ async def handle_panels_callback(query, context, data):
             [InlineKeyboardButton("⬅️ К щитам", callback_data="panels_list_" + str(p.get('object_id')))],
         ])
         try:
-            await query.edit_message_text(
-                chr(10).join(lines),
-                reply_markup=InlineKeyboardMarkup(kb_rows)
-            )
+            await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
         except Exception as e:
             print("panel card show: " + str(e), flush=True)
         return True
