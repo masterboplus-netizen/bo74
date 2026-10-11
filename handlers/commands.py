@@ -2131,6 +2131,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             total_elec += est.get("elec", 0)
             total_plumb += est.get("plumbing", 0)
             total_extra += est.get("extra_works", 0)
+        totals = []
+        for o in objs[:30]:
+            est = calc_object_estimate(o["id"])
+            if est:
+                totals.append(est.get("total", 0))
+        avg = round(sum(totals) / len(totals), 2) if totals else 0
+        sorted_t = sorted(totals)
+        med = round(sorted_t[len(sorted_t) // 2], 2) if sorted_t else 0
         lines = [
             "📊 Дашборд смет",
             "",
@@ -2143,6 +2151,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🔨 Отдельные:  " + str(round(total_extra, 2)) + " ₽",
             "",
             "💰 ВСЕГО:      " + str(round(total_all, 2)) + " ₽",
+            "",
+            "📈 Средняя:    " + str(avg) + " ₽",
+            "📊 Медиана:    " + str(med) + " ₽",
         ]
         try:
             await query.edit_message_text(
