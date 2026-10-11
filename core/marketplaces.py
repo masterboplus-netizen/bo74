@@ -166,3 +166,74 @@ def generate_csv_template(path=None):
         writer.writerow(['uzo', '63', '2', 'EKF', '1500', 'RUB', '', ''])
         writer.writerow(['cable_3x2.5', '', '', 'Кабель', '120', 'RUB', '', ''])
     return path
+
+
+# ============================================================
+# СРАВНЕНИЕ ЦЕН ПОСТАВЩИКОВ
+# ============================================================
+
+def compare_component_prices(component_type, rating=None, poles=None):
+    """Сравнение цен одного компонента по всем поставщикам.
+
+    Возвращает: [{source, price, market_url, brand, updated_at}, ...] (сортировка по цене).
+    """
+    rows = fetchall(
+        """SELECT price, source, market_url, market_sku, brand, updated_at
+           FROM component_prices
+           WHERE component_type = ?
+             AND (rating IS ? OR rating = ?)
+             AND (poles IS ? OR poles = ?)
+           ORDER BY price ASC""",
+        (component_type, rating, rating, poles, poles)
+    )
+    return [dict(r) for r in rows]
+
+
+def format_price_comparison(component_type, rating=None, poles=None):
+    """Текстовое сравнение цен по поставщикам."""
+    from core import spec
+    label = spec.get_default_price(component_type, poles)
+    rows = compare_component_prices(component_type, rating, poles)
+
+    lines = [f"💱 Сравнение цен: {component_type}"]
+    if rating:
+        lines[-1] += f" {rating}А"
+    if poles:
+        lines[-1] += f" {poles}P"
+    lines.append("")
+
+    if not rows:
+        lines.append(f"   В БД нет цен. Дефолт из spec: {label} ₽")
+        return "\n".join(lines)
+
+    for r in rows:
+        src = r.get("source") or "?"
+        price = r.get("price") or 0
+        brand = r.get("brand") or "—"
+        url = r.get("market_url") or ""
+        line = f"   • {src}: {price} ₽ ({brand})"
+        if url:
+            line += f"\n     {url}"
+        lines.append(line)
+
+    lines.append("")
+    lines.append(f"   Дефолт из spec: {label} ₽")
+    return "\n".join(lines)
+
+
+def list_marketplace_sources():
+    """Список доступных источников цен."""
+    rows = fetchall(
+        "SELECT source, COUNT(*) as cnt FROM component_prices GROUP BY source"
+    )
+    return [dict(r) for r in rows]
+
+
+def format_marketplace_sources():
+    rows = list_marketplace_sources()
+    if not rows:
+        return "Источников цен в БД нет."
+    lines = ["💱 Источники цен:", ""]
+    for r in rows:
+        lines.append(f"   • {r['source']}: {r['cnt']} позиций")
+    return "\n".join(lines)
