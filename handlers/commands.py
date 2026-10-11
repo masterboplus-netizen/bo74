@@ -1471,6 +1471,48 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print("est_price_edit_work: " + str(e), flush=True)
         return
 
+    if data.startswith("est_object_floors_"):
+        try:
+            object_id = int(data.replace("est_object_floors_", ""))
+        except ValueError:
+            return
+        from core.db import fetchall
+        floors = fetchall(
+            "SELECT id, floor_name, floor_number, type FROM floors WHERE object_id = ? ORDER BY floor_number, id",
+            (object_id,)
+        )
+        if not floors:
+            try:
+                await query.edit_message_text(
+                    "🏢 По этажам\n\nПомещений нет.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                    ])
+                )
+            except Exception:
+                pass
+            return
+        from core.floor_estimate import calc_floor_estimate
+        kb_rows = []
+        for fl in floors[:20]:
+            fid = fl["id"]
+            est = calc_floor_estimate(fid)
+            total = est["total"] if est else 0
+            name = fl.get("floor_name") or f"Этаж {fl.get('floor_number')}"
+            kb_rows.append([InlineKeyboardButton(
+                "🏢 " + str(name)[:25] + " — " + str(int(total)) + " ₽",
+                callback_data="floor_estimate_" + str(fid)
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))])
+        try:
+            await query.edit_message_text(
+                "🏢 Сметы по этажам:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_object_floors: " + str(e), flush=True)
+        return
+
     if data.startswith("est_object_rooms_"):
         try:
             object_id = int(data.replace("est_object_rooms_", ""))
@@ -1539,6 +1581,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text,
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🏢 По этажам", callback_data="est_object_floors_" + str(object_id))],
                     [InlineKeyboardButton("🏠 По комнатам", callback_data="est_object_rooms_" + str(object_id))],
                     [InlineKeyboardButton("🔨 Отдельные работы", callback_data="est_extra_" + str(object_id))],
                     [InlineKeyboardButton("📄 Экспорт (TXT)", callback_data="est_export_" + str(object_id))],
