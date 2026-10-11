@@ -1587,6 +1587,67 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print("est_price_edit_work: " + str(e), flush=True)
         return
 
+    if data.startswith("est_where_"):
+        try:
+            object_id = int(data.replace("est_where_", ""))
+        except ValueError:
+            return
+        from core import spec
+        kb_rows = []
+        for code in list(spec.MATERIALS_DEFAULT.keys())[:15]:
+            info = spec.MATERIALS_DEFAULT[code]
+            kb_rows.append([InlineKeyboardButton(
+                info[0][:35],
+                callback_data="est_where_mat_" + str(object_id) + "_" + code
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))])
+        try:
+            await query.edit_message_text(
+                "🔍 Где используется материал:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_where: " + str(e), flush=True)
+        return
+
+    if data.startswith("est_where_mat_"):
+        rest = data.replace("est_where_mat_", "")
+        try:
+            object_id_s, code = rest.split("_", 1)
+            object_id = int(object_id_s)
+        except (ValueError, IndexError):
+            return
+        from core.room_estimate import calc_room_estimate
+        from core.db import fetchall
+        from core import spec
+        rooms = fetchall("SELECT id, name FROM rooms WHERE object_id = ?", (object_id,))
+        rows_use = []
+        for r in rooms:
+            est = calc_room_estimate(r["id"])
+            if not est:
+                continue
+            for m in est.get("materials", []):
+                if m["code"] == code:
+                    rows_use.append((r["name"], m["qty"], m["unit"], m["cost"]))
+        info = spec.MATERIALS_DEFAULT.get(code)
+        lines = ["🔍 " + (info[0] if info else code), ""]
+        if not rows_use:
+            lines.append("   Нигде не используется.")
+        else:
+            for name, qty, unit, cost in rows_use:
+                lines.append(f"   • {name}: {round(qty, 2)} {unit} = {round(cost, 2)} ₽")
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К материалам", callback_data="est_where_" + str(object_id))],
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_where_mat: " + str(e), flush=True)
+        return
+
     if data.startswith("est_buy_"):
         try:
             object_id = int(data.replace("est_buy_", ""))
@@ -2021,6 +2082,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("👷 Работы (все)", callback_data="est_allwork_" + str(object_id))],
                     [InlineKeyboardButton("📊 Статус сметы", callback_data="est_status_" + str(object_id))],
                     [InlineKeyboardButton("🛒 Список закупки", callback_data="est_buy_" + str(object_id))],
+                    [InlineKeyboardButton("🔍 Где материал", callback_data="est_where_" + str(object_id))],
                     [InlineKeyboardButton("🏠 По комнатам", callback_data="est_object_rooms_" + str(object_id))],
                     [InlineKeyboardButton("🔨 Отдельные работы", callback_data="est_extra_" + str(object_id))],
                     [InlineKeyboardButton("📄 Экспорт (TXT)", callback_data="est_export_" + str(object_id))],
