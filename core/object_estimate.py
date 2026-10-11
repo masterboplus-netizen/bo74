@@ -113,7 +113,9 @@ def format_object_estimate(object_id):
     if not data:
         return "❌ Объект не найден"
 
+    from datetime import datetime
     lines = [f"💰 Смета объекта «{data['object_name']}»", ""]
+    lines.append(f"📅 Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}")
     lines.append(f"📦 Комнат: {data['rooms_count']}")
     lines.append("")
 
