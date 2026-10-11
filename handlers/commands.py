@@ -1622,6 +1622,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "🏗️ " + str(o.get('name') or '?')[:40],
                 callback_data="est_object_" + str(o['id'])
             )])
+        kb_rows.append([InlineKeyboardButton("🔍 Найти", callback_data="est_search")])
         kb_rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
         try:
             await query.edit_message_text(
@@ -1631,6 +1632,20 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         except Exception:
             pass
+        return
+
+    if data == "est_search":
+        try:
+            await query.edit_message_text(
+                "🔍 Поиск объекта по имени\n\nНапиши название:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
+                ])
+            )
+            from handlers import commands as _cmd
+            _cmd._est_search_pending = True
+        except Exception as e:
+            print("est_search: " + str(e), flush=True)
         return
 
     if data == "menu_objects":
@@ -2837,6 +2852,38 @@ async def handle_photo_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
+
+    # --- ПОИСК ПО СМЕТАМ ---
+    if getattr(__import__('handlers.commands', fromlist=['_est_search_pending']), '_est_search_pending', False):
+        import handlers.commands as _cmd
+        _cmd._est_search_pending = False
+        q = text.strip().lower()
+        if not q:
+            await update.message.reply_text("❌ Пустой запрос")
+            return
+        from modules.objects import get_all_objects
+        objs = get_all_objects()
+        matched = [o for o in objs if q in (o.get('name') or '').lower()]
+        if not matched:
+            await update.message.reply_text(
+                "🔍 Не найдено: " + text.strip(),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
+                ])
+            )
+            return
+        kb_rows = []
+        for o in matched[:10]:
+            kb_rows.append([InlineKeyboardButton(
+                "🏗️ " + str(o.get('name'))[:40],
+                callback_data="est_object_" + str(o['id'])
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")])
+        await update.message.reply_text(
+            "🔍 Найдено: " + str(len(matched)),
+            reply_markup=InlineKeyboardMarkup(kb_rows)
+        )
+        return
 
     # --- ОТДЕЛЬНЫЕ РАБОТЫ ---
     _pend = getattr(__import__('handlers.commands', fromlist=['_est_extra_pending']), '_est_extra_pending', None)
