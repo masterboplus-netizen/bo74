@@ -1177,6 +1177,26 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print("est_csv: " + str(e), flush=True)
         return
 
+    if data.startswith("est_rules_"):
+        try:
+            object_id = int(data.replace("est_rules_", ""))
+        except ValueError:
+            return
+        from core.elec_rules import format_rules, list_overrides
+        text = format_rules(object_id).replace("*", "")
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + chr(10) + "..."
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_rules: " + str(e), flush=True)
+        return
+
     if data.startswith("est_kpi_"):
         try:
             object_id = int(data.replace("est_kpi_", ""))
@@ -1629,6 +1649,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("📊 CSV-смета", callback_data="est_csv_" + str(object_id))],
                     [InlineKeyboardButton("💱 Сравнение цен", callback_data="est_cmp_" + str(object_id))],
                     [InlineKeyboardButton("📊 KPI объекта", callback_data="est_kpi_" + str(object_id))],
+                    [InlineKeyboardButton("⚙️ Правила ЭОМ", callback_data="est_rules_" + str(object_id))],
                     [InlineKeyboardButton("📊 KPI объекта", callback_data="est_kpi_" + str(object_id))],
                     [InlineKeyboardButton("✏️ Редактировать цены", callback_data="est_prices_" + str(object_id))],
                     [InlineKeyboardButton("⚡ Смета ЭОМ", callback_data="obj_elec_cost_" + str(object_id))],
