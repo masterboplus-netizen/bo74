@@ -1622,6 +1622,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "🏗️ " + str(o.get('name') or '?')[:40],
                 callback_data="est_object_" + str(o['id'])
             )])
+        kb_rows.append([InlineKeyboardButton("📋 Все сметы (сводка)", callback_data="est_all")])
         kb_rows.append([InlineKeyboardButton("🔍 Найти", callback_data="est_search")])
         kb_rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
         try:
@@ -1632,6 +1633,34 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         except Exception:
             pass
+        return
+
+    if data == "est_all":
+        from modules.objects import get_all_objects
+        from core.object_estimate import calc_object_estimate
+        objs = get_all_objects()
+        rows_data = []
+        for o in objs[:20]:
+            est = calc_object_estimate(o["id"])
+            if est:
+                rows_data.append((o, est["total"]))
+        rows_data.sort(key=lambda x: -x[1])
+        lines = ["📋 Все сметы объектов:", ""]
+        total_all = 0.0
+        for o, total in rows_data:
+            lines.append("   • " + str(o.get("name"))[:30] + " — " + str(total) + " ₽")
+            total_all += total
+        lines.append("")
+        lines.append("💰 Итого по всем: " + str(round(total_all, 2)) + " ₽")
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
+                ])
+            )
+        except Exception as e:
+            print("est_all: " + str(e), flush=True)
         return
 
     if data == "est_search":
