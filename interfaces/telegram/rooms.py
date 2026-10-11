@@ -2804,6 +2804,30 @@ async def handle_floors_callback(query, context, data):
         return True
 
     # --- СПИСОК ПОМЕЩЕНИЙ ---
+    if data.startswith("floor_export_"):
+        try:
+            floor_id = int(data.replace("floor_export_", ""))
+        except ValueError:
+            return
+        from core.floor_estimate import format_floor_estimate
+        text = format_floor_estimate(floor_id).replace("*", "")
+        path = "/tmp/floor_" + str(floor_id) + ".txt"
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        try:
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename="floor_" + str(floor_id) + "_smeta.txt",
+                    caption="📄 Смета помещения",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К помещению", callback_data=f"floor_{floor_id}")],
+                    ])
+                )
+        except Exception as e:
+            print("floor_export: " + str(e), flush=True)
+        return
+
     if data.startswith("floor_estimate_"):
         try:
             floor_id = int(data.replace("floor_estimate_", ""))
@@ -3090,6 +3114,7 @@ async def _show_floor_card(query, floor_id):
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("📦 Комнаты", callback_data=f"floor_rooms_{floor_id}")],
         [InlineKeyboardButton("💰 Смета этажа", callback_data=f"floor_estimate_{floor_id}")],
+        [InlineKeyboardButton("📄 Экспорт TXT", callback_data=f"floor_export_{floor_id}")],
         [InlineKeyboardButton("⚡ Группы этажа", callback_data=f"floor_groups_{floor_id}")],
         [InlineKeyboardButton("⚡ ЭОМ объекта", callback_data=f"obj_elec_{object_id}")],
         [InlineKeyboardButton("✏️ Переименовать", callback_data=f"floor_rename_{floor_id}")],
