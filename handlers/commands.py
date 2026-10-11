@@ -1587,6 +1587,58 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print("est_price_edit_work: " + str(e), flush=True)
         return
 
+    if data.startswith("est_allmat_"):
+        try:
+            object_id = int(data.replace("est_allmat_", ""))
+        except ValueError:
+            return
+        from core.object_estimate import calc_object_estimate
+        from core.room_estimate import calc_room_estimate
+        from core.db import fetchall
+        rooms = fetchall("SELECT id FROM rooms WHERE object_id = ?", (object_id,))
+        agg = {}
+        for r in rooms:
+            est = calc_room_estimate(r["id"])
+            if not est:
+                continue
+            for m in est.get("materials", []):
+                key = m["code"]
+                if key not in agg:
+                    agg[key] = {"name": m["name"], "unit": m["unit"], "qty": 0.0, "cost": 0.0}
+                agg[key]["qty"] += m["qty"]
+                agg[key]["cost"] += m["cost"]
+        if not agg:
+            try:
+                await query.edit_message_text(
+                    "🧱 Материалы объекта\n\nМатериалов нет.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                    ])
+                )
+            except Exception:
+                pass
+            return
+        lines = ["🧱 Материалы объекта (все комнаты):", ""]
+        total = 0.0
+        for code, info in sorted(agg.items(), key=lambda x: -x[1]["cost"]):
+            lines.append(f"   • {info['name']}: {round(info['qty'], 2)} {info['unit']} = {round(info['cost'], 2)} ₽")
+            total += info["cost"]
+        lines.append("")
+        lines.append(f"💰 Итого материалы: {round(total, 2)} ₽")
+        text = chr(10).join(lines)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + chr(10) + "..."
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_allmat: " + str(e), flush=True)
+        return
+
     if data.startswith("est_object_floors_"):
         try:
             object_id = int(data.replace("est_object_floors_", ""))
@@ -1740,6 +1792,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🏢 По этажам", callback_data="est_object_floors_" + str(object_id))],
+                    [InlineKeyboardButton("🧱 Материалы (все)", callback_data="est_allmat_" + str(object_id))],
                     [InlineKeyboardButton("🏠 По комнатам", callback_data="est_object_rooms_" + str(object_id))],
                     [InlineKeyboardButton("🔨 Отдельные работы", callback_data="est_extra_" + str(object_id))],
                     [InlineKeyboardButton("📄 Экспорт (TXT)", callback_data="est_export_" + str(object_id))],
