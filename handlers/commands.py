@@ -108,6 +108,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+_est_extra_pending = None
+
+
 def _help_text() -> str:
     """Текст справки (общий для /help и кнопки Помощь)."""
     return (
@@ -1134,6 +1137,45 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    if data.startswith("est_extra_"):
+        try:
+            object_id = int(data.replace("est_extra_", ""))
+        except ValueError:
+            return
+        from core.extra_works import format_extra_works
+        text = format_extra_works(object_id).replace("*", "")
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + chr(10) + "..."
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("➕ Добавить работу", callback_data="est_extra_add_" + str(object_id))],
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_extra: " + str(e), flush=True)
+        return
+
+    if data.startswith("est_extra_add_"):
+        try:
+            object_id = int(data.replace("est_extra_add_", ""))
+        except ValueError:
+            return
+        try:
+            await query.edit_message_text(
+                "🔨 Новая отдельная работа\n\nНапиши название работы:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data="est_extra_" + str(object_id))],
+                ])
+            )
+            from handlers import commands as _cmd
+            _cmd._est_extra_pending = {"object_id": object_id, "step": "title"}
+        except Exception as e:
+            print("est_extra_add: " + str(e), flush=True)
+        return
+
     if data.startswith("est_prices_"):
         try:
             object_id = int(data.replace("est_prices_", ""))
@@ -1314,6 +1356,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🏠 По комнатам", callback_data="est_object_rooms_" + str(object_id))],
+                    [InlineKeyboardButton("🔨 Отдельные работы", callback_data="est_extra_" + str(object_id))],
                     [InlineKeyboardButton("✏️ Редактировать цены", callback_data="est_prices_" + str(object_id))],
                     [InlineKeyboardButton("⚡ Смета ЭОМ", callback_data="obj_elec_cost_" + str(object_id))],
                     [InlineKeyboardButton("🔧 Смета сантехники", callback_data="plumb_cost_obj_" + str(object_id))],
@@ -2562,6 +2605,54 @@ async def handle_photo_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
+
+    # --- ОТДЕЛЬНЫЕ РАБОТЫ ---
+    _pend = getattr(__import__('handlers.commands', fromlist=['_est_extra_pending']), '_est_extra_pending', None)
+    if _pend and isinstance(_pend, dict):
+        step = _pend.get('step')
+        object_id = _pend.get('object_id')
+        if step == 'title':
+            _pend['title'] = text.strip()
+            _pend['step'] = 'qty'
+            await update.message.reply_text(
+                "🔨 " + text.strip() + "\n\nКоличество (число):"
+            )
+            return
+        elif step == 'qty':
+            try:
+                q = float(text.replace(',', '.'))
+            except ValueError:
+                await update.message.reply_text("❌ Нужно число")
+                return
+            _pend['qty'] = q
+            _pend['step'] = 'price'
+            await update.message.reply_text(
+                "🔨 " + _pend['title'] + "\nКол-во: " + str(q) + "\n\nЦена за единицу (₽):"
+            )
+            return
+        elif step == 'price':
+            try:
+                p = float(text.replace(',', '.'))
+            except ValueError:
+                await update.message.reply_text("❌ Нужно число")
+                return
+            from core.extra_works import add_extra_work
+            wid = add_extra_work(
+                object_id=object_id,
+                title=_pend['title'],
+                qty=_pend['qty'],
+                price=p,
+                unit='шт',
+            )
+            import handlers.commands as _cmd
+            _cmd._est_extra_pending = None
+            await update.message.reply_text(
+                "✅ Работа добавлена!\n\n🔨 " + _pend['title'] + "\nКол-во: " + str(_pend['qty']) + " × " + str(p) + " ₽",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К работам", callback_data="est_extra_" + str(object_id))],
+                ])
+            )
+            return
     # DEBUG: печатаем всё, что приходит
     try:
         with open('/tmp/handle_text.log', 'a') as _f:
