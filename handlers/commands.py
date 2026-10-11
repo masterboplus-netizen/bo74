@@ -1868,6 +1868,77 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         return
 
+    if data.startswith("est_room_per_"):
+        try:
+            room_id = int(data.replace("est_room_per_", ""))
+        except ValueError:
+            return
+        from core.db import fetchone
+        from core.rooms import get_room
+        room = get_room(room_id)
+        if not room:
+            return
+        object_id = room.get("object_id")
+        sessions = __import__("core.sessions", fromlist=["list_sessions"]).list_sessions(room_id)
+        if not sessions:
+            try:
+                await query.edit_message_text(
+                    "📅 Сессий замеров нет.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К смете", callback_data="est_room_" + str(room_id))],
+                    ])
+                )
+            except Exception:
+                pass
+            return
+        kb_rows = []
+        for s in sessions[:10]:
+            st = s.get("session_type") or "?"
+            lab = s.get("session_label") or st
+            kb_rows.append([InlineKeyboardButton(
+                "📅 " + str(lab)[:30] + " (" + str(s.get("created_at", ""))[:10] + ")",
+                callback_data="est_room_sess_" + str(room_id) + "_" + str(s["id"])
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ К смете", callback_data="est_room_" + str(room_id))])
+        try:
+            await query.edit_message_text(
+                "📅 Сессии замеров комнаты:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_room_per: " + str(e), flush=True)
+        return
+
+    if data.startswith("est_room_sess_"):
+        parts = data.replace("est_room_sess_", "").split("_")
+        try:
+            room_id = int(parts[0])
+            session_id = int(parts[1])
+        except (ValueError, IndexError):
+            return
+        from core.room_estimate import calc_room_estimate
+        est = calc_room_estimate(room_id, session_id=session_id)
+        if not est:
+            return
+        lines = [
+            "📅 Смета по сессии #" + str(session_id),
+            "",
+            f"🧱 Материалы: {est['total_materials']} ₽",
+            f"👷 Работы:    {est['total_works']} ₽ ({est['total_hours']} ч)",
+            f"💰 ВСЕГО:     {est['total']} ₽",
+        ]
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К сессиям", callback_data="est_room_per_" + str(room_id))],
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_room_" + str(room_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_room_sess: " + str(e), flush=True)
+        return
+
     if data.startswith("est_room_mat_"):
         try:
             room_id = int(data.replace("est_room_mat_", ""))
@@ -1923,6 +1994,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🧱 Только материалы", callback_data="est_room_mat_" + str(room_id))],
                     [InlineKeyboardButton("👷 Только работы", callback_data="est_room_work_" + str(room_id))],
+                    [InlineKeyboardButton("📅 Период", callback_data="est_room_per_" + str(room_id))],
                     [InlineKeyboardButton("⬅️ К комнатам", callback_data="est_object_rooms_" + str(object_id))],
                 ])
             )
