@@ -1666,6 +1666,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb_rows.append([InlineKeyboardButton("📋 Все сметы (сводка)", callback_data="est_all")])
         kb_rows.append([InlineKeyboardButton("📥 Импорт прайса (CSV)", callback_data="est_import")])
         kb_rows.append([InlineKeyboardButton("🏷 По типу объекта", callback_data="est_bykind")])
+        kb_rows.append([InlineKeyboardButton("⚖️ Сравнить объекты", callback_data="est_compare")])
         kb_rows.append([InlineKeyboardButton("🔍 Найти", callback_data="est_search")])
         kb_rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
         try:
@@ -1676,6 +1677,87 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         except Exception:
             pass
+        return
+
+    if data == "est_compare":
+        from modules.objects import get_all_objects
+        objs = get_all_objects()[:10]
+        kb_rows = []
+        for o in objs:
+            kb_rows.append([InlineKeyboardButton(
+                "🏗️ " + str(o.get("name"))[:40],
+                callback_data="est_cmp_a_" + str(o["id"])
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")])
+        try:
+            await query.edit_message_text(
+                "⚖️ Сравнение смет объектов" + chr(10) + chr(10) + "Выбери первый объект:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_compare: " + str(e), flush=True)
+        return
+
+    if data.startswith("est_cmp_a_"):
+        a_id = int(data.replace("est_cmp_a_", ""))
+        from modules.objects import get_all_objects
+        objs = get_all_objects()[:10]
+        kb_rows = []
+        for o in objs:
+            if o["id"] == a_id:
+                continue
+            kb_rows.append([InlineKeyboardButton(
+                "🏗️ " + str(o.get("name"))[:40],
+                callback_data="est_cmp_b_" + str(a_id) + "_" + str(o["id"])
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="est_compare")])
+        try:
+            await query.edit_message_text(
+                "⚖️ Теперь выбери второй объект:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_cmp_a: " + str(e), flush=True)
+        return
+
+    if data.startswith("est_cmp_b_"):
+        parts = data.replace("est_cmp_b_", "").split("_")
+        a_id, b_id = int(parts[0]), int(parts[1])
+        from core.object_estimate import calc_object_estimate
+        from modules.objects import get_object
+        a = calc_object_estimate(a_id)
+        b = calc_object_estimate(b_id)
+        an = get_object(a_id)
+        bn = get_object(b_id)
+        aname = an.get("name") if an else "?"
+        bname = bn.get("name") if bn else "?"
+        lines = ["⚖️ Сравнение смет", ""]
+        lines.append("🏗️ " + str(aname)[:30])
+        lines.append("   Материалы: " + str(a.get("total_materials", 0)))
+        lines.append("   Работы:    " + str(a.get("total_works", 0)))
+        lines.append("   ЭОМ:       " + str(a.get("elec", 0)))
+        lines.append("   Сантехника:" + str(a.get("plumbing", 0)))
+        lines.append("   ВСЕГО:     " + str(a.get("total", 0)))
+        lines.append("")
+        lines.append("🏗️ " + str(bname)[:30])
+        lines.append("   Материалы: " + str(b.get("total_materials", 0)))
+        lines.append("   Работы:    " + str(b.get("total_works", 0)))
+        lines.append("   ЭОМ:       " + str(b.get("elec", 0)))
+        lines.append("   Сантехника:" + str(b.get("plumbing", 0)))
+        lines.append("   ВСЕГО:     " + str(b.get("total", 0)))
+        lines.append("")
+        diff = b.get("total", 0) - a.get("total", 0)
+        lines.append("📊 Разница: " + str(round(diff, 2)) + " ₽")
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К сравнению", callback_data="est_compare")],
+                    [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
+                ])
+            )
+        except Exception as e:
+            print("est_cmp_b: " + str(e), flush=True)
         return
 
     if data == "est_bykind":
