@@ -1587,6 +1587,36 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print("est_price_edit_work: " + str(e), flush=True)
         return
 
+    if data.startswith("est_month_"):
+        try:
+            object_id = int(data.replace("est_month_", ""))
+        except ValueError:
+            return
+        from core.export.pdf_export import export_object_monthly_report_pdf
+        from modules.objects import get_object
+        path = export_object_monthly_report_pdf(object_id)
+        if not path:
+            try:
+                await query.edit_message_text("❌ Отчёт не создан")
+            except Exception:
+                pass
+            return
+        obj = get_object(object_id)
+        name = obj.get("name") if obj else ("obj_" + str(object_id))
+        try:
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=str(name) + "_monthly.pdf",
+                    caption="📅 Отчёт по объекту «" + str(name) + "» за месяц",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                    ])
+                )
+        except Exception as e:
+            print("est_month: " + str(e), flush=True)
+        return
+
     if data.startswith("est_where_"):
         try:
             object_id = int(data.replace("est_where_", ""))
@@ -2083,6 +2113,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("📊 Статус сметы", callback_data="est_status_" + str(object_id))],
                     [InlineKeyboardButton("🛒 Список закупки", callback_data="est_buy_" + str(object_id))],
                     [InlineKeyboardButton("🔍 Где материал", callback_data="est_where_" + str(object_id))],
+                    [InlineKeyboardButton("📅 Отчёт за месяц", callback_data="est_month_" + str(object_id))],
                     [InlineKeyboardButton("🏠 По комнатам", callback_data="est_object_rooms_" + str(object_id))],
                     [InlineKeyboardButton("🔨 Отдельные работы", callback_data="est_extra_" + str(object_id))],
                     [InlineKeyboardButton("📄 Экспорт (TXT)", callback_data="est_export_" + str(object_id))],
