@@ -1943,6 +1943,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "🏗️ " + str(o.get('name') or '?')[:40],
                 callback_data="est_object_" + str(o['id'])
             )])
+        kb_rows.append([InlineKeyboardButton("📊 Дашборд смет", callback_data="est_dash")])
         kb_rows.append([InlineKeyboardButton("📋 Все сметы (сводка)", callback_data="est_all")])
         kb_rows.append([InlineKeyboardButton("📥 Импорт прайса (CSV)", callback_data="est_import")])
         kb_rows.append([InlineKeyboardButton("🏷 По типу объекта", callback_data="est_bykind")])
@@ -2108,6 +2109,50 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
         except Exception as e:
             print("est_import: " + str(e), flush=True)
+        return
+
+    if data == "est_dash":
+        from modules.objects import get_all_objects
+        from core.object_estimate import calc_object_estimate
+        objs = get_all_objects()
+        total_all = 0.0
+        total_mat = 0.0
+        total_wrk = 0.0
+        total_elec = 0.0
+        total_plumb = 0.0
+        total_extra = 0.0
+        for o in objs[:30]:
+            est = calc_object_estimate(o["id"])
+            if not est:
+                continue
+            total_all += est.get("total", 0)
+            total_mat += est.get("total_materials", 0)
+            total_wrk += est.get("total_works", 0)
+            total_elec += est.get("elec", 0)
+            total_plumb += est.get("plumbing", 0)
+            total_extra += est.get("extra_works", 0)
+        lines = [
+            "📊 Дашборд смет",
+            "",
+            f"Объектов: {len(objs)}",
+            "",
+            "🧱 Материалы:  " + str(round(total_mat, 2)) + " ₽",
+            "👷 Работы:     " + str(round(total_wrk, 2)) + " ₽",
+            "⚡ ЭОМ:        " + str(round(total_elec, 2)) + " ₽",
+            "🔧 Сантехника: " + str(round(total_plumb, 2)) + " ₽",
+            "🔨 Отдельные:  " + str(round(total_extra, 2)) + " ₽",
+            "",
+            "💰 ВСЕГО:      " + str(round(total_all, 2)) + " ₽",
+        ]
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
+                ])
+            )
+        except Exception as e:
+            print("est_dash: " + str(e), flush=True)
         return
 
     if data == "est_all":
