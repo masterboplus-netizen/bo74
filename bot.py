@@ -99,6 +99,46 @@ def _ensure_netrc():
         print(f"⚠️ _ensure_netrc: {e}")
 
 
+
+async def process_scheduled_reports(context):
+    """Проверка и отправка запланированных отчётов."""
+    from core.db import fetchall, commit
+    from datetime import datetime
+    from core.export.pdf_export import export_object_monthly_report_pdf
+    from modules.objects import get_object
+    try:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        rows = fetchall(
+            "SELECT * FROM report_schedule WHERE active = 1 AND next_send <= ?",
+            (now,)
+        )
+    except Exception as e:
+        print("sched check: " + str(e), flush=True)
+        return
+    for r in rows:
+        try:
+            object_id = r["object_id"]
+            path = export_object_monthly_report_pdf(object_id)
+            if not path:
+                continue
+            obj = get_object(object_id)
+            name = obj.get("name") if obj else "?"
+            with open(path, "rb") as f:
+                await context.bot.send_document(
+                    chat_id=MAIN_ADMIN_TG_ID,
+                    document=f,
+                    filename=str(name) + "_auto.pdf",
+                    caption="📅 Автоотчёт по объекту «" + str(name) + "»"
+                )
+            from datetime import timedelta
+            freq = r.get("frequency") or "weekly"
+            days = 1 if freq == "daily" else (7 if freq == "weekly" else 30)
+            nxt = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+            commit("UPDATE report_schedule SET last_sent = ?, next_send = ? WHERE id = ?", (now, nxt, r["id"]))
+        except Exception as e:
+            print("sched send: " + str(e), flush=True)
+
+
 def main():
     _ensure_netrc()
     if not validate_config():
@@ -142,6 +182,13 @@ def main():
             send_daily_backup,
             time=time(hour=20, minute=0, tzinfo=ZoneInfo("UTC")),
             name="daily_backup"
+        )
+        # Автоотчёты — каждый час
+        app.job_queue.run_repeating(
+            process_scheduled_reports,
+            interval=3600,
+            first=60,
+            name="sched_reports"
         )
         logger.info("⏰ Дайджесты: 9:00 и 18:00 МСК, автобэкап БД: 23:00 МСК")
 
