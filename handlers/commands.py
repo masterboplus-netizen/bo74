@@ -1177,6 +1177,62 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print("est_csv: " + str(e), flush=True)
         return
 
+    if data.startswith("est_period_"):
+        try:
+            object_id = int(data.replace("est_period_", ""))
+        except ValueError:
+            return
+        kb_rows = [
+            [InlineKeyboardButton("📅 За неделю", callback_data="est_per_" + str(object_id) + "_week")],
+            [InlineKeyboardButton("📅 За месяц", callback_data="est_per_" + str(object_id) + "_month")],
+            [InlineKeyboardButton("📅 За всё время", callback_data="est_per_" + str(object_id) + "_all")],
+            [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                "📈 Аналитика по периодам" + chr(10) + chr(10) + "Выбери период:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_period: " + str(e), flush=True)
+        return
+
+    if data.startswith("est_per_"):
+        rest = data.replace("est_per_", "")
+        try:
+            object_id_s, period = rest.rsplit("_", 1)
+            object_id = int(object_id_s)
+        except (ValueError, IndexError):
+            return
+        from core.economics import calc_margin
+        from modules.finance import get_finance_summary
+        from modules.objects import get_object
+        obj = get_object(object_id)
+        name = obj.get("name") if obj else "?"
+        f = get_finance_summary(object_id)
+        m = calc_margin(object_id, period=period)
+        pnames = {"week": "неделю", "month": "месяц", "all": "всё время"}
+        lines = [
+            "📈 " + str(name) + " — за " + pnames.get(period, period),
+            "",
+            "💰 Доход:   " + str(f.get("income", 0)) + " ₽",
+            "💸 Расход:  " + str(f.get("expense", 0)) + " ₽",
+            "⚖️ Баланс:  " + str(f.get("balance", 0)) + " ₽",
+            "",
+            "📊 Маржа:   " + str(m.get("margin_percent", 0)) + " %",
+        ]
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К периодам", callback_data="est_period_" + str(object_id))],
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_per: " + str(e), flush=True)
+        return
+
     if data.startswith("est_rules_"):
         try:
             object_id = int(data.replace("est_rules_", ""))
@@ -1650,6 +1706,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("💱 Сравнение цен", callback_data="est_cmp_" + str(object_id))],
                     [InlineKeyboardButton("📊 KPI объекта", callback_data="est_kpi_" + str(object_id))],
                     [InlineKeyboardButton("⚙️ Правила ЭОМ", callback_data="est_rules_" + str(object_id))],
+                    [InlineKeyboardButton("📈 По периодам", callback_data="est_period_" + str(object_id))],
                     [InlineKeyboardButton("📊 KPI объекта", callback_data="est_kpi_" + str(object_id))],
                     [InlineKeyboardButton("✏️ Редактировать цены", callback_data="est_prices_" + str(object_id))],
                     [InlineKeyboardButton("⚡ Смета ЭОМ", callback_data="obj_elec_cost_" + str(object_id))],
