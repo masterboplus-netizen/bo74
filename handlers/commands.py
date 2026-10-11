@@ -2201,6 +2201,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )])
         kb_rows.append([InlineKeyboardButton("📊 Дашборд смет", callback_data="est_dash")])
         kb_rows.append([InlineKeyboardButton("📤 Экспорт всех смет", callback_data="est_export_all")])
+        kb_rows.append([InlineKeyboardButton("⚡ KPI мастеров", callback_data="est_kpi_masters")])
         kb_rows.append([InlineKeyboardButton("📋 Все сметы (сводка)", callback_data="est_all")])
         kb_rows.append([InlineKeyboardButton("📥 Импорт прайса (CSV)", callback_data="est_import")])
         kb_rows.append([InlineKeyboardButton("🏷 По типу объекта", callback_data="est_bykind")])
@@ -2366,6 +2367,26 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
         except Exception as e:
             print("est_import: " + str(e), flush=True)
+        return
+
+    if data == "est_kpi_masters":
+        try:
+            from modules.kpi import get_master_kpi, format_master_kpi
+            masters = get_master_kpi(30)
+            text = format_master_kpi(masters, 30).replace("*", "")
+        except Exception as e:
+            text = "KPI недоступен: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + chr(10) + "..."
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
+                ])
+            )
+        except Exception as e:
+            print("est_kpi_masters: " + str(e), flush=True)
         return
 
     if data == "est_export_all":
