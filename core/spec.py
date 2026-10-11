@@ -1006,3 +1006,38 @@ def get_work_hours(code):
         t = WORK_TYPES_DEFAULT[code]
         return t[3] if len(t) > 3 else 0
     return 0
+
+
+def get_wall_hint(n, total=None):
+    """Возвращает подсказку для стены."""
+    if total and total <= 4:
+        hints = {1: "напротив", 2: "слева", 3: "у входа", 4: "справа"}
+        return hints.get(n, "")
+    if n == 1:
+        return "у входа"
+    if total:
+        return f"между {n - 1} и {n + 1 if n < total else 1}"
+    return ""
+
+
+def get_total_walls():
+    """Возвращает количество стен из настроек (по умолчанию 4)."""
+    try:
+        from core.db import fetchone
+        row = fetchone("SELECT value FROM system_settings WHERE key = 'total_walls'")
+        if row and row["value"]:
+            return int(row["value"])
+    except Exception:
+        pass
+    return 4
+
+
+def set_total_walls(n):
+    """Сохраняет количество стен в настройках."""
+    from core.db import fetchone, commit
+    existing = fetchone("SELECT key FROM system_settings WHERE key = 'total_walls'")
+    if existing:
+        commit("UPDATE system_settings SET value = ? WHERE key = 'total_walls'", (str(int(n)),))
+    else:
+        commit("INSERT INTO system_settings (key, value) VALUES ('total_walls', ?)", (str(int(n)),))
+    return True
