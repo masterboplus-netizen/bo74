@@ -1716,6 +1716,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 text,
                 reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🧱 Только материалы", callback_data="est_room_mat_" + str(room_id))],
+                    [InlineKeyboardButton("👷 Только работы", callback_data="est_room_work_" + str(room_id))],
                     [InlineKeyboardButton("⬅️ К комнатам", callback_data="est_object_rooms_" + str(object_id))],
                 ])
             )
