@@ -1137,6 +1137,46 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    if data.startswith("est_csv_"):
+        try:
+            object_id = int(data.replace("est_csv_", ""))
+        except ValueError:
+            return
+        from core.object_estimate import calc_object_estimate
+        from modules.objects import get_object
+        import csv
+        est = calc_object_estimate(object_id)
+        if not est:
+            return
+        obj = get_object(object_id)
+        name = obj.get("name") if obj else ("obj_" + str(object_id))
+        path = "/tmp/estimate_" + str(object_id) + ".csv"
+        with open(path, "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.writer(f, delimiter=";")
+            w.writerow(["Комната", "Материалы", "Работы", "Итого"])
+            for r in est.get("rooms", []):
+                w.writerow([r["name"], r["materials"], r["works"], r["total"]])
+            w.writerow([])
+            w.writerow(["Материалы (всего)", est["total_materials"]])
+            w.writerow(["Работы (всего)", est["total_works"]])
+            w.writerow(["ЭОМ", est["elec"]])
+            w.writerow(["Сантехника", est["plumbing"]])
+            w.writerow(["Отдельные работы", est.get("extra_works", 0)])
+            w.writerow(["ВСЕГО", est["total"]])
+        try:
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=str(name) + "_smeta.csv",
+                    caption="📊 CSV-смета объекта «" + str(name) + "»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                    ])
+                )
+        except Exception as e:
+            print("est_csv: " + str(e), flush=True)
+        return
+
     if data.startswith("est_kpi_"):
         try:
             object_id = int(data.replace("est_kpi_", ""))
@@ -1586,6 +1626,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("🔨 Отдельные работы", callback_data="est_extra_" + str(object_id))],
                     [InlineKeyboardButton("📄 Экспорт (TXT)", callback_data="est_export_" + str(object_id))],
                     [InlineKeyboardButton("📄 PDF-смета", callback_data="est_pdf_" + str(object_id))],
+                    [InlineKeyboardButton("📊 CSV-смета", callback_data="est_csv_" + str(object_id))],
                     [InlineKeyboardButton("💱 Сравнение цен", callback_data="est_cmp_" + str(object_id))],
                     [InlineKeyboardButton("📊 KPI объекта", callback_data="est_kpi_" + str(object_id))],
                     [InlineKeyboardButton("📊 KPI объекта", callback_data="est_kpi_" + str(object_id))],
