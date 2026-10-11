@@ -220,3 +220,66 @@ def export_object_estimate_pdf(object_id):
 
     c.save()
     return path
+
+
+
+def export_object_monthly_report_pdf(object_id):
+    """PDF-отчёт по объекту за месяц (задачи + финансы + смета)."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+    from core.object_estimate import calc_object_estimate
+    from modules.objects import get_object
+    from modules.finance import get_finance_summary
+    from modules.tasks import get_tasks_by_object
+    from datetime import datetime
+    import os
+
+    obj = get_object(object_id)
+    est = calc_object_estimate(object_id)
+    if not obj or not est:
+        return None
+
+    f = get_finance_summary(object_id)
+    tasks = get_tasks_by_object(object_id)
+    open_t = len([t for t in tasks if t.get("status") in ("open", "in_progress")])
+    done_t = len([t for t in tasks if t.get("status") == "done"])
+
+    out_dir = "/tmp"
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, "obj_monthly_" + str(object_id) + ".pdf")
+
+    c = canvas.Canvas(path, pagesize=A4)
+    w, h = A4
+    y = h - 50
+
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(50, y, "ОТЧЁТ ПО ОБЪЕКТУ ЗА МЕСЯЦ"); y -= 30
+    c.setFont("Helvetica", 11)
+    c.drawString(50, y, "Объект: " + str(obj.get("name"))); y -= 15
+    c.drawString(50, y, "Дата: " + datetime.now().strftime("%d.%m.%Y")); y -= 25
+
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "ЗАДАЧИ:"); y -= 18
+    c.setFont("Helvetica", 11)
+    c.drawString(50, y, "Открытых: " + str(open_t)); y -= 15
+    c.drawString(50, y, "Закрытых: " + str(done_t)); y -= 15
+    c.drawString(50, y, "Всего: " + str(len(tasks))); y -= 25
+
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "ФИНАНСЫ:"); y -= 18
+    c.setFont("Helvetica", 11)
+    c.drawString(50, y, "Доход:  " + str(f.get("income", 0)) + " RUB"); y -= 15
+    c.drawString(50, y, "Расход: " + str(f.get("expense", 0)) + " RUB"); y -= 15
+    c.drawString(50, y, "Баланс: " + str(f.get("balance", 0)) + " RUB"); y -= 25
+
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(50, y, "СМЕТА:"); y -= 18
+    c.setFont("Helvetica", 11)
+    c.drawString(50, y, "Материалы: " + str(est.get("total_materials", 0)) + " RUB"); y -= 15
+    c.drawString(50, y, "Работы:    " + str(est.get("total_works", 0)) + " RUB"); y -= 15
+    c.drawString(50, y, "ЭОМ:       " + str(est.get("elec", 0)) + " RUB"); y -= 15
+    c.drawString(50, y, "Сантехника:" + str(est.get("plumbing", 0)) + " RUB"); y -= 15
+    c.drawString(50, y, "ВСЕГО:     " + str(est.get("total", 0)) + " RUB")
+
+    c.save()
+    return path
