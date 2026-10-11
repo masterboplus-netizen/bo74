@@ -1159,7 +1159,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "menu_estimates":
         try:
-            from modules.objects import get_all_objects
             objs = get_all_objects()
         except Exception as e:
             print("menu_estimates objs: " + str(e), flush=True)
