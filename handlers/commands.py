@@ -1663,6 +1663,46 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         return
 
+    if data.startswith("est_room_mat_"):
+        try:
+            room_id = int(data.replace("est_room_mat_", ""))
+        except ValueError:
+            return
+        from core.room_estimate import format_room_materials_only
+        text = format_room_materials_only(room_id).replace("*", "")
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + chr(10) + "..."
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К смете комнаты", callback_data="est_room_" + str(room_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_room_mat: " + str(e), flush=True)
+        return
+
+    if data.startswith("est_room_work_"):
+        try:
+            room_id = int(data.replace("est_room_work_", ""))
+        except ValueError:
+            return
+        from core.room_estimate import format_room_works_only
+        text = format_room_works_only(room_id).replace("*", "")
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + chr(10) + "..."
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К смете комнаты", callback_data="est_room_" + str(room_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_room_work: " + str(e), flush=True)
+        return
+
     if data.startswith("est_room_"):
         try:
             room_id = int(data.replace("est_room_", ""))
