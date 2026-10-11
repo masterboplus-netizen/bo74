@@ -31,3 +31,5 @@ backups/*.db
 project.zip
 part_*.txt
 .netrc
+*.db-shm
+*.db-wal
