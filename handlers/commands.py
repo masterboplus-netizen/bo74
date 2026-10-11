@@ -2152,6 +2152,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "",
             "💰 ВСЕГО:      " + str(round(total_all, 2)) + " ₽",
             "",
+            "📈 Средняя:    " + str(round(total_all / max(len(objs), 1), 2)) + " ₽",
+            "📊 Объектов:   " + str(len(objs)) + " (для медианы — отдельно)",
+            "",
             "📈 Средняя:    " + str(avg) + " ₽",
             "📊 Медиана:    " + str(med) + " ₽",
         ]
