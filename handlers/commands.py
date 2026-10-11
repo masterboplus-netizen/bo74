@@ -1587,6 +1587,47 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print("est_price_edit_work: " + str(e), flush=True)
         return
 
+    if data.startswith("est_sched_"):
+        try:
+            object_id = int(data.replace("est_sched_", ""))
+        except ValueError:
+            return
+        from core.report_schedule import format_schedules
+        text = format_schedules(object_id).replace("*", "")
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("➕ Создать (еженедельно)", callback_data="est_sched_add_" + str(object_id) + "_weekly")],
+                    [InlineKeyboardButton("➕ Создать (ежемесячно)", callback_data="est_sched_add_" + str(object_id) + "_monthly")],
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_sched: " + str(e), flush=True)
+        return
+
+    if data.startswith("est_sched_add_"):
+        rest = data.replace("est_sched_add_", "")
+        try:
+            object_id_s, freq = rest.rsplit("_", 1)
+            object_id = int(object_id_s)
+        except (ValueError, IndexError):
+            return
+        from core.report_schedule import create_schedule
+        sid = create_schedule(object_id=object_id, frequency=freq, hour=9, minute=0)
+        try:
+            await query.edit_message_text(
+                "✅ Расписание создано (" + freq + ", в 09:00)",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К расписаниям", callback_data="est_sched_" + str(object_id))],
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_sched_add: " + str(e), flush=True)
+        return
+
     if data.startswith("est_month_"):
         try:
             object_id = int(data.replace("est_month_", ""))
@@ -2114,6 +2155,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("🛒 Список закупки", callback_data="est_buy_" + str(object_id))],
                     [InlineKeyboardButton("🔍 Где материал", callback_data="est_where_" + str(object_id))],
                     [InlineKeyboardButton("📅 Отчёт за месяц", callback_data="est_month_" + str(object_id))],
+                    [InlineKeyboardButton("📅 Расписания", callback_data="est_sched_" + str(object_id))],
                     [InlineKeyboardButton("🏠 По комнатам", callback_data="est_object_rooms_" + str(object_id))],
                     [InlineKeyboardButton("🔨 Отдельные работы", callback_data="est_extra_" + str(object_id))],
                     [InlineKeyboardButton("📄 Экспорт (TXT)", callback_data="est_export_" + str(object_id))],
