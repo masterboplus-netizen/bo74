@@ -1056,7 +1056,6 @@ def objects_keyboard():
 
 def object_detail_keyboard(object_id):
     try:
-        from modules.objects import get_object
         _obj_data = get_object(object_id)
         _status = (_obj_data or {}).get("status") or "active"
     except Exception:
@@ -1143,7 +1142,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             return
         from core.object_estimate import calc_object_estimate
-        from modules.objects import get_object
         import csv
         est = calc_object_estimate(object_id)
         if not est:
@@ -1206,7 +1204,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         from core.economics import calc_margin
         from modules.finance import get_finance_summary
-        from modules.objects import get_object
         obj = get_object(object_id)
         name = obj.get("name") if obj else "?"
         f = get_finance_summary(object_id)
@@ -1260,7 +1257,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         from core.economics import calc_margin
         from modules.finance import get_finance_summary
-        from modules.objects import get_object
         obj = get_object(object_id)
         name = obj.get("name") if obj else "?"
         f = get_finance_summary(object_id)
@@ -1298,7 +1294,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         from core.economics import calc_margin
         from modules.finance import get_finance_summary
-        from modules.objects import get_object
         obj = get_object(object_id)
         name = obj.get("name") if obj else "?"
         f = get_finance_summary(object_id)
@@ -1385,7 +1380,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             return
         from core.export.pdf_export import export_object_estimate_pdf
-        from modules.objects import get_object
         path = export_object_estimate_pdf(object_id)
         if not path:
             try:
@@ -1416,7 +1410,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         import tempfile
         from core.object_estimate import format_object_estimate
-        from modules.objects import get_object
         text = format_object_estimate(object_id).replace("*", "")
         obj = get_object(object_id)
         name = obj.get("name") if obj else ("obj_" + str(object_id))
@@ -1634,7 +1627,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             return
         from core.export.pdf_export import export_object_monthly_report_pdf
-        from modules.objects import get_object
         path = export_object_monthly_report_pdf(object_id)
         if not path:
             try:
@@ -1750,7 +1742,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             w.writerow(["Материал", "Кол-во", "Ед."])
             for code, info in sorted(agg.items()):
                 w.writerow([info["name"], round(info["qty"], 2), info["unit"]])
-        from modules.objects import get_object
         obj = get_object(object_id)
         name = obj.get("name") if obj else ("obj_" + str(object_id))
         try:
@@ -2221,7 +2212,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "est_compare":
-        from modules.objects import get_all_objects
         objs = get_all_objects()[:10]
         kb_rows = []
         for o in objs:
@@ -2241,7 +2231,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith("est_cmp_a_"):
         a_id = int(data.replace("est_cmp_a_", ""))
-        from modules.objects import get_all_objects
         objs = get_all_objects()[:10]
         kb_rows = []
         for o in objs:
@@ -2265,7 +2254,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parts = data.replace("est_cmp_b_", "").split("_")
         a_id, b_id = int(parts[0]), int(parts[1])
         from core.object_estimate import calc_object_estimate
-        from modules.objects import get_object
         a = calc_object_estimate(a_id)
         b = calc_object_estimate(b_id)
         an = get_object(a_id)
@@ -2302,7 +2290,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "est_bykind":
-        from modules.objects import get_all_objects
         objs = get_all_objects()
         groups = {}
         for o in objs:
@@ -2331,7 +2318,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith("est_kind_"):
         kind = data.replace("est_kind_", "")
-        from modules.objects import get_all_objects
         objs = get_all_objects()
         matched = [o for o in objs if ((o.get("object_kind") or o.get("status") or "прочее").lower()[:30] == kind)]
         kb_rows = []
@@ -2432,7 +2418,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "est_export_all":
-        from modules.objects import get_all_objects
         from core.object_estimate import format_object_estimate
         objs = get_all_objects()
         all_text = []
@@ -2463,7 +2448,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "est_dash":
-        from modules.objects import get_all_objects
         from core.object_estimate import calc_object_estimate
         objs = get_all_objects()
         total_all = 0.0
@@ -2521,7 +2505,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "est_all":
-        from modules.objects import get_all_objects
         from core.object_estimate import calc_object_estimate
         objs = get_all_objects()
         rows_data = []
@@ -3775,7 +3758,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not q:
             await update.message.reply_text("❌ Пустой запрос")
             return
-        from modules.objects import get_all_objects
         objs = get_all_objects()
         matched = [o for o in objs if q in (o.get('name') or '').lower()]
         if not matched:
