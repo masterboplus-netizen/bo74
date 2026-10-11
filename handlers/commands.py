@@ -1587,6 +1587,54 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print("est_price_edit_work: " + str(e), flush=True)
         return
 
+    if data.startswith("est_buy_"):
+        try:
+            object_id = int(data.replace("est_buy_", ""))
+        except ValueError:
+            return
+        from core.room_estimate import calc_room_estimate
+        from core.db import fetchall
+        rooms = fetchall("SELECT id, name FROM rooms WHERE object_id = ?", (object_id,))
+        agg = {}
+        for r in rooms:
+            est = calc_room_estimate(r["id"])
+            if not est:
+                continue
+            for m in est.get("materials", []):
+                key = m["code"]
+                if key not in agg:
+                    agg[key] = {"name": m["name"], "unit": m["unit"], "qty": 0.0}
+                agg[key]["qty"] += m["qty"]
+        if not agg:
+            try:
+                await query.edit_message_text("🛒 Список закупки пуст.")
+            except Exception:
+                pass
+            return
+        import csv
+        path = "/tmp/buy_" + str(object_id) + ".csv"
+        with open(path, "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.writer(f, delimiter=";")
+            w.writerow(["Материал", "Кол-во", "Ед."])
+            for code, info in sorted(agg.items()):
+                w.writerow([info["name"], round(info["qty"], 2), info["unit"]])
+        from modules.objects import get_object
+        obj = get_object(object_id)
+        name = obj.get("name") if obj else ("obj_" + str(object_id))
+        try:
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=str(name) + "_buy.csv",
+                    caption="🛒 Список закупки материалов объекта «" + str(name) + "»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                    ])
+                )
+        except Exception as e:
+            print("est_buy: " + str(e), flush=True)
+        return
+
     if data.startswith("est_status_"):
         try:
             object_id = int(data.replace("est_status_", ""))
@@ -1900,6 +1948,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("🧱 Материалы (все)", callback_data="est_allmat_" + str(object_id))],
                     [InlineKeyboardButton("👷 Работы (все)", callback_data="est_allwork_" + str(object_id))],
                     [InlineKeyboardButton("📊 Статус сметы", callback_data="est_status_" + str(object_id))],
+                    [InlineKeyboardButton("🛒 Список закупки", callback_data="est_buy_" + str(object_id))],
                     [InlineKeyboardButton("🏠 По комнатам", callback_data="est_object_rooms_" + str(object_id))],
                     [InlineKeyboardButton("🔨 Отдельные работы", callback_data="est_extra_" + str(object_id))],
                     [InlineKeyboardButton("📄 Экспорт (TXT)", callback_data="est_export_" + str(object_id))],
