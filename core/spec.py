@@ -530,8 +530,15 @@ def get_niche_step(step_name, i=None, count=None):
     return result
 
 
-def get_wall_name(n):
-    return WALL_NAMES.get(n, "?")
+def get_wall_name(n, total=None):
+    """Имя стены. Для 1-4 берёт из WALL_NAMES, для 5+ генерирует 'пятая', 'шестая'..."""
+    if n in WALL_NAMES:
+        return WALL_NAMES[n]
+    if total and n > 4:
+        extra = {5: "пятая", 6: "шестая", 7: "седьмая",
+                 8: "восьмая", 9: "девятая", 10: "десятая"}
+        return extra.get(n, f"стена {n}")
+    return "?"
 
 
 def get_session_label(code):
