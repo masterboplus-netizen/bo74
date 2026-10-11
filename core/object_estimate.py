@@ -81,7 +81,15 @@ def calc_object_estimate(object_id):
     except Exception as e:
         print(f"⚠️ object plumb: {e}", flush=True)
 
-    total = round(total_rooms + elec_total + plumb_total, 2)
+    # Отдельные работы
+    extra_total = 0.0
+    try:
+        from core.extra_works import calc_extra_total
+        extra_total = calc_extra_total(object_id)
+    except Exception as e:
+        print(f"⚠️ object extra: {e}", flush=True)
+
+    total = round(total_rooms + elec_total + plumb_total + extra_total, 2)
 
     return {
         'object_id': object_id,
@@ -91,6 +99,7 @@ def calc_object_estimate(object_id):
         'total_rooms': round(total_rooms, 2),
         'elec': round(elec_total, 2),
         'plumbing': round(plumb_total, 2),
+        'extra_works': round(extra_total, 2),
         'total_materials': round(total_materials, 2),
         'total_works': round(total_works, 2),
         'total_hours': round(total_hours, 2),
@@ -122,6 +131,8 @@ def format_object_estimate(object_id):
     lines.append(f"👷 Работы:     {data['total_works']} ₽ ({data['total_hours']} ч)")
     lines.append(f"⚡ ЭОМ:        {data['elec']} ₽")
     lines.append(f"🔧 Сантехника: {data['plumbing']} ₽")
+    if data.get('extra_works'):
+        lines.append(f"🔨 Отдельные:  {data['extra_works']} ₽")
     lines.append("")
     lines.append(f"💰 ВСЕГО: {data['total']} ₽")
 
