@@ -1137,6 +1137,82 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    if data.startswith("est_kpi_"):
+        try:
+            object_id = int(data.replace("est_kpi_", ""))
+        except ValueError:
+            return
+        from core.economics import calc_margin
+        from modules.finance import get_finance_summary
+        from modules.objects import get_object
+        obj = get_object(object_id)
+        name = obj.get("name") if obj else "?"
+        f = get_finance_summary(object_id)
+        m = calc_margin(object_id, period="all")
+        income = f.get("income", 0)
+        expense = f.get("expense", 0)
+        balance = f.get("balance", 0)
+        lines = [
+            "📊 KPI объекта «" + str(name) + "»",
+            "",
+            "💰 Финансы:",
+            "   Доход:   " + str(income) + " ₽",
+            "   Расход:  " + str(expense) + " ₽",
+            "   Баланс:  " + str(balance) + " ₽",
+            "",
+            "📈 Маржа:",
+            "   Прибыль: " + str(m.get("profit", 0)) + " ₽",
+            "   Маржа:   " + str(m.get("margin_percent", 0)) + " %",
+        ]
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_kpi: " + str(e), flush=True)
+        return
+
+    if data.startswith("est_kpi_"):
+        try:
+            object_id = int(data.replace("est_kpi_", ""))
+        except ValueError:
+            return
+        from core.economics import calc_margin
+        from modules.finance import get_finance_summary
+        from modules.objects import get_object
+        obj = get_object(object_id)
+        name = obj.get("name") if obj else "?"
+        f = get_finance_summary(object_id)
+        m = calc_margin(object_id, period="all")
+        income = f.get("income", 0)
+        expense = f.get("expense", 0)
+        balance = f.get("balance", 0)
+        lines = [
+            "📊 KPI объекта «" + str(name) + "»",
+            "",
+            "💰 Финансы:",
+            "   Доход:   " + str(income) + " ₽",
+            "   Расход:  " + str(expense) + " ₽",
+            "   Баланс:  " + str(balance) + " ₽",
+            "",
+            "📈 Маржа:",
+            "   Прибыль: " + str(m.get("profit", 0)) + " ₽",
+            "   Маржа:   " + str(m.get("margin_percent", 0)) + " %",
+        ]
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_kpi: " + str(e), flush=True)
+        return
+
     if data.startswith("est_cmp_"):
         try:
             object_id = int(data.replace("est_cmp_", ""))
@@ -1468,6 +1544,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("📄 Экспорт (TXT)", callback_data="est_export_" + str(object_id))],
                     [InlineKeyboardButton("📄 PDF-смета", callback_data="est_pdf_" + str(object_id))],
                     [InlineKeyboardButton("💱 Сравнение цен", callback_data="est_cmp_" + str(object_id))],
+                    [InlineKeyboardButton("📊 KPI объекта", callback_data="est_kpi_" + str(object_id))],
+                    [InlineKeyboardButton("📊 KPI объекта", callback_data="est_kpi_" + str(object_id))],
                     [InlineKeyboardButton("✏️ Редактировать цены", callback_data="est_prices_" + str(object_id))],
                     [InlineKeyboardButton("⚡ Смета ЭОМ", callback_data="obj_elec_cost_" + str(object_id))],
                     [InlineKeyboardButton("🔧 Смета сантехники", callback_data="plumb_cost_obj_" + str(object_id))],
