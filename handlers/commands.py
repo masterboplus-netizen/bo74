@@ -2202,6 +2202,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb_rows.append([InlineKeyboardButton("📊 Дашборд смет", callback_data="est_dash")])
         kb_rows.append([InlineKeyboardButton("📤 Экспорт всех смет", callback_data="est_export_all")])
         kb_rows.append([InlineKeyboardButton("⚡ KPI мастеров", callback_data="est_kpi_masters")])
+        kb_rows.append([InlineKeyboardButton("🏗️ Здоровье объектов", callback_data="est_kpi_objs")])
+        kb_rows.append([InlineKeyboardButton("🚨 Красная зона", callback_data="est_kpi_red")])
         kb_rows.append([InlineKeyboardButton("📋 Все сметы (сводка)", callback_data="est_all")])
         kb_rows.append([InlineKeyboardButton("📥 Импорт прайса (CSV)", callback_data="est_import")])
         kb_rows.append([InlineKeyboardButton("🏷 По типу объекта", callback_data="est_bykind")])
@@ -2367,6 +2369,46 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
         except Exception as e:
             print("est_import: " + str(e), flush=True)
+        return
+
+    if data == "est_kpi_objs":
+        try:
+            from modules.kpi import get_object_health, format_object_health
+            objs = get_object_health()
+            text = format_object_health(objs).replace("*", "")
+        except Exception as e:
+            text = "KPI объектов недоступен: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + chr(10) + "..."
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
+                ])
+            )
+        except Exception as e:
+            print("est_kpi_objs: " + str(e), flush=True)
+        return
+
+    if data == "est_kpi_red":
+        try:
+            from modules.kpi import get_red_zone, format_red_zone
+            items = get_red_zone()
+            text = format_red_zone(items).replace("*", "")
+        except Exception as e:
+            text = "KPI красной зоны недоступен: " + str(e)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + chr(10) + "..."
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
+                ])
+            )
+        except Exception as e:
+            print("est_kpi_red: " + str(e), flush=True)
         return
 
     if data == "est_kpi_masters":
