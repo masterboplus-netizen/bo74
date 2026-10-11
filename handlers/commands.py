@@ -1137,6 +1137,56 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    if data.startswith("est_cmp_"):
+        try:
+            object_id = int(data.replace("est_cmp_", ""))
+        except ValueError:
+            return
+        from core.marketplaces import format_marketplace_sources
+        from core import spec
+        lines = ["💱 Сравнение цен", ""]
+        sources = format_marketplace_sources()
+        lines.append(sources)
+        lines.append("")
+        lines.append("Выбери материал для сравнения:")
+        kb_rows = []
+        for code in list(spec.MATERIALS_DEFAULT.keys())[:10]:
+            info = spec.MATERIALS_DEFAULT[code]
+            kb_rows.append([InlineKeyboardButton(
+                info[0][:35],
+                callback_data="est_cmp_mat_" + str(object_id) + "_" + code
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))])
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_cmp: " + str(e), flush=True)
+        return
+
+    if data.startswith("est_cmp_mat_"):
+        rest = data.replace("est_cmp_mat_", "")
+        try:
+            object_id, code = rest.split("_", 1)
+            object_id = int(object_id)
+        except (ValueError, IndexError):
+            return
+        from core.marketplaces import format_price_comparison
+        text = format_price_comparison(code).replace("*", "")
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К сравнению", callback_data="est_cmp_" + str(object_id))],
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_cmp_mat: " + str(e), flush=True)
+        return
+
     if data.startswith("est_pdf_"):
         try:
             object_id = int(data.replace("est_pdf_", ""))
@@ -1417,6 +1467,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("🔨 Отдельные работы", callback_data="est_extra_" + str(object_id))],
                     [InlineKeyboardButton("📄 Экспорт (TXT)", callback_data="est_export_" + str(object_id))],
                     [InlineKeyboardButton("📄 PDF-смета", callback_data="est_pdf_" + str(object_id))],
+                    [InlineKeyboardButton("💱 Сравнение цен", callback_data="est_cmp_" + str(object_id))],
                     [InlineKeyboardButton("✏️ Редактировать цены", callback_data="est_prices_" + str(object_id))],
                     [InlineKeyboardButton("⚡ Смета ЭОМ", callback_data="obj_elec_cost_" + str(object_id))],
                     [InlineKeyboardButton("🔧 Смета сантехники", callback_data="plumb_cost_obj_" + str(object_id))],
