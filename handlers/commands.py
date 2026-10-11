@@ -1134,6 +1134,60 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    if data.startswith("est_object_rooms_"):
+        try:
+            object_id = int(data.replace("est_object_rooms_", ""))
+        except ValueError:
+            return
+        from core.object_estimate import calc_object_estimate
+        data_est = calc_object_estimate(object_id)
+        if not data_est or not data_est.get('rooms'):
+            try:
+                await query.edit_message_text(
+                    "🏠 По комнатам\n\nПока комнат нет.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                    ])
+                )
+            except Exception:
+                pass
+            return
+        kb_rows = []
+        for r in data_est['rooms'][:20]:
+            kb_rows.append([InlineKeyboardButton(
+                "🏠 " + str(r['name'])[:30] + " — " + str(int(r['total'])) + " ₽",
+                callback_data="est_room_" + str(r['room_id'])
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))])
+        try:
+            await query.edit_message_text(
+                "🏠 Сметы по комнатам объекта «" + str(data_est['object_name']) + "»:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
+        return
+
+    if data.startswith("est_room_"):
+        try:
+            room_id = int(data.replace("est_room_", ""))
+        except ValueError:
+            return
+        from core.room_estimate import format_room_estimate
+        text = format_room_estimate(room_id)
+        if len(text) > 4000:
+            text = text[:3900] + "\n\n..."
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К комнатам", callback_data="est_object_rooms_" + str(object_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return
+
     if data.startswith("est_object_"):
         try:
             object_id = int(data.replace("est_object_", ""))
@@ -1148,6 +1202,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text,
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🏠 По комнатам", callback_data="est_object_rooms_" + str(object_id))],
                     [InlineKeyboardButton("⚡ Смета ЭОМ", callback_data="obj_elec_cost_" + str(object_id))],
                     [InlineKeyboardButton("🔧 Смета сантехники", callback_data="plumb_cost_obj_" + str(object_id))],
                     [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
