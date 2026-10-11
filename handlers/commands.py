@@ -1587,6 +1587,57 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print("est_price_edit_work: " + str(e), flush=True)
         return
 
+    if data.startswith("est_status_"):
+        try:
+            object_id = int(data.replace("est_status_", ""))
+        except ValueError:
+            return
+        from core.db import fetchone, commit
+        row = fetchone("SELECT key, value FROM system_settings WHERE key = ?", ("estimate_status_" + str(object_id),))
+        cur = (dict(row).get("value") if row else "draft") or "draft"
+        labels = {"draft": "📝 Черновик", "approved": "✅ Согласована", "invoiced": "📄 Выставлена", "paid": "💰 Оплачена"}
+        lines = ["📊 Статус сметы объекта", "", "Сейчас: " + labels.get(cur, cur)]
+        kb_rows = []
+        for st, lab in labels.items():
+            if st == cur:
+                continue
+            kb_rows.append([InlineKeyboardButton(lab, callback_data="est_setstatus_" + str(object_id) + "_" + st)])
+        kb_rows.append([InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))])
+        try:
+            await query.edit_message_text(chr(10).join(lines), reply_markup=InlineKeyboardMarkup(kb_rows))
+        except Exception as e:
+            print("est_status: " + str(e), flush=True)
+        return
+
+    if data.startswith("est_setstatus_"):
+        rest = data.replace("est_setstatus_", "")
+        try:
+            object_id_s, st = rest.rsplit("_", 1)
+            object_id = int(object_id_s)
+        except (ValueError, IndexError):
+            return
+        from core.db import fetchone, commit
+        key = "estimate_status_" + str(object_id)
+        existing = fetchone("SELECT key FROM system_settings WHERE key = ?", (key,))
+        if existing:
+            commit("UPDATE system_settings SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?", (st, key))
+        else:
+            commit("INSERT INTO system_settings (key, value) VALUES (?, ?)", (key, st))
+        try:
+            await query.answer("✅ Статус изменён")
+        except Exception:
+            pass
+        try:
+            await query.edit_message_text(
+                "✅ Статус сметы: " + st,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_setstatus: " + str(e), flush=True)
+        return
+
     if data.startswith("est_allwork_"):
         try:
             object_id = int(data.replace("est_allwork_", ""))
@@ -1848,6 +1899,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     [InlineKeyboardButton("🏢 По этажам", callback_data="est_object_floors_" + str(object_id))],
                     [InlineKeyboardButton("🧱 Материалы (все)", callback_data="est_allmat_" + str(object_id))],
                     [InlineKeyboardButton("👷 Работы (все)", callback_data="est_allwork_" + str(object_id))],
+                    [InlineKeyboardButton("📊 Статус сметы", callback_data="est_status_" + str(object_id))],
                     [InlineKeyboardButton("🏠 По комнатам", callback_data="est_object_rooms_" + str(object_id))],
                     [InlineKeyboardButton("🔨 Отдельные работы", callback_data="est_extra_" + str(object_id))],
                     [InlineKeyboardButton("📄 Экспорт (TXT)", callback_data="est_export_" + str(object_id))],
