@@ -325,7 +325,7 @@ def _clear_wall_draft(room_id):
 def _current_wall_pos(context):
     """Текущая позиция стены (строка) из state."""
     state = _get_wall_state(context)
-    return WALL_NAMES.get(state.get('step_num') or 1, '?')
+    return core_spec.get_wall_name(state.get('step_num') or 1, core_spec.get_total_walls())
 
 
 def _wall_flags_list(context):
@@ -649,7 +649,7 @@ async def _show_wall_step(query, context, room_id, step, phase='flags', use_phot
     state['step_name'] = phase
     _save_wall_draft(context, room_id)
 
-    pos = WALL_NAMES.get(step, '?')
+    pos = core_spec.get_wall_name(step, core_spec.get_total_walls())
     flags = state.get('flags') or DEFAULT_FLAGS
 
     spec_step = spec.get_wall_step('flags', n=step, pos=pos)
@@ -743,7 +743,7 @@ async def _show_wall_plane(query, context, room_id):
                 print(f"⚠️ plane (wavy) send: {e}", flush=True)
         return
 
-    spec_step = spec.get_wall_step('plane', n=step, pos=WALL_NAMES.get(step, '?'))
+    spec_step = spec.get_wall_step('plane', n=step, pos=core_spec.get_wall_name(step, core_spec.get_total_walls()))
     if spec_step:
         caption = f"{spec_step.get('title', '')}\n\n{spec_step.get('subtitle', '')}"
         if spec_step.get('hint'):
@@ -774,7 +774,7 @@ async def _show_wall_length(query, context, room_id, step):
     _save_wall_draft(context, room_id)
 
     context.user_data['waiting_for'] = 'wall_round_length'
-    pos = WALL_NAMES.get(step, '?')
+    pos = core_spec.get_wall_name(step, core_spec.get_total_walls())
 
     spec_step = spec.get_wall_step('length', n=step, pos=pos)
     if spec_step:
@@ -807,7 +807,7 @@ async def _show_wall_openings(query, context, room_id, step):
     _save_wall_draft(context, room_id)
 
     context.user_data['waiting_for'] = None
-    pos = WALL_NAMES.get(step, '?')
+    pos = core_spec.get_wall_name(step, core_spec.get_total_walls())
     length_cm = state.get('length') or 0
     openings = get_openings_by_wall(room_id, pos)
 
@@ -842,7 +842,7 @@ async def _show_wall_angle(query, context, room_id, step, use_photo=False):
     context.user_data['waiting_for'] = None
     length_cm = state.get('length') or 0
 
-    spec_step = spec.get_wall_step('angle', n=step, pos=WALL_NAMES.get(step, '?'), length=length_cm)
+    spec_step = spec.get_wall_step('angle', n=step, pos=core_spec.get_wall_name(step, core_spec.get_total_walls()), length=length_cm)
     if spec_step:
         caption = f"{spec_step.get('title', '')}\n\n{spec_step.get('subtitle', '')}"
         if spec_step.get('hint'):
@@ -1085,7 +1085,7 @@ async def _show_niche_top_depth(query, context, room_id):
 async def _wall_save_and_next(query, context, room_id, step):
     """Сохраняет текущую стену, чистит черновик, идёт к следующей."""
     state = _get_wall_state(context)
-    pos = WALL_NAMES.get(step, '?')
+    pos = core_spec.get_wall_name(step, core_spec.get_total_walls())
     length = state.get('length') or 0
     angle = state.get('angle_value') or 90
     angle_method = state.get('angle_method') or '90'
@@ -1704,7 +1704,7 @@ async def _wall_round_open_start(query, context, room_id, opening_type):
     """Старт добавления проёма при обходе."""
     state = _get_wall_state(context)
     step = state.get('step_num') or 1
-    pos = WALL_NAMES.get(step, 'напротив')
+    pos = core_spec.get_wall_name(step, core_spec.get_total_walls())
     context.user_data['wall_round_opening_type'] = opening_type
     context.user_data['wall_round_opening_wall'] = pos
 
@@ -1782,7 +1782,7 @@ async def _handle_wall_round_input(update, context, step):
         state['plane_bottom'] = val
         context.user_data['waiting_for'] = 'wall_round_plane_middle'
         step_num = state.get('step_num') or 1
-        pos = WALL_NAMES.get(step_num, '?')
+        pos = core_spec.get_wall_name(step_num, core_spec.get_total_walls())
         caption = (
             f"🧱 *Стена {step_num} — {pos}*\n\n"
             f"📏 *Замер в 3 точках*\n"
@@ -1801,7 +1801,7 @@ async def _handle_wall_round_input(update, context, step):
         state['plane_middle'] = val
         context.user_data['waiting_for'] = 'wall_round_plane_top'
         step_num = state.get('step_num') or 1
-        pos = WALL_NAMES.get(step_num, '?')
+        pos = core_spec.get_wall_name(step_num, core_spec.get_total_walls())
         bottom = state.get('plane_bottom') or 0
         caption = (
             f"🧱 *Стена {step_num} — {pos}*\n\n"
@@ -1825,7 +1825,7 @@ async def _handle_wall_round_input(update, context, step):
         _save_wall_draft(context, room_id)
         context.user_data['waiting_for'] = 'wall_round_length'
         step_num = state.get('step_num') or 1
-        pos = WALL_NAMES.get(step_num, '?')
+        pos = core_spec.get_wall_name(step_num, core_spec.get_total_walls())
         bottom = state.get('plane_bottom') or 0
         middle = state.get('plane_middle') or 0
         # Отклонение — насколько «кривая» стена
@@ -2041,7 +2041,7 @@ async def _after_angle_from_update(update, context, room_id):
 async def _wall_save_and_next_from_update(update, context, room_id, step):
     """Сохранение стены (версия для update.message)."""
     state = _get_wall_state(context)
-    pos = WALL_NAMES.get(step, '?')
+    pos = core_spec.get_wall_name(step, core_spec.get_total_walls())
     length = state.get('length') or 0
     angle = state.get('angle_value') or 90
     angle_method = state.get('angle_method') or '90'
@@ -2124,7 +2124,7 @@ async def _show_wall_openings_from_update(update, context, room_id):
     """Экран проёмов через update.message."""
     state = _get_wall_state(context)
     step = state.get('step_num') or 1
-    pos = WALL_NAMES.get(step, '?')
+    pos = core_spec.get_wall_name(step, core_spec.get_total_walls())
     length_cm = state.get('length') or 0
     openings = get_openings_by_wall(room_id, pos)
     text = f"🧱 *Стена {step} — {pos}*\n📏 Длина: *{length_cm} см*\n\n"
@@ -2200,7 +2200,7 @@ async def _show_wall_length_from_update(update, context, room_id, step):
     _save_wall_draft(context, room_id)
     context.user_data['waiting_for'] = 'wall_round_length'
 
-    pos = WALL_NAMES.get(step, '?')
+    pos = core_spec.get_wall_name(step, core_spec.get_total_walls())
     spec_step = spec.get_wall_step('length', n=step, pos=pos)
     if spec_step:
         caption = f"{spec_step.get('title', '')}\n\n{spec_step.get('subtitle', '')}"
