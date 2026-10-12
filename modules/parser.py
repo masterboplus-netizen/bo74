@@ -62,26 +62,35 @@ def parse_message(text: str) -> dict:
     # === ДОБАВИТЬ ЗАДАЧУ ===
     add_words = ['добавь', 'добавить', 'задача', 'новая задача', 'надо', 'нужно']
     if any(w in text_lower for w in add_words):
-        if found:
-            if len(found) > 1:
+            if found:
+                if len(found) > 1:
+                    return {
+                        'action': 'choose_object',
+                        'objects': found,
+                        'original_text': text,
+                        'intent': 'add_task'
+                    }
+                obj = found[0]
+                title = text_lower
+                for w in add_words:
+                    title = title.replace(w, '')
+                for w in ['в', 'на', 'для']:
+                    title = title.replace(w, '', 1)
+                title = title.replace(obj['name'].lower(), '')
+                simple = obj['name'].lower().split('(')[0].strip()
+                if simple:
+                    title = title.replace(simple, '')
+                title = title.strip() or text
+                return {'action': 'add_task', 'object': obj, 'title': title}
+            else:
+                # Объект не найден — предлагаем выбрать из всех или без объекта
                 return {
                     'action': 'choose_object',
-                    'objects': found,
+                    'objects': get_all_objects(),
                     'original_text': text,
-                    'intent': 'add_task'
+                    'intent': 'add_task',
+                    'allow_no_object': True
                 }
-            obj = found[0]
-            title = text_lower
-            for w in add_words:
-                title = title.replace(w, '')
-            for w in ['в', 'на', 'для']:
-                title = title.replace(w, '', 1)
-            title = title.replace(obj['name'].lower(), '')
-        simple = obj['name'].lower().split('(')[0].strip()
-        if simple:
-            title = title.replace(simple, '')
-        title = title.strip() or text
-        return {'action': 'add_task', 'object': obj, 'title': title}
     # === ДОХОД ===
     income_words = ['получил', 'заработал', 'оплатили', 'перевели', 'пришло', 'доход', 'приход', 'заплатили']
     has_income_word = any(w in text_lower for w in income_words)
