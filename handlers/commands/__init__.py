@@ -17,5 +17,10 @@ from handlers.commands.finance import (
     finance_command, add_expense_command, finance_keyboard,
     format_finance_summary, show_finance_summary, format_money
 )
+from handlers.commands.objects import (
+    add_object_command, objects_command, objects_keyboard, object_detail_keyboard,
+    choose_object_for_task_keyboard, choose_object_for_expense_keyboard,
+    choose_object_for_expense_keyboard_amount
+)
 import sys as _sys
 _sys.modules[__name__].__dict__.update(_legacy.__dict__)
