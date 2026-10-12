@@ -22,5 +22,12 @@ from handlers.commands.objects import (
     choose_object_for_task_keyboard, choose_object_for_expense_keyboard,
     choose_object_for_expense_keyboard_amount
 )
+from handlers.commands.tasks import (
+    add_task_command, format_tasks_block, tasks_command, done_command,
+    handle_skip_photo, tasks_keyboard, tasks_keyboard_by_object,
+    task_card_keyboard, task_date_keyboard, task_priority_keyboard,
+    show_task_card, handle_task_action, build_calendar,
+    auto_confirm_date, handle_confirm_date
+)
 import sys as _sys
 _sys.modules[__name__].__dict__.update(_legacy.__dict__)
