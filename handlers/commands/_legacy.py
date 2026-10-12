@@ -12,6 +12,7 @@ from modules.personal import add_personal_expense
 from config import ADMIN_IDS
 from handlers.onboarding import ask_role, role_menu_keyboard
 from handlers.commands.start import _help_text, help_command
+from handlers.commands.personal import personal_command, format_personal_summary, personal_keyboard
 
 
 _est_extra_pending = None
@@ -240,15 +241,6 @@ async def add_expense_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     add_expense(obj['id'], amount, category)
     await update.message.reply_text(f"✅ Расход {amount} ₽ ({category}) добавлен в «{obj['name']}»")
 
-
-async def personal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /personal — личные расходы за месяц."""
-    await update.message.reply_text(
-        format_personal_summary('month'),
-        reply_markup=personal_keyboard()
-    )
-
-# === CRM: КЛИЕНТЫ И СДЕЛКИ ===
 
 async def clients_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Список клиентов."""
@@ -2681,31 +2673,47 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "personal_today":
-        await query.edit_message_text(
-            format_personal_summary('today'),
-            reply_markup=personal_keyboard()
-        )
+        try:
+            await query.edit_message_text(
+                format_personal_summary('today'),
+                reply_markup=personal_keyboard()
+            )
+        except Exception as _e:
+            if "Message is not modified" not in str(_e):
+                print(f"personal_today: {_e}", flush=True)
         return
 
     if data == "personal_week":
-        await query.edit_message_text(
-            format_personal_summary('week'),
-            reply_markup=personal_keyboard()
-        )
+        try:
+            await query.edit_message_text(
+                format_personal_summary('week'),
+                reply_markup=personal_keyboard()
+            )
+        except Exception as _e:
+            if "Message is not modified" not in str(_e):
+                print(f"personal_week: {_e}", flush=True)
         return
 
     if data == "personal_month":
-        await query.edit_message_text(
-            format_personal_summary('month'),
-            reply_markup=personal_keyboard()
-        )
+        try:
+            await query.edit_message_text(
+                format_personal_summary('month'),
+                reply_markup=personal_keyboard()
+            )
+        except Exception as _e:
+            if "Message is not modified" not in str(_e):
+                print(f"personal_month: {_e}", flush=True)
         return
 
     if data == "personal_all":
-        await query.edit_message_text(
-            format_personal_summary('all'),
-            reply_markup=personal_keyboard()
-        )
+        try:
+            await query.edit_message_text(
+                format_personal_summary('all'),
+                reply_markup=personal_keyboard()
+            )
+        except Exception as _e:
+            if "Message is not modified" not in str(_e):
+                print(f"personal_all: {_e}", flush=True)
         return
 
     if data == "personal_add":
@@ -5732,40 +5740,6 @@ def choose_object_for_expense_keyboard():
 
 
 # === ЛИЧНЫЕ РАСХОДЫ ===
-
-def format_personal_summary(period='month'):
-    """Формирует текст сводки личных расходов"""
-    from modules.personal import get_personal_summary
-    data = get_personal_summary(period)
-    period_names = {
-        'today': 'сегодня',
-        'week': 'за 7 дней',
-        'month': 'за месяц',
-        'all': 'за всё время'
-    }
-    text = f"💸 ЛИЧНЫЕ РАСХОДЫ ({period_names.get(period, period)})\n\n"
-    text += f"Потрачено: {data['total']} ₽\n"
-    text += f"Записей: {data['count']}\n\n"
-    if data['by_category']:
-        text += "📊 По категориям:\n"
-        for item in data['by_category'][:10]:
-            text += f"• {item['category']}: {item['amount']} ₽\n"
-    else:
-        text += "Пока нет записей за этот период."
-    return text
-
-
-def personal_keyboard():
-    """Клавиатура для экрана личных расходов"""
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("➕ Добавить расход", callback_data="personal_add")],
-        [InlineKeyboardButton("📅 За сегодня", callback_data="personal_today"),
-         InlineKeyboardButton("📅 За неделю", callback_data="personal_week")],
-        [InlineKeyboardButton("📅 За месяц", callback_data="personal_month"),
-         InlineKeyboardButton("📅 За всё время", callback_data="personal_all")],
-        [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")],
-    ])
-
 
 def choose_object_for_expense_keyboard_amount(amount):
     """Клавиатура выбора объекта для расхода с суммой (только объект, без категории)"""
