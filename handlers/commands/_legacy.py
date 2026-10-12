@@ -45,25 +45,11 @@ from handlers.commands.choose_expense import (
     expense_category_keyboard, handle_category
 )
 from handlers.commands.document import handle_document
+from handlers.commands.keyboards import main_menu_keyboard
 
 
 _est_extra_pending = None
 
-
-def main_menu_keyboard():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🏗️ Объекты", callback_data="menu_objects")],
-        [InlineKeyboardButton("📋 Задачи", callback_data="menu_tasks")],
-        [InlineKeyboardButton("💰 Финансы", callback_data="menu_finance")],
-        [InlineKeyboardButton("💵 Сметы", callback_data="menu_estimates")],
-        [InlineKeyboardButton("📊 Отчёты", callback_data="menu_reports")],
-        [InlineKeyboardButton("📊 KPI", callback_data="menu_kpi")],
-        [InlineKeyboardButton("💸 Личные", callback_data="menu_personal")],
-        [InlineKeyboardButton("👥 CRM", callback_data="menu_crm")],
-        [InlineKeyboardButton("🌐 Дашборд", callback_data="menu_dashboard")],
-        [InlineKeyboardButton("➕ Добавить", callback_data="menu_add")],
-        [InlineKeyboardButton("⚙️ Помощь", callback_data="menu_help")],
-    ])
 
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
