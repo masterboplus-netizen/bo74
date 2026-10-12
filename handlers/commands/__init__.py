@@ -6,5 +6,9 @@ from handlers.commands.receipt import (
     handle_recognize_receipt, handle_receipt_save, handle_receipt_object,
     handle_receipt_category, handle_receipt_show
 )
+from handlers.commands.photos import (
+    photos_command, _show_photos_batch, handle_photo_filter, handle_photo_page,
+    handle_photo, handle_photo_stage, handle_photo_task, handle_photo_save
+)
 import sys as _sys
 _sys.modules[__name__].__dict__.update(_legacy.__dict__)
