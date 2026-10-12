@@ -2475,7 +2475,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # CRM: ждём бюджет сделки — ВАЖНО до парсера
     if context.user_data.get('waiting_for') == 'crm_deal_budget':
         try:
-            from modules.parser import parse_amount
             budget = parse_amount(text) or 0
         except Exception:
             budget = 0
