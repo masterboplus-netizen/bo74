@@ -33,5 +33,6 @@ from handlers.commands.choose_expense import (
     handle_choose_object, make_choose_keyboard,
     expense_category_keyboard, handle_category
 )
+from handlers.commands.document import handle_document
 import sys as _sys
 _sys.modules[__name__].__dict__.update(_legacy.__dict__)
