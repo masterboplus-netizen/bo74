@@ -389,7 +389,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except (ValueError, IndexError):
             return
         from core.economics import calc_margin
-        from modules.finance import get_finance_summary
         obj = get_object(object_id)
         name = obj.get("name") if obj else "?"
         f = get_finance_summary(object_id)
@@ -442,7 +441,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             return
         from core.economics import calc_margin
-        from modules.finance import get_finance_summary
         obj = get_object(object_id)
         name = obj.get("name") if obj else "?"
         f = get_finance_summary(object_id)
@@ -479,7 +477,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except ValueError:
             return
         from core.economics import calc_margin
-        from modules.finance import get_finance_summary
         obj = get_object(object_id)
         name = obj.get("name") if obj else "?"
         f = get_finance_summary(object_id)
@@ -3132,7 +3129,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if action == 'income':
-        from modules.finance import add_income
         obj = result['object']
         amount = result['amount']
         category = result.get('category', 'доход')
@@ -3405,7 +3401,6 @@ async def handle_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # === ФИНАНСЫ: СВОДКА + КНОПКИ ===
 
-from modules.finance import get_all_finance_summary
 
 
 def tasks_keyboard():
