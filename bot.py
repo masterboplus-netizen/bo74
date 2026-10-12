@@ -20,7 +20,7 @@ from handlers.commands import (
     clients_command, deals_command, handle_crm_menu
 )
 from handlers.digest_cmd import digest_now_command, survey_now_command
-from interfaces.telegram.rooms import handle_rooms_callback
+from interfaces.telegram.rooms import handle_rooms_callback, handle_reports_callback
 from modules.digest import send_morning_digest_with_log, send_evening_survey_with_log, catch_up_digests
 from modules.backup_db import send_daily_backup, backup_now_command
 from datetime import time
@@ -239,6 +239,10 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_receipt_object, pattern="^receipt_obj_"))
     app.add_handler(CallbackQueryHandler(handle_receipt_category, pattern="^receipt_cat_"))
     app.add_handler(CallbackQueryHandler(handle_receipt_show, pattern="^receipt_show_"))
+    app.add_handler(CallbackQueryHandler(
+        lambda u, c: handle_reports_callback(u.callback_query, c, u.callback_query.data),
+        pattern="^room_estimate_"
+    ))
     app.add_handler(CallbackQueryHandler(handle_rooms_callback, pattern="^(rooms_list_|room_|wall_|openings_|opening_|comm_|obj_|floor_|group_|cables_|panels_|panel_|plumb_|works_|prices_)"))
     app.add_handler(CallbackQueryHandler(handle_callback, pattern="^(menu_crm|crm_|unknown_|deal_|client_|activity_)"))
     app.add_handler(CallbackQueryHandler(handle_callback, pattern="^(?!room_|rooms_|wall_|openings_|opening_|cat_|choose_obj_|task_|taskdone_|taskdel_|setdate_|taskdate_|taskprio_|setprio_|taskrename_|taskassign_|setassigned_|setrange_|setduration_|cal_|dur_days_|floor_|group_|obj_|comm_).*"))
