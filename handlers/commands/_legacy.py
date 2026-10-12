@@ -66,6 +66,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     data = query.data
 
+    if data == "tasks_byobj":
+        from handlers.commands.tasks import tasks_keyboard_by_object
+        try:
+            await query.edit_message_text(
+                "🏗️ Задачи по объектам:\n\nВыбери объект:",
+                reply_markup=tasks_keyboard_by_object()
+            )
+        except Exception as _e:
+            if "Message is not modified" not in str(_e):
+                print(f"tasks_byobj: {_e}", flush=True)
+        return
+
     if data == "tasks_archive_list":
         try:
             from modules import tasks as _t_arch
@@ -1577,8 +1589,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _arch_n = 0
         if _arch_n:
             buttons.append([InlineKeyboardButton("🗑 Архив (" + str(_arch_n) + ")", callback_data="tasks_archive_list")])
+        buttons.append([InlineKeyboardButton("🏗️ По объектам", callback_data="tasks_byobj")])
         buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
-
         await query.edit_message_text(
             text + "\n\nВыбери задачу:",
             reply_markup=InlineKeyboardMarkup(buttons)

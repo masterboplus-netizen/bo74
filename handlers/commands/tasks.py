@@ -114,6 +114,7 @@ async def tasks_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"{i}. {r['title'][:40]}",
             callback_data=f"task_{r['id']}"
         )])
+    buttons.append([InlineKeyboardButton("🏗️ По объектам", callback_data="tasks_byobj")])
     buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
 
     await update.message.reply_text(
