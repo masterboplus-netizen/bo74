@@ -209,7 +209,7 @@ def tasks_keyboard_by_object():
             f"🏗️ {r['name']} ({r['cnt']})",
             callback_data=f"objtasks_{r['id']}"
         )])
-    buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
+    buttons.append([InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")])
     return InlineKeyboardMarkup(buttons)
 
 
