@@ -10,5 +10,8 @@ from handlers.commands.photos import (
     photos_command, _show_photos_batch, handle_photo_filter, handle_photo_page,
     handle_photo, handle_photo_stage, handle_photo_task, handle_photo_save
 )
+from handlers.commands.crm import (
+    clients_command, deals_command, handle_crm_menu, _finalize_new_client
+)
 import sys as _sys
 _sys.modules[__name__].__dict__.update(_legacy.__dict__)
