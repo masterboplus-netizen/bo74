@@ -13,5 +13,9 @@ from handlers.commands.photos import (
 from handlers.commands.crm import (
     clients_command, deals_command, handle_crm_menu, _finalize_new_client
 )
+from handlers.commands.finance import (
+    finance_command, add_expense_command, finance_keyboard,
+    format_finance_summary, show_finance_summary, format_money
+)
 import sys as _sys
 _sys.modules[__name__].__dict__.update(_legacy.__dict__)
