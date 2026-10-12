@@ -29,5 +29,9 @@ from handlers.commands.tasks import (
     show_task_card, handle_task_action, build_calendar,
     auto_confirm_date, handle_confirm_date
 )
+from handlers.commands.choose_expense import (
+    handle_choose_object, make_choose_keyboard,
+    expense_category_keyboard, handle_category
+)
 import sys as _sys
 _sys.modules[__name__].__dict__.update(_legacy.__dict__)
