@@ -3010,7 +3010,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         amount = result.get('amount')
         category = result.get('category', 'прочее')
         if intent == 'add_task':
-            context.user_data['pending_task_title'] = result.get('original_text', '')
+            context.user_data['pending_task_title'] = result.get('title') or result.get('original_text', '')
         await update.message.reply_text(
             f"🤔 Нашёл несколько объектов. Какой именно?",
             reply_markup=make_choose_keyboard(objects, intent, amount, category)

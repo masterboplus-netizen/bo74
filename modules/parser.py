@@ -61,6 +61,13 @@ def parse_message(text: str) -> dict:
     found = find_all_objects_in_text(text)
     # === ДОБАВИТЬ ЗАДАЧУ ===
     add_words = ['добавь', 'добавить', 'задача', 'новая задача', 'надо', 'нужно']
+    # Вычисляем title заранее (для обеих ветвей — с объектом и без)
+    title = text_lower
+    for w in add_words:
+        title = title.replace(w, '')
+    for w in ['в', 'на', 'для']:
+        title = title.replace(w, '', 1)
+    title = title.strip() or text
     if any(w in text_lower for w in add_words):
             if found:
                 if len(found) > 1:
@@ -68,14 +75,10 @@ def parse_message(text: str) -> dict:
                         'action': 'choose_object',
                         'objects': found,
                         'original_text': text,
+                        'title': title,
                         'intent': 'add_task'
                     }
                 obj = found[0]
-                title = text_lower
-                for w in add_words:
-                    title = title.replace(w, '')
-                for w in ['в', 'на', 'для']:
-                    title = title.replace(w, '', 1)
                 title = title.replace(obj['name'].lower(), '')
                 simple = obj['name'].lower().split('(')[0].strip()
                 if simple:
@@ -88,6 +91,7 @@ def parse_message(text: str) -> dict:
                     'action': 'choose_object',
                     'objects': get_all_objects(),
                     'original_text': text,
+                    'title': title,
                     'intent': 'add_task',
                     'allow_no_object': True
                 }
