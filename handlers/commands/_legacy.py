@@ -69,101 +69,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await _try_estimates_cb(data, query, context):
         return
     
-    if data.startswith("est_pdf_"):
-        try:
-            object_id = int(data.replace("est_pdf_", ""))
-        except ValueError:
-            return
-        from core.export.pdf_export import export_object_estimate_pdf
-        path = export_object_estimate_pdf(object_id)
-        if not path:
-            try:
-                await query.edit_message_text("❌ PDF не создан")
-            except Exception:
-                pass
-            return
-        obj = get_object(object_id)
-        name = obj.get("name") if obj else ("obj_" + str(object_id))
-        try:
-            with open(path, "rb") as f:
-                await query.message.chat.send_document(
-                    document=f,
-                    filename=str(name) + "_smeta.pdf",
-                    caption="📄 PDF-смета объекта «" + str(name) + "»",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
-                    ])
-                )
-        except Exception as e:
-            print("est_pdf: " + str(e), flush=True)
+    # === Домен: estimates (est_pdf_*, est_export_*, est_extra_* — сессия 16) ===
+    from handlers.commands.callbacks.estimates import try_handle as _try_estimates_cb
+    if await _try_estimates_cb(data, query, context):
         return
-
-    if data.startswith("est_export_"):
-        try:
-            object_id = int(data.replace("est_export_", ""))
-        except ValueError:
-            return
-        import tempfile
-        from core.object_estimate import format_object_estimate
-        text = format_object_estimate(object_id).replace("*", "")
-        obj = get_object(object_id)
-        name = obj.get("name") if obj else ("obj_" + str(object_id))
-        path = "/tmp/estimate_" + str(object_id) + ".txt"
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(text)
-        try:
-            with open(path, "rb") as f:
-                await query.message.chat.send_document(
-                    document=f,
-                    filename=str(name) + "_smeta.txt",
-                    caption="📄 Смета объекта «" + str(name) + "»",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
-                    ])
-                )
-        except Exception as e:
-            print("est_export: " + str(e), flush=True)
-        return
-
-    if data.startswith("est_extra_"):
-        try:
-            object_id = int(data.replace("est_extra_", ""))
-        except ValueError:
-            return
-        from core.extra_works import format_extra_works
-        text = format_extra_works(object_id).replace("*", "")
-        if len(text) > 4000:
-            text = text[:3900] + chr(10) + chr(10) + "..."
-        try:
-            await query.edit_message_text(
-                text,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("➕ Добавить работу", callback_data="est_extra_add_" + str(object_id))],
-                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
-                ])
-            )
-        except Exception as e:
-            print("est_extra: " + str(e), flush=True)
-        return
-
-    if data.startswith("est_extra_add_"):
-        try:
-            object_id = int(data.replace("est_extra_add_", ""))
-        except ValueError:
-            return
-        try:
-            await query.edit_message_text(
-                "🔨 Новая отдельная работа\n\nНапиши название работы:",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ Отмена", callback_data="est_extra_" + str(object_id))],
-                ])
-            )
-            from handlers import commands as _cmd
-            _cmd._est_extra_pending = {"object_id": object_id, "step": "title"}
-        except Exception as e:
-            print("est_extra_add: " + str(e), flush=True)
-        return
-
+    
     if data.startswith("est_prices_"):
         try:
             object_id = int(data.replace("est_prices_", ""))

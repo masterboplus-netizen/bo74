@@ -416,4 +416,105 @@ async def try_handle(data: str, query, context) -> bool:
             print("est_kpi: " + str(e), flush=True)
         return True
 
+# === est_pdf_* : PDF-смета объекта ===
+    if data.startswith("est_pdf_"):
+        try:
+            object_id = int(data.replace("est_pdf_", ""))
+        except ValueError:
+            return True
+        from core.export.pdf_export import export_object_estimate_pdf
+        path = export_object_estimate_pdf(object_id)
+        if not path:
+            try:
+                await query.edit_message_text("❌ PDF не создан")
+            except Exception:
+                pass
+            return True
+        obj = get_object(object_id)
+        name = obj.get("name") if obj else ("obj_" + str(object_id))
+        try:
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=str(name) + "_smeta.pdf",
+                    caption="📄 PDF-смета объекта «" + str(name) + "»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                    ])
+                )
+        except Exception as e:
+            print("est_pdf: " + str(e), flush=True)
+        return True
+
+    # === est_export_* : TXT-смета объекта ===
+    if data.startswith("est_export_"):
+        try:
+            object_id = int(data.replace("est_export_", ""))
+        except ValueError:
+            return True
+        from core.object_estimate import format_object_estimate
+        text = format_object_estimate(object_id).replace("*", "")
+        obj = get_object(object_id)
+        name = obj.get("name") if obj else ("obj_" + str(object_id))
+        path = "/tmp/estimate_" + str(object_id) + ".txt"
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        try:
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=str(name) + "_smeta.txt",
+                    caption="📄 Смета объекта «" + str(name) + "»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                    ])
+                )
+        except Exception as e:
+            print("est_export: " + str(e), flush=True)
+        return True
+
+    # === est_extra_* : отдельные работы ===
+    if data.startswith("est_extra_"):
+        # Не путать с est_extra_add_
+        if data.startswith("est_extra_add_"):
+            return False  # обрабатывается ниже
+        try:
+            object_id = int(data.replace("est_extra_", ""))
+        except ValueError:
+            return True
+        from core.extra_works import format_extra_works
+        text = format_extra_works(object_id).replace("*", "")
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + chr(10) + "..."
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("➕ Добавить работу", callback_data="est_extra_add_" + str(object_id))],
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_extra: " + str(e), flush=True)
+        return True
+
+    # === est_extra_add_* : добавить работу ===
+    if data.startswith("est_extra_add_"):
+        try:
+            object_id = int(data.replace("est_extra_add_", ""))
+        except ValueError:
+            return True
+        try:
+            await query.edit_message_text(
+                "🔨 Новая отдельная работа\n\nНапиши название работы:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data="est_extra_" + str(object_id))],
+                ])
+            )
+            from handlers import commands as _cmd
+            _cmd._est_extra_pending = {"object_id": object_id, "step": "title"}
+        except Exception as e:
+            print("est_extra_add: " + str(e), flush=True)
+        return True
+
     return False
