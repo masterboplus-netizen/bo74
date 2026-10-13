@@ -733,4 +733,117 @@ async def try_handle(data: str, query, context) -> bool:
             print("est_where_mat: " + str(e), flush=True)
         return True
 
+# === est_buy_* : CSV список закупки материалов ===
+    if data.startswith("est_buy_"):
+        try:
+            object_id = int(data.replace("est_buy_", ""))
+        except ValueError:
+            return True
+        from core.room_estimate import calc_room_estimate
+        from core.db import fetchall
+        rooms = fetchall("SELECT id, name FROM rooms WHERE object_id = ?", (object_id,))
+        agg = {}
+        for r in rooms:
+            est = calc_room_estimate(r["id"])
+            if not est:
+                continue
+            for m in est.get("materials", []):
+                key = m["code"]
+                if key not in agg:
+                    agg[key] = {"name": m["name"], "unit": m["unit"], "qty": 0.0}
+                agg[key]["qty"] += m["qty"]
+        if not agg:
+            try:
+                await query.edit_message_text("🛒 Список закупки пуст.")
+            except Exception:
+                pass
+            return True
+        import csv
+        path = "/tmp/buy_" + str(object_id) + ".csv"
+        with open(path, "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.writer(f, delimiter=";")
+            w.writerow(["Материал", "Кол-во", "Ед."])
+            for code, info in sorted(agg.items()):
+                w.writerow([info["name"], round(info["qty"], 2), info["unit"]])
+        obj = get_object(object_id)
+        name = obj.get("name") if obj else ("obj_" + str(object_id))
+        try:
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=str(name) + "_buy.csv",
+                    caption="🛒 Список закупки материалов объекта «" + str(name) + "»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                    ])
+                )
+        except Exception as e:
+            print("est_buy: " + str(e), flush=True)
+        return True
+
+    # === est_status_* : статус сметы ===
+    if data.startswith("est_status_"):
+        try:
+            object_id = int(data.replace("est_status_", ""))
+        except ValueError:
+            return True
+        from core.db import fetchone
+        row = fetchone("SELECT key, value FROM system_settings WHERE key = ?", ("estimate_status_" + str(object_id),))
+        cur = (dict(row).get("value") if row else "draft") or "draft"
+        labels = {
+            "draft": "📝 Черновик",
+            "approved": "✅ Согласована",
+            "invoiced": "📄 Выставлена",
+            "paid": "💰 Оплачена",
+        }
+        lines = [
+            "📊 Статус сметы объекта",
+            "",
+            "Сейчас: " + labels.get(cur, cur),
+        ]
+        kb_rows = []
+        for st, lab in labels.items():
+            if st == cur:
+                continue
+            kb_rows.append([InlineKeyboardButton(lab, callback_data="est_setstatus_" + str(object_id) + "_" + st)])
+        kb_rows.append([InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))])
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_status: " + str(e), flush=True)
+        return True
+
+    # === est_setstatus_* : установить статус ===
+    if data.startswith("est_setstatus_"):
+        rest = data.replace("est_setstatus_", "")
+        try:
+            object_id_s, st = rest.rsplit("_", 1)
+            object_id = int(object_id_s)
+        except (ValueError, IndexError):
+            return True
+        from core.db import fetchone, commit
+        key = "estimate_status_" + str(object_id)
+        existing = fetchone("SELECT key FROM system_settings WHERE key = ?", (key,))
+        if existing:
+            commit("UPDATE system_settings SET value = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?", (st, key))
+        else:
+            commit("INSERT INTO system_settings (key, value) VALUES (?, ?)", (key, st))
+        try:
+            await query.answer("✅ Статус изменён")
+        except Exception:
+            pass
+        try:
+            await query.edit_message_text(
+                "✅ Статус сметы: " + st,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_setstatus: " + str(e), flush=True)
+        return True
+
     return False
