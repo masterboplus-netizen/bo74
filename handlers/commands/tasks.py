@@ -201,6 +201,10 @@ def tasks_keyboard_by_object():
         ORDER BY o.name
     """)
     rows = c.fetchall()
+    # Считаем задачи без объекта
+    c.execute("SELECT COUNT(*) FROM tasks WHERE object_id IS NULL AND status IN ('open', 'in_progress')")
+    _no_obj_row = c.fetchone()
+    _no_obj_cnt = _no_obj_row[0] if _no_obj_row else 0
     conn.close()
 
     buttons = []
@@ -209,6 +213,10 @@ def tasks_keyboard_by_object():
             f"🏗️ {r['name']} ({r['cnt']})",
             callback_data=f"objtasks_{r['id']}"
         )])
+    # Кнопка 'Без объекта' если есть такие задачи
+    if _no_obj_cnt > 0:
+        buttons.append([InlineKeyboardButton(f"🚫 Без объекта ({_no_obj_cnt})", callback_data="objtasks_none")])
+    
     buttons.append([InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")])
     return InlineKeyboardMarkup(buttons)
 
