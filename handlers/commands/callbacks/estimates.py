@@ -942,4 +942,79 @@ async def try_handle(data: str, query, context) -> bool:
             print("est_allmat: " + str(e), flush=True)
         return True
 
+# === est_object_floors_* : сметы по этажам ===
+    if data.startswith("est_object_floors_"):
+        try:
+            object_id = int(data.replace("est_object_floors_", ""))
+        except ValueError:
+            return True
+        from core.db import fetchall
+        floors = fetchall("SELECT id, floor_name, floor_number FROM floors WHERE object_id = ?", (object_id,))
+        if not floors:
+            try:
+                await query.edit_message_text(
+                    "🏢 Этажей нет.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                    ])
+                )
+            except Exception:
+                pass
+            return True
+        from core.floor_estimate import calc_floor_estimate
+        kb_rows = []
+        for fl in floors[:20]:
+            fid = fl["id"]
+            est = calc_floor_estimate(fid)
+            total = est["total"] if est else 0
+            name = fl.get("floor_name") or f"Этаж {fl.get('floor_number')}"
+            kb_rows.append([InlineKeyboardButton(
+                "🏢 " + str(name)[:25] + " — " + str(int(total)) + " ₽",
+                callback_data="floor_estimate_" + str(fid)
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))])
+        try:
+            await query.edit_message_text(
+                "🏢 Сметы по этажам:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_object_floors: " + str(e), flush=True)
+        return True
+
+    # === est_object_rooms_* : сметы по комнатам объекта ===
+    if data.startswith("est_object_rooms_"):
+        try:
+            object_id = int(data.replace("est_object_rooms_", ""))
+        except ValueError:
+            return True
+        from core.object_estimate import calc_object_estimate
+        data_est = calc_object_estimate(object_id)
+        if not data_est or not data_est.get('rooms'):
+            try:
+                await query.edit_message_text(
+                    "🏠 По комнатам\n\nПока комнат нет.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                    ])
+                )
+            except Exception:
+                pass
+            return True
+        kb_rows = []
+        for r in data_est['rooms'][:20]:
+            kb_rows.append([InlineKeyboardButton(
+                "🏠 " + str(r['name'])[:30] + " — " + str(int(r['total'])) + " ₽",
+                callback_data="est_room_" + str(r['room_id'])
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))])
+        try:
+            await query.edit_message_text(
+                "🏠 Сметы по комнатам объекта «" + str(data_est['object_name']) + "»:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
+        return True
+
     return False
