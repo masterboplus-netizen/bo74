@@ -247,6 +247,13 @@ db.py — обёртка SQLite. get_connection(), fetchone(), fetchall(), commi
 
 ## 11. ЧАСТЫЕ ОПЕРАЦИИ — ШПАРГАЛКА
 
+**Структура файла (отступы цифрой):**
+```
+python3 tools/show_structure.py <file> <from> <to>
+```
+Вывод: `NNNN | indent | code`. Используется ВМЕСТО `cat -A`. Создан в сессии 16.
+
+
 Перезапуск:
 pkill -9 -f 'python bot.py' ; sleep 2 ; ./start_all.sh ; sleep 5 ; tail -5 bot_start.log
 
