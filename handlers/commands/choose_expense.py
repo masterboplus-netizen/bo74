@@ -4,6 +4,7 @@ from telegram.ext import ContextTypes
 
 from modules.objects import get_object, get_all_objects, get_object_by_name
 from modules.finance import add_expense
+from modules.tasks import create_task
 
 
 async def handle_choose_object(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -13,11 +14,29 @@ async def handle_choose_object(update: Update, context: ContextTypes.DEFAULT_TYP
     data = query.data
 
     # Формат: choose_obj_<intent>_<object_id>_<amount>_<category>
+    # Для intent='add_task' формат: choose_obj_add_task_<object_id>_<amount>_<category>
     parts = data.split('_')
-    intent = parts[2]
-    object_id = int(parts[3])
-    amount = int(parts[4]) if len(parts) > 4 and parts[4] != 'none' else None
-    category = parts[5] if len(parts) > 5 else 'прочее'
+    # Определяем intent (учитываем 'add_task' с подчёркиванием)
+    if len(parts) > 3 and parts[2] == 'add' and parts[3] == 'task':
+        intent = 'add_task'
+        shift = 2
+    else:
+        intent = parts[2]
+        shift = 1
+    object_id_str = parts[2 + shift]
+    amount_str = parts[3 + shift] if len(parts) > 3 + shift else 'none'
+    category = parts[4 + shift] if len(parts) > 4 + shift else 'прочее'
+    
+    # Задача без объекта
+    if intent == 'add_task' and object_id_str == 'none':
+        title = context.user_data.get('pending_task_title', '')
+        tid = create_task(None, title)
+        context.user_data.pop('pending_task_title', None)
+        await query.edit_message_text(f"✅ Задача «{title}» добавлена без объекта. ID: {tid}")
+        return
+    
+    object_id = int(object_id_str)
+    amount = int(amount_str) if amount_str != 'none' else None
 
     obj = get_object(object_id)
     if not obj:
@@ -67,6 +86,10 @@ def make_choose_keyboard(objects, intent, amount=None, category=None):
         else:
             cb = f"choose_obj_{intent}_{o['id']}_none_none"
         buttons.append([InlineKeyboardButton(f"🏗️ {o['name']}", callback_data=cb)])
+    # Кнопка 'Без объекта' — только для задач
+    if intent == 'add_task':
+        buttons.append([InlineKeyboardButton("🚫 Без объекта", callback_data="choose_obj_add_task_none_none_none")])
+    
     return InlineKeyboardMarkup(buttons)
 
 
