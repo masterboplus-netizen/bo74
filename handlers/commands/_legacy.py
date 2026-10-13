@@ -1258,66 +1258,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print("est_import: " + str(e), flush=True)
         return
 
-    if data == "est_kpi_objs":
-        try:
-            from modules.kpi import get_object_health, format_object_health
-            objs = get_object_health()
-            text = format_object_health(objs).replace("*", "")
-        except Exception as e:
-            text = "KPI объектов недоступен: " + str(e)
-        if len(text) > 4000:
-            text = text[:3900] + chr(10) + chr(10) + "..."
-        try:
-            await query.edit_message_text(
-                text,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
-                ])
-            )
-        except Exception as e:
-            print("est_kpi_objs: " + str(e), flush=True)
+    # === Домен: estimates (est_kpi_* вынесено в callbacks/estimates.py, сессия 16) ===
+    from handlers.commands.callbacks.estimates import try_handle as _try_estimates_cb
+    if await _try_estimates_cb(data, query, context):
         return
-
-    if data == "est_kpi_red":
-        try:
-            from modules.kpi import get_red_zone, format_red_zone
-            items = get_red_zone()
-            text = format_red_zone(items).replace("*", "")
-        except Exception as e:
-            text = "KPI красной зоны недоступен: " + str(e)
-        if len(text) > 4000:
-            text = text[:3900] + chr(10) + chr(10) + "..."
-        try:
-            await query.edit_message_text(
-                text,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
-                ])
-            )
-        except Exception as e:
-            print("est_kpi_red: " + str(e), flush=True)
-        return
-
-    if data == "est_kpi_masters":
-        try:
-            from modules.kpi import get_master_kpi, format_master_kpi
-            masters = get_master_kpi(30)
-            text = format_master_kpi(masters, 30).replace("*", "")
-        except Exception as e:
-            text = "KPI недоступен: " + str(e)
-        if len(text) > 4000:
-            text = text[:3900] + chr(10) + chr(10) + "..."
-        try:
-            await query.edit_message_text(
-                text,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
-                ])
-            )
-        except Exception as e:
-            print("est_kpi_masters: " + str(e), flush=True)
-        return
-
+    
     if data == "est_export_all":
         from core.object_estimate import format_object_estimate
         objs = get_all_objects()

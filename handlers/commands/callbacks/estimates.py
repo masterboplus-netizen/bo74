@@ -1,7 +1,4 @@
-"""Callbacks домена «Сметы» — вынесено из _legacy.py (сессия 16).
-
-try_handle() возвращает True, если callback обработан.
-"""
+"""Callbacks домена «Сметы» — вынесено из _legacy.py (сессия 16)."""
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 
@@ -12,6 +9,10 @@ from modules.finance import get_finance_summary
 
 async def try_handle(data: str, query, context) -> bool:
     """Обработка callback'ов домена Сметы."""
+
+    # Быстрый выход для не-estimates
+    if not data.startswith("est_"):
+        return False
 
     # === est_month_* : PDF отчёт по объекту за месяц ===
     if data.startswith("est_month_"):
@@ -41,6 +42,57 @@ async def try_handle(data: str, query, context) -> bool:
                 )
         except Exception as e:
             print("est_month: " + str(e), flush=True)
+        return True
+
+    # === est_kpi_objs : здоровье объектов ===
+    if data == "est_kpi_objs":
+        from modules.kpi import get_object_health, format_object_health
+        try:
+            text = format_object_health(get_object_health()).replace("*", "")
+            if len(text) > 4000:
+                text = text[:3900] + "\n\n..."
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Назад", callback_data="menu_kpi")],
+                ])
+            )
+        except Exception as e:
+            print("est_kpi_objs: " + str(e), flush=True)
+        return True
+
+    # === est_kpi_red : красная зона ===
+    if data == "est_kpi_red":
+        from modules.kpi import get_red_zone, format_red_zone
+        try:
+            text = format_red_zone(get_red_zone()).replace("*", "")
+            if len(text) > 4000:
+                text = text[:3900] + "\n\n..."
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Назад", callback_data="menu_kpi")],
+                ])
+            )
+        except Exception as e:
+            print("est_kpi_red: " + str(e), flush=True)
+        return True
+
+    # === est_kpi_masters : KPI мастеров ===
+    if data == "est_kpi_masters":
+        from modules.kpi import get_master_kpi, format_master_kpi
+        try:
+            text = format_master_kpi(get_master_kpi()).replace("*", "")
+            if len(text) > 4000:
+                text = text[:3900] + "\n\n..."
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Назад", callback_data="menu_kpi")],
+                ])
+            )
+        except Exception as e:
+            print("est_kpi_masters: " + str(e), flush=True)
         return True
 
     return False
