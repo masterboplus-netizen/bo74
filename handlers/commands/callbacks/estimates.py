@@ -208,4 +208,58 @@ async def try_handle(data: str, query, context) -> bool:
             print("est_search: " + str(e), flush=True)
         return True
 
+# === est_room_* : смета комнаты ===
+    if data.startswith("est_room_"):
+        try:
+            room_id = int(data.replace("est_room_", ""))
+        except ValueError:
+            return True
+        from core.room_estimate import format_room_estimate
+        text = format_room_estimate(room_id)
+        if len(text) > 4000:
+            text = text[:3900] + "\n\n..."
+        # Извлекаем object_id из room? Пока простая ссылка через callback
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🧱 Только материалы", callback_data="est_room_mat_" + str(room_id))],
+                    [InlineKeyboardButton("👷 Только работы", callback_data="est_room_work_" + str(room_id))],
+                    [InlineKeyboardButton("📅 Период", callback_data="est_room_per_" + str(room_id))],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    # === est_object_* : меню сметы объекта ===
+    if data.startswith("est_object_"):
+        try:
+            object_id = int(data.replace("est_object_", ""))
+        except ValueError:
+            return True
+        obj = get_object(object_id)
+        name = obj.get("name") if obj else "?"
+        kb = [
+            [InlineKeyboardButton("📄 Экспорт (TXT)", callback_data="est_export_" + str(object_id))],
+            [InlineKeyboardButton("📄 PDF-смета", callback_data="est_pdf_" + str(object_id))],
+            [InlineKeyboardButton("📊 CSV-смета", callback_data="est_csv_" + str(object_id))],
+            [InlineKeyboardButton("💱 Сравнение цен", callback_data="est_cmp_" + str(object_id))],
+            [InlineKeyboardButton("📊 KPI объекта", callback_data="est_kpi_" + str(object_id))],
+            [InlineKeyboardButton("⚙️ Правила ЭОМ", callback_data="est_rules_" + str(object_id))],
+            [InlineKeyboardButton("📈 По периодам", callback_data="est_period_" + str(object_id))],
+            [InlineKeyboardButton("✏️ Редактировать цены", callback_data="est_prices_" + str(object_id))],
+            [InlineKeyboardButton("💡 Смета ЭОМ", callback_data="obj_elec_cost_" + str(object_id))],
+            [InlineKeyboardButton("🔧 Смета сантехники", callback_data="plumb_cost_obj_" + str(object_id))],
+            [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
+        ]
+        try:
+            await query.edit_message_text(
+                "📋 Смета объекта «" + str(name) + "»",
+                reply_markup=InlineKeyboardMarkup(kb)
+            )
+        except Exception as e:
+            print("est_object: " + str(e), flush=True)
+        return True
+
     return False
