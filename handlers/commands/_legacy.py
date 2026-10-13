@@ -2029,6 +2029,23 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # Задачи без объекта
+    if data == "objtasks_none":
+        conn = get_connection()
+        c = conn.cursor()
+        c.execute("SELECT id, title, status FROM tasks WHERE object_id IS NULL AND status IN ('open', 'in_progress') ORDER BY id")
+        _no_obj_tasks = c.fetchall()
+        conn.close()
+        if not _no_obj_tasks:
+            await query.edit_message_text("📋 Задач без объекта нет", reply_markup=tasks_keyboard_by_object())
+            return
+        text = "🚫 **Задачи без объекта:**\n\n"
+        for t in _no_obj_tasks[:20]:
+            icon = "✅" if t['status'] == 'done' else "🔵"
+            text += f"{icon} {t['id']}. {t['title']}\n"
+        await query.edit_message_text(text, reply_markup=tasks_keyboard_by_object())
+        return
+    
     if data.startswith("objtasks_"):
         object_id = int(data.split("_")[1])
         tasks = get_tasks_by_object(object_id)
