@@ -95,4 +95,117 @@ async def try_handle(data: str, query, context) -> bool:
             print("est_kpi_masters: " + str(e), flush=True)
         return True
 
+# === est_export_all : PDF-смета всех объектов ===
+    if data == "est_export_all":
+        from core.object_estimate import calc_object_estimate
+        from core.export.pdf_export import export_object_estimate_pdf
+        obj = get_object(1)  # fallback
+        # Собираем общую смету всех объектов
+        try:
+            objs = get_all_objects()
+        except Exception:
+            objs = []
+        if not objs:
+            try:
+                await query.edit_message_text("❌ Нет объектов")
+            except Exception:
+                pass
+            return True
+        first_id = objs[0]["id"]
+        path = export_object_estimate_pdf(first_id)
+        if not path:
+            try:
+                await query.edit_message_text("❌ PDF не создан")
+            except Exception:
+                pass
+            return True
+        try:
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename="all_estimates.pdf",
+                    caption="📄 Общая смета"
+                )
+        except Exception as e:
+            print("est_export_all: " + str(e), flush=True)
+        return True
+
+    # === est_dash : дашборд ===
+    if data == "est_dash":
+        from core.object_estimate import calc_object_estimate
+        try:
+            objs = get_all_objects()
+        except Exception:
+            objs = []
+        totals = []
+        for o in objs[:30]:
+            est = calc_object_estimate(o["id"])
+            if est:
+                totals.append(est.get("total", 0))
+        total_all = sum(totals)
+        avg = round(total_all / max(len(totals), 1), 2)
+        med = round(sorted(totals)[len(totals) // 2], 2) if totals else 0
+        lines = [
+            "📊 Дашборд смет",
+            "",
+            "💼 Всего смет:   " + str(len(totals)),
+            "💰 Сумма:        " + str(round(total_all, 2)) + " ₽",
+            "📈 Средняя:      " + str(avg) + " ₽",
+            "📊 Медиана:      " + str(med) + " ₽",
+        ]
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
+                ])
+            )
+        except Exception as e:
+            print("est_dash: " + str(e), flush=True)
+        return True
+
+    # === est_all : все сметы ===
+    if data == "est_all":
+        from core.object_estimate import calc_object_estimate
+        try:
+            objs = get_all_objects()
+        except Exception:
+            objs = []
+        lines = ["📋 Сметы всех объектов", ""]
+        total = 0
+        for o in objs[:20]:
+            est = calc_object_estimate(o["id"])
+            if est:
+                t = est.get("total", 0)
+                total += t
+                lines.append("🏗️ " + str(o["name"])[:30] + ": " + str(round(t, 2)) + " ₽")
+        lines.append("")
+        lines.append("💰 ВСЕГО: " + str(round(total, 2)) + " ₽")
+        text = chr(10).join(lines)
+        if len(text) > 4000:
+            text = text[:3900] + "\n\n..."
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
+                ])
+            )
+        except Exception as e:
+            print("est_all: " + str(e), flush=True)
+        return True
+
+    # === est_search : поиск по сметам ===
+    if data == "est_search":
+        try:
+            await query.edit_message_text(
+                "🔎 Поиск по сметам\n\nНапиши название объекта:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
+                ])
+            )
+        except Exception as e:
+            print("est_search: " + str(e), flush=True)
+        return True
+
     return False
