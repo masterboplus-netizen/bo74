@@ -1,57 +1,70 @@
-# STATE — сессия 16 (13.10.2026)
+# STATE — сессия 16 (13.10.2026, финал)
 
-## Итог сессии
-
-Сессия 16 — низкоуровневые фиксы + мелкая фича. 3 коммита, всё на GitHub.
+## Итог: 7 коммитов, всё на GitHub
 
 ### Сделано
 
-1. **`parse_date` → `utils.py`** (коммит `ddf37d1`)
-   - Вынесено 156 строк из `_legacy.py` (строки 3086–3241) в новый `handlers/commands/utils.py`
+1. **`parse_date` → `utils.py`** (`ddf37d1`)
+   - 156 строк из `_legacy.py` (3086-3241)
    - `_legacy.py`: 3242 → 3084 строк
-   - Убран локальный импорт `from handlers.commands import parse_date`
-   - Реэкспорт через `__init__.py`
 
-2. **`UnboundLocalError obj` в `parser.py`** (коммит `c9ec6eb`)
-   - Строки 80–84 в `parse_message` были вне `if found:` → падали при пустом `found`
-   - Добавлен `else:` с `get_all_objects()` + `allow_no_object: True`
-   - Тест: «Задача позвонить завтра клиенту» → экран выбора вместо падения
+2. **`UnboundLocalError obj` в `parser.py`** (`c9ec6eb`)
+   - Строки 80-84 вне `if found:` → падали при пустом found
+   - Добавлен `else:` с `get_all_objects()`
 
-3. **`tools/show_structure.py`** (коммит `c9ec6eb`)
-   - Инструмент: `python3 tools/show_structure.py <file> <from> <to>`
-   - Вывод: `NNNN | indent | code` — цифра отступа вместо `cat -A`
-   - **Правило:** перед любым патчем с отступами — только `show_structure.py`
+3. **`tools/show_structure.py`** (`c9ec6eb`)
+   - Структура файла с отступами цифрой
+   - **Правило:** перед патчем — только этот инструмент, не `cat -A`
 
-4. **Кнопка «Без объекта» + фикс `add_task` callback** (коммит `f7fd1d5`)
-   - `make_choose_keyboard`: добавлена кнопка «🚫 Без объекта» для intent='add_task'
-   - `handle_choose_object`: переписан парсинг callback (учитывает `add_task` с `_`)
-   - Early return: если `object_id_str == 'none'` → `create_task(None, title)`
-   - Тест 1: задача без объекта — ID 41 ✅
-   - Тест 2: задача с объектом — ID 42 ✅
+4. **Кнопка «Без объекта» + фикс add_task callback** (`f7fd1d5`)
+   - `make_choose_keyboard`: кнопка «🚫 Без объекта»
+   - `handle_choose_object`: переписан парсинг (add_task с `_`)
 
-### Техдолг / известные баги (не критичные)
+5. **`docs/STATE.md`, `docs/HANDOFF.md`** (`22cc944`, `da05e3e`)
 
-- **Дубль «Задача» в title** — `add_words` не вырезается из `original_text` при создании задачи. Причина: возможно регистр или `original_text=text` (оригинал).
-- **Опечатка «позонить»** — при создании задачи с объектом. Возможно `.replace(obj['name'].lower())` или `.strip()`.
+6. **Clean title в parser.py** (`a838670`)
+   - `title` вычисляется выше — общий для обеих веток
+   - `'title': title` в choose_object — без дубля «Задача»
 
-Оба — косметика, задача создаётся, ID выводится.
+7. **Handler `objtasks_none`** (`fbbd5c5`)
+   - Показывает задачи без объекта по кнопке «🚫 Без объекта»
 
-## Что дальше (приоритет)
+### Работает в боте
 
-1. **Косметика title в `parser.py`** (30 мин, низкий риск) — либо сначала, либо пропустить.
-2. **`handle_callback` (2055 строк) → `callbacks/`** по доменам: estimates, objects, tasks, crm, prices, panels, plumbing, misc. (3–4 часа, средний риск).
-3. **`handle_text` (975) → `text/`** по доменам: crm_flows, activity_flows, task_flows, estimate_flows, personal_flows, room_flows.
-4. **`rooms.py` (7638) → `rooms/`** по доменам: walls, openings, comms, elec, plumbing, reports, core. (5–6 часов, высокий риск).
-5. **Универсальный приёмник файлов** — `handle_document` (CSV/XLSX → типы: прайс, счёт, накладная, чек).
-6. **`modules/` → `core/`** — 176 импортов через шим.
+- ✅ Задача без объекта (ID 41, 43)
+- ✅ Кнопка «🚫 Без объекта (2)» в «🏗️ По объектам»
+- ✅ Задачи без объекта в `/tasks`
+- ✅ Title очищен
+
+### ⚠️ Известные проблемы (техдолг)
+
+**1. Бардак с клавиатурами задач** — 4-5 разных функций:
+- `tasks.py:66` — `tasks_command()` (/tasks)
+- `tasks.py:186` — `tasks_keyboard()` (мёртвая, никто не зовёт)
+- `tasks.py:210` — `tasks_keyboard_by_object()`
+- `_legacy.py:1576` — «Мои задачи / По объектам / По исполнителям»
+- **Плюс:** `tasks.py:117-125` — мы вставили кнопку в tasks_command, но `/tasks` её не показывает (непонятно почему)
+
+**Нужно:** рефакторинг UI задач — единая функция, единая клавиатура, кнопка «Без объекта» — везде.
+
+**2. Косметика title:**
+- Опечатка «позонить» вместо «позвонить» при задаче с объектом — баг в парсере (какой-то `.replace` режет).
+
+## Что дальше (приоритет следующей сессии)
+
+1. **Рефакторинг UI задач** — единая клавиатура (2-3 часа, средний риск).
+2. **`handle_callback` (2055 строк) → `callbacks/`** по доменам.
+3. **`handle_text` (975) → `text/`** по доменам.
+4. **`rooms.py` (7638) → `rooms/`** по доменам.
+5. **Опечатка «позонить»** в parser.py.
+6. **`modules/` → `core/`** через шим.
+
+## Инструменты
+
+- `python3 tools/show_structure.py <file> <from> <to>` — структура с отступами цифрой.
+- `pkill -9 -f 'python bot.py' ; sleep 2 ; ./start_all.sh ; sleep 5 ; tail -5 bot_start.log` — перезапуск.
 
 ## Состояние
 
 - Бот работает, `bot_start.log` чист.
-- Все коммиты на GitHub: `ddf37d1`, `f7fd1d5`, `c9ec6eb`.
-- `bo72.db` — не коммитится (в .gitignore или вручную).
-
-## Инструменты
-
-- `tools/show_structure.py <file> <from> <to>` — структура файла с отступами цифрой.
-- `pkill -9 -f 'python bot.py' ; sleep 2 ; ./start_all.sh ; sleep 5 ; tail -5 bot_start.log` — перезапуск.
+- Все коммиты на GitHub (HEAD: `fbbd5c5`).
