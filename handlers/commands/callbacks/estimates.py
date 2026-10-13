@@ -10,8 +10,8 @@ from modules.finance import get_finance_summary
 async def try_handle(data: str, query, context) -> bool:
     """Обработка callback'ов домена Сметы."""
 
-    # Быстрый выход для не-estimates
-    if not data.startswith("est_"):
+    # Быстрый выход для не-estimates (кроме menu_estimates)
+    if not data.startswith("est_") and data != "menu_estimates":
         return False
 
     # === est_month_* : PDF отчёт по объекту за месяц ===
@@ -1136,6 +1136,31 @@ async def try_handle(data: str, query, context) -> bool:
             )
         except Exception as e:
             print("est_room_work: " + str(e), flush=True)
+        return True
+
+# === menu_estimates : главное меню смет ===
+    if data == "menu_estimates":
+        kb_rows = [
+            [InlineKeyboardButton("📊 Дашборд смет", callback_data="est_dash")],
+            [InlineKeyboardButton("📦 Экспорт всех смет", callback_data="est_export_all")],
+            [InlineKeyboardButton("⚡ KPI мастеров", callback_data="est_kpi_masters")],
+            [InlineKeyboardButton("🏗️ Здоровье объектов", callback_data="est_kpi_objs")],
+            [InlineKeyboardButton("🚨 Красная зона", callback_data="est_kpi_red")],
+            [InlineKeyboardButton("📋 Все сметы (сводка)", callback_data="est_all")],
+            [InlineKeyboardButton("📦 Импорт прайса (CSV)", callback_data="est_import")],
+            [InlineKeyboardButton("📐 По типу объекта", callback_data="est_bykind")],
+            [InlineKeyboardButton("⚖️ Сравнить объекты", callback_data="est_compare")],
+            [InlineKeyboardButton("🔎 Найти", callback_data="est_search")],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")],
+        ]
+        try:
+            await query.edit_message_text(
+                "💰 *Сметы*\n\nВыбери объект:",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception:
+            pass
         return True
 
     return False

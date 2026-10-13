@@ -104,50 +104,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await _try_estimates_cb(data, query, context):
         return
     
-    if data == "menu_estimates":
-        try:
-            objs = get_all_objects()
-        except Exception as e:
-            print("menu_estimates objs: " + str(e), flush=True)
-            objs = []
-        if not objs:
-            try:
-                await query.edit_message_text(
-                    "💰 Сметы\n\nПока нет объектов.",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")],
-                    ])
-                )
-            except Exception:
-                pass
-            return
-        kb_rows = []
-        for o in objs[:20]:
-            kb_rows.append([InlineKeyboardButton(
-                "🏗️ " + str(o.get('name') or '?')[:40],
-                callback_data="est_object_" + str(o['id'])
-            )])
-        kb_rows.append([InlineKeyboardButton("📊 Дашборд смет", callback_data="est_dash")])
-        kb_rows.append([InlineKeyboardButton("📤 Экспорт всех смет", callback_data="est_export_all")])
-        kb_rows.append([InlineKeyboardButton("⚡ KPI мастеров", callback_data="est_kpi_masters")])
-        kb_rows.append([InlineKeyboardButton("🏗️ Здоровье объектов", callback_data="est_kpi_objs")])
-        kb_rows.append([InlineKeyboardButton("🚨 Красная зона", callback_data="est_kpi_red")])
-        kb_rows.append([InlineKeyboardButton("📋 Все сметы (сводка)", callback_data="est_all")])
-        kb_rows.append([InlineKeyboardButton("📥 Импорт прайса (CSV)", callback_data="est_import")])
-        kb_rows.append([InlineKeyboardButton("🏷 По типу объекта", callback_data="est_bykind")])
-        kb_rows.append([InlineKeyboardButton("⚖️ Сравнить объекты", callback_data="est_compare")])
-        kb_rows.append([InlineKeyboardButton("🔍 Найти", callback_data="est_search")])
-        kb_rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")])
-        try:
-            await query.edit_message_text(
-                "💰 *Сметы*\n\nВыбери объект:",
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=InlineKeyboardMarkup(kb_rows)
-            )
-        except Exception:
-            pass
+    # === Домен: estimates (menu_estimates — сессия 16) ===
+    from handlers.commands.callbacks.estimates import try_handle as _try_estimates_cb
+    if await _try_estimates_cb(data, query, context):
         return
-
+    
     if data == "est_compare":
         objs = get_all_objects()[:10]
         kb_rows = []
