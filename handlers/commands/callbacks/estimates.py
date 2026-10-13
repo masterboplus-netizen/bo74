@@ -517,4 +517,123 @@ async def try_handle(data: str, query, context) -> bool:
             print("est_extra_add: " + str(e), flush=True)
         return True
 
+# === est_prices_* : меню редактирования цен ===
+    if data.startswith("est_prices_"):
+        # Не путать с est_prices_mat_ / est_prices_work_
+        if data.startswith("est_prices_mat_") or data.startswith("est_prices_work_"):
+            return False
+        try:
+            object_id = int(data.replace("est_prices_", ""))
+        except ValueError:
+            return True
+        kb_rows = [
+            [InlineKeyboardButton("🧱 Материалы", callback_data="est_prices_mat_" + str(object_id))],
+            [InlineKeyboardButton("👷 Работы", callback_data="est_prices_work_" + str(object_id))],
+            [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                "✏️ Редактирование цен\n\nЧто править?",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_prices: " + str(e), flush=True)
+        return True
+
+    # === est_prices_mat_* : список материалов ===
+    if data.startswith("est_prices_mat_"):
+        try:
+            object_id = int(data.replace("est_prices_mat_", ""))
+        except ValueError:
+            return True
+        from core import spec
+        kb_rows = []
+        for code, info in list(spec.MATERIALS_DEFAULT.items())[:20]:
+            kb_rows.append([InlineKeyboardButton(
+                info[0][:30] + " — " + str(info[4]) + " ₽/" + str(info[2]),
+                callback_data="est_price_edit_mat_" + str(object_id) + "_" + code
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="est_prices_" + str(object_id))])
+        try:
+            await query.edit_message_text(
+                "🧱 Материалы (цены):",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_prices_mat: " + str(e), flush=True)
+        return True
+
+    # === est_prices_work_* : список работ ===
+    if data.startswith("est_prices_work_"):
+        try:
+            object_id = int(data.replace("est_prices_work_", ""))
+        except ValueError:
+            return True
+        from core import spec
+        kb_rows = []
+        for code, info in list(spec.WORK_TYPES_DEFAULT.items())[:20]:
+            kb_rows.append([InlineKeyboardButton(
+                info[0][:30] + " — " + str(info[2]) + " ₽/" + str(info[1]),
+                callback_data="est_price_edit_work_" + str(object_id) + "_" + code
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="est_prices_" + str(object_id))])
+        try:
+            await query.edit_message_text(
+                "👷 Работы (цены):",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_prices_work: " + str(e), flush=True)
+        return True
+
+    # === est_price_edit_mat_* : редактирование цены материала ===
+    if data.startswith("est_price_edit_mat_"):
+        rest = data.replace("est_price_edit_mat_", "")
+        try:
+            object_id, code = rest.split("_", 1)
+            object_id = int(object_id)
+        except (ValueError, IndexError):
+            return True
+        from core import spec
+        info = spec.MATERIALS_DEFAULT.get(code)
+        if not info:
+            return True
+        try:
+            await query.edit_message_text(
+                "🧱 " + info[0] + "\n\nТекущая цена: " + str(info[4]) + " ₽/" + str(info[2]) + "\n",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data="est_prices_mat_" + str(object_id))],
+                ])
+            )
+            from handlers import commands as _cmd
+            _cmd._est_pending_price = {"object_id": object_id, "type": "mat", "code": code}
+        except Exception as e:
+            print("est_price_edit_mat: " + str(e), flush=True)
+        return True
+
+    # === est_price_edit_work_* : редактирование цены работы ===
+    if data.startswith("est_price_edit_work_"):
+        rest = data.replace("est_price_edit_work_", "")
+        try:
+            object_id, code = rest.split("_", 1)
+            object_id = int(object_id)
+        except (ValueError, IndexError):
+            return True
+        from core import spec
+        info = spec.WORK_TYPES_DEFAULT.get(code)
+        if not info:
+            return True
+        try:
+            await query.edit_message_text(
+                "👷 " + info[0] + "\n\nТекущая цена: " + str(info[2]) + " ₽/" + str(info[1]) + "\n",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data="est_prices_work_" + str(object_id))],
+                ])
+            )
+            from handlers import commands as _cmd
+            _cmd._est_pending_price = {"object_id": object_id, "type": "work", "code": code}
+        except Exception as e:
+            print("est_price_edit_work: " + str(e), flush=True)
+        return True
+
     return False
