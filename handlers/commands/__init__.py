@@ -38,3 +38,4 @@ from handlers.commands.keyboards import main_menu_keyboard
 from handlers.commands.add_menu import handle_add_menu
 import sys as _sys
 _sys.modules[__name__].__dict__.update(_legacy.__dict__)
+from handlers.commands.utils import parse_date
