@@ -546,35 +546,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print("est_sched_add: " + str(e), flush=True)
         return
 
-    if data.startswith("est_month_"):
-        try:
-            object_id = int(data.replace("est_month_", ""))
-        except ValueError:
-            return
-        from core.export.pdf_export import export_object_monthly_report_pdf
-        path = export_object_monthly_report_pdf(object_id)
-        if not path:
-            try:
-                await query.edit_message_text("❌ Отчёт не создан")
-            except Exception:
-                pass
-            return
-        obj = get_object(object_id)
-        name = obj.get("name") if obj else ("obj_" + str(object_id))
-        try:
-            with open(path, "rb") as f:
-                await query.message.chat.send_document(
-                    document=f,
-                    filename=str(name) + "_monthly.pdf",
-                    caption="📅 Отчёт по объекту «" + str(name) + "» за месяц",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
-                    ])
-                )
-        except Exception as e:
-            print("est_month: " + str(e), flush=True)
+    # === Домен: estimates (est_month вынесено в callbacks/estimates.py, сессия 16) ===
+    from handlers.commands.callbacks.estimates import try_handle as _try_estimates_cb
+    if await _try_estimates_cb(data, query, context):
         return
-
+    
     if data.startswith("est_where_"):
         try:
             object_id = int(data.replace("est_where_", ""))
