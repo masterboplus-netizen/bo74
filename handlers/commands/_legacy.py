@@ -79,113 +79,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await _try_estimates_cb(data, query, context):
         return
     
-    if data.startswith("est_sched_"):
-        try:
-            object_id = int(data.replace("est_sched_", ""))
-        except ValueError:
-            return
-        from core.report_schedule import format_schedules
-        text = format_schedules(object_id).replace("*", "")
-        try:
-            await query.edit_message_text(
-                text,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("➕ Создать (еженедельно)", callback_data="est_sched_add_" + str(object_id) + "_weekly")],
-                    [InlineKeyboardButton("➕ Создать (ежемесячно)", callback_data="est_sched_add_" + str(object_id) + "_monthly")],
-                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
-                ])
-            )
-        except Exception as e:
-            print("est_sched: " + str(e), flush=True)
-        return
-
-    if data.startswith("est_sched_add_"):
-        rest = data.replace("est_sched_add_", "")
-        try:
-            object_id_s, freq = rest.rsplit("_", 1)
-            object_id = int(object_id_s)
-        except (ValueError, IndexError):
-            return
-        from core.report_schedule import create_schedule
-        sid = create_schedule(object_id=object_id, frequency=freq, hour=9, minute=0)
-        try:
-            await query.edit_message_text(
-                "✅ Расписание создано (" + freq + ", в 09:00)",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ К расписаниям", callback_data="est_sched_" + str(object_id))],
-                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
-                ])
-            )
-        except Exception as e:
-            print("est_sched_add: " + str(e), flush=True)
-        return
-
-    # === Домен: estimates (est_month вынесено в callbacks/estimates.py, сессия 16) ===
+    # === Домен: estimates (est_sched_*, est_where_* — сессия 16) ===
     from handlers.commands.callbacks.estimates import try_handle as _try_estimates_cb
     if await _try_estimates_cb(data, query, context):
         return
     
-    if data.startswith("est_where_"):
-        try:
-            object_id = int(data.replace("est_where_", ""))
-        except ValueError:
-            return
-        from core import spec
-        kb_rows = []
-        for code in list(spec.MATERIALS_DEFAULT.keys())[:15]:
-            info = spec.MATERIALS_DEFAULT[code]
-            kb_rows.append([InlineKeyboardButton(
-                info[0][:35],
-                callback_data="est_where_mat_" + str(object_id) + "_" + code
-            )])
-        kb_rows.append([InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))])
-        try:
-            await query.edit_message_text(
-                "🔍 Где используется материал:",
-                reply_markup=InlineKeyboardMarkup(kb_rows)
-            )
-        except Exception as e:
-            print("est_where: " + str(e), flush=True)
-        return
-
-    if data.startswith("est_where_mat_"):
-        rest = data.replace("est_where_mat_", "")
-        try:
-            object_id_s, code = rest.split("_", 1)
-            object_id = int(object_id_s)
-        except (ValueError, IndexError):
-            return
-        from core.room_estimate import calc_room_estimate
-        from core.db import fetchall
-        from core import spec
-        rooms = fetchall("SELECT id, name FROM rooms WHERE object_id = ?", (object_id,))
-        rows_use = []
-        for r in rooms:
-            est = calc_room_estimate(r["id"])
-            if not est:
-                continue
-            for m in est.get("materials", []):
-                if m["code"] == code:
-                    rows_use.append((r["name"], m["qty"], m["unit"], m["cost"]))
-        info = spec.MATERIALS_DEFAULT.get(code)
-        lines = ["🔍 " + (info[0] if info else code), ""]
-        if not rows_use:
-            lines.append("   Нигде не используется.")
-        else:
-            for name, qty, unit, cost in rows_use:
-                lines.append(f"   • {name}: {round(qty, 2)} {unit} = {round(cost, 2)} ₽")
-        try:
-            await query.edit_message_text(
-                chr(10).join(lines),
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ К материалам", callback_data="est_where_" + str(object_id))],
-                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
-                ])
-            )
-        except Exception as e:
-            print("est_where_mat: " + str(e), flush=True)
-        return
-
     if data.startswith("est_buy_"):
         try:
             object_id = int(data.replace("est_buy_", ""))

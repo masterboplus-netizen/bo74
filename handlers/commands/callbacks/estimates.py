@@ -636,4 +636,101 @@ async def try_handle(data: str, query, context) -> bool:
             print("est_price_edit_work: " + str(e), flush=True)
         return True
 
+# === est_sched_* : список расписаний объекта ===
+    if data.startswith("est_sched_"):
+        # Не путать с est_sched_add_
+        if data.startswith("est_sched_add_"):
+            return False
+        try:
+            object_id = int(data.replace("est_sched_", ""))
+        except ValueError:
+            return True
+        from core.report_schedule import format_schedules
+        try:
+            text = format_schedules(object_id).replace("*", "")
+        except Exception:
+            text = "📅 Расписаний нет"
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("➕ Создать (9:00)", callback_data="est_sched_add_" + str(object_id) + "_daily")],
+                    [InlineKeyboardButton("📅 Еженедельно", callback_data="est_sched_add_" + str(object_id) + "_weekly")],
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_sched: " + str(e), flush=True)
+        return True
+
+    # === est_sched_add_* : создать расписание ===
+    if data.startswith("est_sched_add_"):
+        rest = data.replace("est_sched_add_", "")
+        try:
+            object_id_s, freq = rest.rsplit("_", 1)
+            object_id = int(object_id_s)
+        except (ValueError, IndexError):
+            return True
+        from core.report_schedule import create_schedule
+        sid = create_schedule(object_id=object_id, frequency=freq, hour=9, minute=0)
+        try:
+            await query.edit_message_text(
+                "✅ Расписание создано (" + freq + ", в 09:00)",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К расписаниям", callback_data="est_sched_" + str(object_id))],
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_sched_add: " + str(e), flush=True)
+        return True
+
+    # === est_where_* : где купить материалы ===
+    if data.startswith("est_where_"):
+        # Не путать с est_where_mat_
+        if data.startswith("est_where_mat_"):
+            return False
+        try:
+            object_id = int(data.replace("est_where_", ""))
+        except ValueError:
+            return True
+        from core import spec
+        kb_rows = []
+        for code, info in list(spec.MATERIALS_DEFAULT.items())[:15]:
+            kb_rows.append([InlineKeyboardButton(
+                info[0][:30],
+                callback_data="est_where_mat_" + str(object_id) + "_" + code
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))])
+        try:
+            await query.edit_message_text(
+                "🛒 Где купить\n\nВыбери материал:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_where: " + str(e), flush=True)
+        return True
+
+    # === est_where_mat_* : где купить конкретный материал ===
+    if data.startswith("est_where_mat_"):
+        rest = data.replace("est_where_mat_", "")
+        try:
+            object_id_s, code = rest.split("_", 1)
+            object_id = int(object_id_s)
+        except (ValueError, IndexError):
+            return True
+        from core.marketplaces import format_price_comparison
+        text = format_price_comparison(code).replace("*", "")
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К списку", callback_data="est_where_" + str(object_id))],
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_where_mat: " + str(e), flush=True)
+        return True
+
     return False
