@@ -262,4 +262,158 @@ async def try_handle(data: str, query, context) -> bool:
             print("est_object: " + str(e), flush=True)
         return True
 
+# === est_csv_* : CSV-смета объекта ===
+    if data.startswith("est_csv_"):
+        try:
+            object_id = int(data.replace("est_csv_", ""))
+        except ValueError:
+            return True
+        from core.object_estimate import calc_object_estimate
+        import csv
+        est = calc_object_estimate(object_id)
+        if not est:
+            return True
+        obj = get_object(object_id)
+        name = obj.get("name") if obj else ("obj_" + str(object_id))
+        path = "/tmp/estimate_" + str(object_id) + ".csv"
+        with open(path, "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.writer(f, delimiter=";")
+            w.writerow(["Комната", "Материалы", "Работы", "Итого"])
+            for r in est.get("rooms", []):
+                w.writerow([r["name"], r["materials"], r["works"], r["total"]])
+            w.writerow([])
+            w.writerow(["Материалы (всего)", est["total_materials"]])
+            w.writerow(["Работы (всего)", est["total_works"]])
+            w.writerow(["ЭОМ", est["elec"]])
+            w.writerow(["Сантехника", est["plumbing"]])
+            w.writerow(["Отдельные работы", est.get("extra_works", 0)])
+            w.writerow(["ВСЕГО", est["total"]])
+        try:
+            with open(path, "rb") as f:
+                await query.message.chat.send_document(
+                    document=f,
+                    filename=str(name) + "_smeta.csv",
+                    caption="📊 CSV-смета объекта «" + str(name) + "»",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                    ])
+                )
+        except Exception as e:
+            print("est_csv: " + str(e), flush=True)
+        return True
+
+    # === est_period_* : меню периодов ===
+    if data.startswith("est_period_"):
+        try:
+            object_id = int(data.replace("est_period_", ""))
+        except ValueError:
+            return True
+        kb_rows = [
+            [InlineKeyboardButton("📅 За неделю", callback_data="est_per_" + str(object_id) + "_week")],
+            [InlineKeyboardButton("📅 За месяц", callback_data="est_per_" + str(object_id) + "_month")],
+            [InlineKeyboardButton("📅 За всё время", callback_data="est_per_" + str(object_id) + "_all")],
+            [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+        ]
+        try:
+            await query.edit_message_text(
+                "📈 Аналитика по периодам" + chr(10) + chr(10) + "Выбери период:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_period: " + str(e), flush=True)
+        return True
+
+    # === est_per_* : аналитика за период ===
+    if data.startswith("est_per_"):
+        rest = data.replace("est_per_", "")
+        try:
+            object_id_s, period = rest.rsplit("_", 1)
+            object_id = int(object_id_s)
+        except (ValueError, IndexError):
+            return True
+        from core.economics import calc_margin
+        obj = get_object(object_id)
+        name = obj.get("name") if obj else "?"
+        f = get_finance_summary(object_id)
+        m = calc_margin(object_id, period=period)
+        pnames = {"week": "неделю", "month": "месяц", "all": "всё время"}
+        lines = [
+            "📈 " + str(name) + " — за " + pnames.get(period, period),
+            "",
+            "💰 Доход:   " + str(f.get("income", 0)) + " ₽",
+            "💸 Расход:  " + str(f.get("expense", 0)) + " ₽",
+            "⚖️ Баланс:  " + str(f.get("balance", 0)) + " ₽",
+            "",
+            "📊 Маржа:   " + str(m.get("margin_percent", 0)) + " %",
+        ]
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К периодам", callback_data="est_period_" + str(object_id))],
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_per: " + str(e), flush=True)
+        return True
+
+    # === est_rules_* : правила ЭОМ ===
+    if data.startswith("est_rules_"):
+        try:
+            object_id = int(data.replace("est_rules_", ""))
+        except ValueError:
+            return True
+        from core.elec_rules import format_rules, list_overrides
+        text = format_rules(object_id).replace("*", "")
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + chr(10) + "..."
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_rules: " + str(e), flush=True)
+        return True
+
+    # === est_kpi_* : KPI объекта (с числовым id) ===
+    if data.startswith("est_kpi_"):
+        try:
+            object_id = int(data.replace("est_kpi_", ""))
+        except ValueError:
+            return True
+        from core.economics import calc_margin
+        obj = get_object(object_id)
+        name = obj.get("name") if obj else "?"
+        f = get_finance_summary(object_id)
+        m = calc_margin(object_id, period="all")
+        income = f.get("income", 0)
+        expense = f.get("expense", 0)
+        balance = f.get("balance", 0)
+        lines = [
+            "📊 KPI объекта «" + str(name) + "»",
+            "",
+            "💰 Финансы:",
+            "   Доход:   " + str(income) + " ₽",
+            "   Расход:  " + str(expense) + " ₽",
+            "   Баланс:  " + str(balance) + " ₽",
+            "",
+            "📈 Маржа:",
+            "   Прибыль: " + str(m.get("profit", 0)) + " ₽",
+            "   Маржа:   " + str(m.get("margin_percent", 0)) + " %",
+        ]
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_kpi: " + str(e), flush=True)
+        return True
+
     return False
