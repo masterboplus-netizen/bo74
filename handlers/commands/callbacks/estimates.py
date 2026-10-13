@@ -846,4 +846,100 @@ async def try_handle(data: str, query, context) -> bool:
             print("est_setstatus: " + str(e), flush=True)
         return True
 
+# === est_allwork_* : сводка работ по объекту ===
+    if data.startswith("est_allwork_"):
+        try:
+            object_id = int(data.replace("est_allwork_", ""))
+        except ValueError:
+            return True
+        from core.room_estimate import calc_room_estimate
+        from core.db import fetchall
+        rooms = fetchall("SELECT id, name FROM rooms WHERE object_id = ?", (object_id,))
+        agg = {}
+        total_h = 0.0
+        for r in rooms:
+            est = calc_room_estimate(r["id"])
+            if not est:
+                continue
+            for w in est.get("works", []):
+                key = w.get("code") or w.get("name")
+                if key not in agg:
+                    agg[key] = {"name": w["name"], "unit": w.get("unit", ""), "qty": 0.0, "cost": 0.0}
+                agg[key]["qty"] += w.get("qty", 0)
+                agg[key]["cost"] += w.get("cost", 0)
+                total_h += w.get("hours", 0)
+        if not agg:
+            try:
+                await query.edit_message_text("👷 Работ нет.")
+            except Exception:
+                pass
+            return True
+        lines = ["👷 Работы объекта (все комнаты):", ""]
+        total = 0.0
+        for code, info in sorted(agg.items(), key=lambda x: -x[1]["cost"]):
+            lines.append(f"   • {info['name']}: {round(info['qty'], 2)} {info['unit']} = {round(info['cost'], 2)} ₽")
+            total += info["cost"]
+        lines.append("")
+        lines.append(f"💰 Итого работы: {round(total, 2)} ₽ ({round(total_h, 2)} ч)")
+        text = chr(10).join(lines)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + chr(10) + "..."
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_allwork: " + str(e), flush=True)
+        return True
+
+    # === est_allmat_* : сводка материалов по объекту ===
+    if data.startswith("est_allmat_"):
+        try:
+            object_id = int(data.replace("est_allmat_", ""))
+        except ValueError:
+            return True
+        from core.room_estimate import calc_room_estimate
+        from core.db import fetchall
+        rooms = fetchall("SELECT id, name FROM rooms WHERE object_id = ?", (object_id,))
+        agg = {}
+        for r in rooms:
+            est = calc_room_estimate(r["id"])
+            if not est:
+                continue
+            for m in est.get("materials", []):
+                key = m["code"]
+                if key not in agg:
+                    agg[key] = {"name": m["name"], "unit": m.get("unit", ""), "qty": 0.0, "cost": 0.0}
+                agg[key]["qty"] += m.get("qty", 0)
+                agg[key]["cost"] += m.get("cost", 0)
+        if not agg:
+            try:
+                await query.edit_message_text("🧱 Материалов нет.")
+            except Exception:
+                pass
+            return True
+        lines = ["🧱 Материалы объекта (все комнаты):", ""]
+        total = 0.0
+        for code, info in sorted(agg.items(), key=lambda x: -x[1]["cost"]):
+            lines.append(f"   • {info['name']}: {round(info['qty'], 2)} {info['unit']} = {round(info['cost'], 2)} ₽")
+            total += info["cost"]
+        lines.append("")
+        lines.append(f"💰 Итого материалы: {round(total, 2)} ₽")
+        text = chr(10).join(lines)
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + chr(10) + "..."
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_object_" + str(object_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_allmat: " + str(e), flush=True)
+        return True
+
     return False
