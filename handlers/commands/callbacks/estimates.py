@@ -1017,4 +1017,125 @@ async def try_handle(data: str, query, context) -> bool:
             pass
         return True
 
+# === est_room_per_* : сессии замеров комнаты ===
+    if data.startswith("est_room_per_"):
+        try:
+            room_id = int(data.replace("est_room_per_", ""))
+        except ValueError:
+            return True
+        from core.db import fetchall
+        sessions = fetchall(
+            "SELECT id, session_type, session_label, created_at FROM measurement_sessions WHERE room_id = ? ORDER BY created_at DESC",
+            (room_id,)
+        )
+        if not sessions:
+            try:
+                await query.edit_message_text(
+                    "📅 Сессий замеров нет.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ К смете", callback_data="est_room_" + str(room_id))],
+                    ])
+                )
+            except Exception:
+                pass
+            return True
+        kb_rows = []
+        for s in sessions[:10]:
+            st = s.get("session_type") or "?"
+            lab = s.get("session_label") or st
+            kb_rows.append([InlineKeyboardButton(
+                "📅 " + str(lab)[:30] + " (" + str(s.get("created_at", ""))[:10] + ")",
+                callback_data="est_room_sess_" + str(room_id) + "_" + str(s["id"])
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ К смете", callback_data="est_room_" + str(room_id))])
+        try:
+            await query.edit_message_text(
+                "📅 Сессии замеров комнаты:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_room_per: " + str(e), flush=True)
+        return True
+
+    # === est_room_sess_* : сессия замеров комнаты ===
+    if data.startswith("est_room_sess_"):
+        parts = data.replace("est_room_sess_", "").split("_")
+        try:
+            room_id = int(parts[0])
+            session_id = int(parts[1]) if len(parts) > 1 else 0
+        except ValueError:
+            return True
+        from core.db import fetchall
+        sessions = fetchall(
+            "SELECT id, session_type, session_label, created_at FROM measurement_sessions WHERE id = ?",
+            (session_id,)
+        )
+        if not sessions:
+            try:
+                await query.edit_message_text("❌ Сессия не найдена")
+            except Exception:
+                pass
+            return True
+        s = sessions[0]
+        lines = [
+            "📅 Сессия замеров",
+            "",
+            "Тип: " + str(s.get("session_type") or "?"),
+            "Метка: " + str(s.get("session_label") or "?"),
+            "Дата: " + str(s.get("created_at") or "?"),
+        ]
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К сессиям", callback_data="est_room_per_" + str(room_id))],
+                    [InlineKeyboardButton("⬅️ К смете", callback_data="est_room_" + str(room_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_room_sess: " + str(e), flush=True)
+        return True
+
+    # === est_room_mat_* : только материалы комнаты ===
+    if data.startswith("est_room_mat_"):
+        try:
+            room_id = int(data.replace("est_room_mat_", ""))
+        except ValueError:
+            return True
+        from core.room_estimate import format_room_materials_only
+        text = format_room_materials_only(room_id).replace("*", "")
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + chr(10) + "..."
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К смете комнаты", callback_data="est_room_" + str(room_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_room_mat: " + str(e), flush=True)
+        return True
+
+    # === est_room_work_* : только работы комнаты ===
+    if data.startswith("est_room_work_"):
+        try:
+            room_id = int(data.replace("est_room_work_", ""))
+        except ValueError:
+            return True
+        from core.room_estimate import format_room_works_only
+        text = format_room_works_only(room_id).replace("*", "")
+        if len(text) > 4000:
+            text = text[:3900] + chr(10) + chr(10) + "..."
+        try:
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К смете комнаты", callback_data="est_room_" + str(room_id))],
+                ])
+            )
+        except Exception as e:
+            print("est_room_work: " + str(e), flush=True)
+        return True
+
     return False
