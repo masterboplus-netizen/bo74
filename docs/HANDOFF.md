@@ -1,7 +1,7 @@
 # HANDOFF — как войти в проект «Бо 8.1»
 
 > Для нового чата с AI. Прочитай ПЕРВЫМ.
-> Дата: 2026-10-12 22:20. Сессия: 15.
+> Дата: 2026-10-14. Сессия: 16.
 
 ---
 
@@ -16,337 +16,144 @@ AI — ведёт патчи, следит за архитектурой, раз
 
 ## 2. ПРАВИЛА (ЖЁСТКО)
 
-- Один патч → один py_compile → один скрин → один коммит.
+- Один патч → один py_compile → один скрин → один тест → один коммит.
 - НЕ давать 2+ команд в одном сообщении, если могут упасть.
 - Номера строк УСТАРЕВАЮТ после каждого патча. Перед патчем — ВСЕГДА свежий grep -n.
-- Перед рискованным патчем — cp file file.bak_name_$(date +%s)
+- Перед рискованным патчем — cp file file.bak_1791973544
 - Если OLD_NOT_FOUND — не гадать, прислать sed -n + cat -A.
 - 30 минут без движения → СТОП, откат, читаем STATE.md.
 - git checkout — наш бэкап.
 - Максимум 3 вопроса за раз.
+- **Перед патчем с отступами — python3 tools/show_structure.py <file> <from> <to>** (НЕ cat -A).
 
 ---
 
-## 3. ГДЕ МЫ (сессия 15)
+## 3. ГДЕ МЫ (сессия 16)
 
-Сделано: handlers/commands.py (4736 строк) → пакет handlers/commands/ с 13 модулями.
+handle_callback разрезан на домены. Создан пакет handlers/commands/callbacks/:
 
-Модули (все живые, реэкспорт через __init__.py):
-- start.py — start, help_command, _help_text
-- personal.py — personal_command, format_personal_summary, personal_keyboard
-- receipt.py — 5 receipt-хендлеров
-- photos.py — 8 photos-хендлеров
-- crm.py — 4 crm-функции
-- finance.py — 6 finance-функций
-- objects.py — 7 objects-функций
-- tasks.py — 15 tasks-функций
-- choose_expense.py — 4 функции выбора объекта
-- document.py — handle_document (CSV/XLSX)
-- keyboards.py — main_menu_keyboard
-- add_menu.py — handle_add_menu
-- _legacy.py — ЧТО ОСТАЛОСЬ: handle_callback (2055), handle_text (975), parse_date (156)
+- tasks.py — my_tasks, by_assignee, byassigned_ (+ меню задач byobj, archive, menu_back)
+- estimates.py — 30+ поддоменов смет (est_csv, est_pdf, est_export, est_kpi, est_prices, est_sched, est_where, est_buy, est_status, est_allwork, est_allmat, est_object_floors, est_object_rooms, est_room_per, est_room_sess, est_room_mat, est_room_work, est_compare, menu_estimates)
+- kpi.py — menu_kpi, kpi_masters, kpi_objects, kpi_red
+- finance.py — menu_finance, finobj_
 
-Стратегия разреза (проверена):
-1. Вырезать блок строк из _legacy.py → новый файл модуля
-2. В _legacy.py — импорт: from handlers.commands.X import Y
-3. __init__.py — дописать реэкспорт
-4. py_compile → перезапуск → тест → коммит
+_legacy.py: 3102 -> 1625 строк (-48%).
 
 ---
 
 ## 4. ТЕХДОЛГ
 
-A. parse_date (156 строк) — циклический импорт (_legacy.py:2538 импортирует сам себя). Вынести в utils.py.
-
-B. handle_callback (2055) и handle_text (975) — монстры. Резать по доменам отдельной сессией. НЕ в спешке.
-
-C. rooms.py (7638 строк) — следующий God Object. Домены: walls, openings, comms, elec, plumbing, reports, core.
-
-D. Универсальный приёмник файлов — handle_document сейчас только CSV/XLSX-прайсы. Нужно: определять тип (прайс / счёт комплектации / счёт оплаты / накладная / чек) → роутить.
-
-E. modules/ → core/ — 176 импортов. Стратегия: шим.
+A. handle_callback — осталось ~600 строк (personal, reports, obj*, menu_objects, menu_dashboard, menu_help).
+B. handle_text (975) — монстр, резать по доменам.
+C. rooms.py (7638) — следующий God Object.
+D. menu_tasks — дубликат tasks_command (работает).
+E. Универсальный приёмник файлов (handle_document).
+F. modules/ -> core/ (176 импортов) через шим.
 
 ---
 
 ## 5. ГЛАВНЫЕ ГРАБЛИ
 
-UnboundLocalError из-за локальных импортов:
-- Внутри функции есть from modules.X import Y
-- Вызов Y() ВЫШЕ этого импорта → UnboundLocalError
-- Фикс: удалить локальные импорты, глобальный покрывает
-- Уже пофикшено: 18+5+1 (коммиты 0eec77b, 6949b1b, 69c8070)
-
-Номера строк меняются после каждого патча — grep -n перед патчем.
-
-Бэкапы — перед рискованным патчем. git checkout — откат.
-
----
+UnboundLocalError из-за локальных импортов.
 
 ## 6. КАК РАБОТАТЬ С ANDREY
 
-- Мобила, Replit Shell, VPN моргает — процесс может упасть, это норма.
-- Восстановить: ./start_all.sh
+- Мобила, Replit Shell, VPN моргает.
 - Максимум 3 вопроса.
-- Не давать 2+ команд разом.
-- Если патч не сработал — sed -n X,Yp file | cat -A.
-- «Бо 7.7» / «Бо 8.1» — версии. Сейчас 8.1.
-
----
+- Если патч не сработал — show_structure.py.
 
 ## 7. ЕСЛИ СЛОМАЛОСЬ
 
-1. tail -40 bot_start.log — трейсбек
-2. Если не запускается: py_compile → git checkout → ./start_all.sh
-3. Если кнопка не работает: смотрим callback в логе → grep -n по коду → проверяем pattern в bot.py
-4. Message is not modified — try/except с игнором
-
----
+1. tail -40 bot_start.log
+2. git checkout path/to/file.py
+3. ./start_all.sh
 
 ## 8. КОММИТЫ
 
 Формат: feat(модуль): ..., fix(модуль): ..., refactor(модуль): ..., docs(state): ...
-git push — через GITHUB_TOKEN в Replit Secrets, не всегда работает.
-
----
 
 ## 9. ЧТО ЧИТАТЬ
 
-1. docs/STATE.md — где мы сейчас
-2. docs/BO_MANIFEST.md — манифест
-3. docs/HANDOFF.md — этот файл
-4. docs/WORKPLAN.md — план
-5. docs/UX_PRINCIPLES.md — 18 принципов
-
----
-
-Всё. Ты в курсе. Погнали.
-
+1. docs/STATE.md
+2. docs/BO_MANIFEST.md
+3. docs/HANDOFF.md (этот)
+4. docs/WORKPLAN.md
+5. docs/UX_PRINCIPLES.md
 
 ---
 
 ## 10. КАРТА КОДА — ЧТО ГДЕ ЛЕЖИТ
 
-### 10.1. Точки входа
+Точки входа: bot.py, start_all.sh, config.py, db.py.
 
-bot.py — точка входа. Регистрирует все хендлеры.
-- main() — запуск
-- add_handlers(app) — регистрация
-- ПОРЯДОК хендлеров ВАЖЕН — первый матч выигрывает.
-- Ключевые хендлеры:
-  - CommandHandler('start', start) — handlers/commands/start.py
-  - CommandHandler('tasks', tasks_command) — tasks.py
-  - CommandHandler('personal', personal_command) — personal.py
-  - CallbackQueryHandler(handle_rooms_callback, pattern='^(rooms_list_|room_|wall_|openings_|opening_|comm_|obj_|floor_|group_|cables_|panels_|panel_|plumb_|works_|prices_)') — ПЕРВЫЙ. Ловит много. Свалка.
-  - CallbackQueryHandler(handle_callback, pattern='^(menu_crm|crm_|unknown_|deal_|client_|activity_)')
-  - CallbackQueryHandler(handle_callback, pattern='^(?!room_|rooms_|wall_|...).*')
-  - MessageHandler(filters.Document.ALL, handle_document)
-  - MessageHandler(filters.PHOTO, handle_photo)
-  - MessageHandler(filters.TEXT, handle_text)
+handlers/commands/ — пакет:
+- __init__.py (реэкспорт)
+- _legacy.py — handle_callback (1625 строк), handle_text (975)
+- start.py, personal.py, receipt.py, photos.py, crm.py, finance.py,
+  objects.py, tasks.py, choose_expense.py, document.py, keyboards.py, add_menu.py, utils.py
+- callbacks/ — НОВЫЙ пакет (сессия 16):
+  - tasks.py, estimates.py, kpi.py, finance.py
 
-start_all.sh — venv + python bot.py + web_dashboard + watchdog.
-Перезапуск: pkill -9 -f 'python bot.py' ; sleep 2 ; ./start_all.sh ; sleep 5
+core/ — бизнес-логика (spec.py, rooms.py, floors.py, geometry.py, room_estimate.py, floor_estimate.py, object_estimate.py, extra_works.py, report_schedule.py, economics.py, marketplaces.py, elec_*, plumbing_panels.py, comms.py, export/pdf_export.py).
 
-config.py — токен, DB_PATH, ADMIN_IDS, MAIN_ADMIN_TG_ID.
-db.py — обёртка SQLite. get_connection(), fetchone(), fetchall(), commit().
+interfaces/telegram/rooms.py — 7638 строк, следующий God Object.
 
-### 10.2. handlers/commands/ — структура (сессия 15)
+modules/ — СТАРАЯ логика (176 импортов): backup_db, calendar, crm, dashboard_link, digest, finance, kpi, objects, ocr, parser, personal, phone_utils, reports, tasks, users.
 
-Пакет. Каждый файл — свой домен. __init__.py — реэкспорт всего.
+migrations/ — SQL 001-050+. ~110 таблиц.
 
-| Файл | Что | Зависимости |
-|---|---|---|
-| __init__.py | Реэкспорт | из всех модулей |
-| _legacy.py | handle_callback, handle_text, parse_date | 2047 строк |
-| start.py | start, help_command, _help_text | modules.users, config |
-| personal.py | personal_command, format_personal_summary, personal_keyboard | modules.personal |
-| receipt.py | 5 receipt-функций | modules.parser, db |
-| photos.py | 8 photo-функций | modules.objects, modules.tasks, db |
-| crm.py | clients_command, deals_command, handle_crm_menu, _finalize_new_client | modules.crm, db |
-| finance.py | finance_command, add_expense_command, finance_keyboard, format_finance_summary, show_finance_summary, format_money | modules.finance, modules.objects, db |
-| objects.py | 7 objects-функций | modules.objects |
-| tasks.py | 15 functions (tasks_command, task_*, build_calendar, auto_confirm_date) | modules.tasks, modules.objects, db |
-| choose_expense.py | handle_choose_object, make_choose_keyboard, expense_category_keyboard, handle_category | modules.objects, modules.finance |
-| document.py | handle_document (CSV/XLSX) | openpyxl, core.marketplaces |
-| keyboards.py | main_menu_keyboard | telegram |
-| add_menu.py | handle_add_menu | modules.objects |
+docs/ — HANDOFF.md, STATE.md, BO_MANIFEST.md, WORKPLAN.md, UX_PRINCIPLES.md, STYLE_GUIDE.md, ROADMAP_FLEX.md.
 
-### 10.3. core/ — бизнес-логика
-
-| Файл | Что |
-|---|---|
-| spec.py | ЕДИНЫЙ СПРАВОЧНИК. WALL_NAMES, MATERIALS, типы. get_wall_name(n, total), get_total_walls(), set_total_walls() |
-| rooms.py | комнаты |
-| floors.py | этажи |
-| geometry.py | расчёты (площади, углы) |
-| room_estimate.py | смета комнаты. format_room_estimate(room_id) |
-| floor_estimate.py | смета этажа |
-| object_estimate.py | смета объекта |
-| extra_works.py | отдельные работы |
-| report_schedule.py | расписания автоотчётов |
-| economics.py | экономика, маржа |
-| marketplaces.py | импорт цен, format_price_comparison |
-| elec_panels.py | ЭОМ: щиты, группы |
-| elec_rules.py | правила ЭОМ |
-| elec_routes.py | трассы ЭОМ |
-| elec_prices.py | цены ЭОМ |
-| plumbing_panels.py | сантехника: коллекторы |
-| comms.py | коммуникации |
-| export/pdf_export.py | PDF: щит, ЭОМ, сантехника, отчёт |
-| db.py | обёртка (дубль корневого) |
-
-### 10.4. interfaces/telegram/ — UI
-
-| Файл | Что |
-|---|---|
-| rooms.py | 7638 строк — God Object. handle_rooms_callback + ~80 функций. Следующий для разбиения. |
-
-### 10.5. modules/ — СТАРАЯ бизнес-логика (176 импортов)
-
-Техдолг: перенести в core/ через шим.
-
-| Файл | Что | Строк |
-|---|---|---|
-| backup_db.py | бэкап | 156 |
-| calendar.py | календарь | 40 |
-| crm.py | CRM | 221 |
-| dashboard_link.py | ссылка | 20 |
-| digest.py | дайджест | 224 |
-| finance.py | add_expense, add_income, get_finance_summary, get_all_finance_summary, get_finance_by_period, get_finance_by_category | 117 |
-| kpi.py | KPI | 184 |
-| objects.py | create_object, get_all_objects, get_object, get_object_by_name, get_archived_objects, update_object | 136 |
-| ocr.py | OCR чеков | 212 |
-| parser.py | parse_message, parse_amount | 213 |
-| personal.py | личные расходы | 78 |
-| phone_utils.py | parse_phone, get_country_label | 84 |
-| reports.py | get_summary_report, format_summary_report, get_closed_tasks_report... | 341 |
-| tasks.py | create_task, close_task, get_active_tasks, get_tasks_by_object, get_archived_tasks, set_task_range | 416 |
-| users.py | save_user, get_user, set_role, mark_onboarded, is_onboarded | 88 |
-
-### 10.6. migrations/ — SQL
-
-001-050+. Применяются при старте. ~110 таблиц:
-- objects, rooms, floors, measurement_sessions, room_measures, openings, wall_niches, wall_corners, room_comms
-- elec_panels, elec_panel_components, elec_groups, elec_routes
-- plumbing_panels, plumbing_routes, plumbing_panel_points
-- object_works, work_types, component_prices, price_imports
-- users, tasks, task_history, photos, finance, receipt_items, clients, crm_deals, crm_activities
-- system_settings
-
-### 10.7. docs/
-
-- HANDOFF.md — ЭТОТ ФАЙЛ. Читать первым.
-- STATE.md — где мы сейчас.
-- BO_MANIFEST.md — манифест (архитектура, БД, правила).
-- WORKPLAN.md — план и техдолг.
-- UX_PRINCIPLES.md — 18 принципов.
-- STYLE_GUIDE.md — UI-правила.
-- ARCHITECTURE_ESTIMATE.md — архитектура сметы.
-- ROADMAP_FLEX.md — мультиплатформенность.
+tools/ — show_structure.py.
 
 ---
 
-## 11. ЧАСТЫЕ ОПЕРАЦИИ — ШПАРГАЛКА
+## 11. ШПАРГАЛКА
 
-**Структура файла (отступы цифрой):**
-```
+Структура файла:
 python3 tools/show_structure.py <file> <from> <to>
-```
-Вывод: `NNNN | indent | code`. Используется ВМЕСТО `cat -A`. Создан в сессии 16.
-
 
 Перезапуск:
-pkill -9 -f 'python bot.py' ; sleep 2 ; ./start_all.sh ; sleep 5 ; tail -5 bot_start.log
+pkill -9 -f python bot.py ; sleep 2 ; ./start_all.sh ; sleep 5 ; tail -5 bot_start.log
 
-Трейсбек:
-tail -40 bot_start.log
+Трейсбек: tail -40 bot_start.log
 
-Поиск функции:
-grep -n '^async def ИМЯ\|^def ИМЯ' <файл>
+Поиск функции: grep -n '^async def ИМЯ\|^def ИМЯ' <файл>
 
-Поиск вызовов:
-grep -rn 'ИМЯ' --include='*.py' . | grep -v pycache | grep -v .bak
+Точные пробелы: sed -n 'X,Yp' file | cat -A
 
-Точные пробелы:
-sed -n 'X,Yp' file | cat -A
+Бэкап: cp file file.bak_ИМЯ_20261014_102544
 
-Бэкап:
-cp file file.bak_ИМЯ_$(date +%Y%m%d_%H%M%S)
-
-Откат:
-git checkout path/to/file.py
-
-Проверка импорта:
-python3 -c 'from handlers import commands; print(commands.Z)'
-
-Установка пакета:
-pip install --break-system-packages openpyxl
+Откат: git checkout path/to/file.py
 
 ---
 
 ## 12. ПРИМЕР РАБОЧЕГО ПАТЧА
 
 Шаг 1 — свежий grep: grep -n '^async def \|^def ' handlers/commands/_legacy.py
-Шаг 2 — определить границы (например, handle_add_menu: 3241-3310).
-Шаг 3 — бэкап.
-Шаг 4 — Python-патч: вырезать блок, записать в новый файл, удалить из _legacy.
-Шаг 5 — py_compile обоих.
-Шаг 6 — импорт в _legacy.py и __init__.py.
-Шаг 7 — перезапуск + тест + коммит.
-Шаг 8 — если NameError: проверить, что ВСЕ зависимости импортированы в шапке нового модуля.
+Шаг 2 — бэкап.
+Шаг 3 — Python-патч: вырезать блок, записать в новый файл, удалить из _legacy.
+Шаг 4 — py_compile обоих.
+Шаг 5 — импорт в _legacy.py.
+Шаг 6 — перезапуск + тест + коммит.
+Шаг 7 — если NameError: проверить, что ВСЕ зависимости импортированы в шапке нового модуля.
 
 ---
 
-## 13. КОММИТЫ сессии 15 (все на GitHub)
+## 13. КОММИТЫ сессии 16 (HEAD 4c9e053)
 
-41284a8 docs: add HANDOFF.md
-2e7724b add_menu.py
-339fc1d keyboards.py
-0b3be5e docs(state)
-f3e356c .xlsx via openpyxl
-331faae document.py
-69c8070 parse_amount fix
-38f90b2 choose_expense.py
-5783c9b + a0392b6 fix back button
-8abdbac tasks.py
-9535e3c objects.py
-ea45932 + 6949b1b finance fixes
-3ebf99d crm.py
-1b227f9 photos.py
-016d6ae receipt.py
-8755410 personal fix
-02ff371 start.py
-aa7367b convert to package
-2e9f1f7 docs(state)
-b62a239 room_estimate_ fix
-0eec77b 18 imports fix
-adf899e get_wall_name 5+
+26 коммитов, всё на GitHub. См. docs/STATE.md.
 
 ---
 
-## 14. ЧТО ДАЛЬШЕ — ЗАДАЧИ
+## 14. ЧТО ДАЛЬШЕ
 
-### Первая (низкий риск, 30 мин)
-utils.py — вынести parse_date из _legacy.py (3085-3240).
-Проблема: _legacy.py:2538 — циклический импорт from handlers.commands import parse_date.
-Фикс: в utils.py, заменить на from handlers.commands.utils import parse_date.
-
-### Вторая (средний риск, 3-4 часа)
-Резать handle_callback (2055) по доменам:
-callbacks/estimates.py, objects.py, tasks.py, crm.py, prices.py, panels.py, plumbing.py, misc.py.
-
-### Третья (средний риск, 3-4 часа)
-Резать handle_text (975):
-text/crm_flows.py, activity_flows.py, task_flows.py, estimate_flows.py, personal_flows.py, room_flows.py.
-
-### Четвёртая (большой, 5-6 часов)
-Резать rooms.py (7638) — walls, openings, comms, elec, plumbing, reports, core.
-
-### Пятая (средний, 2-3 часа)
-Универсальный приёмник файлов — handle_document:
-CSV/XLSX прайс, счёт комплектации, счёт оплаты, накладная, чек.
-
-### Шестая (большой, 4-5 часов)
-modules/ -> core/ — 176 импортов через шим.
+1. Оставшиеся ~600 строк _legacy.py -> callbacks/personal.py, reports.py, objects.py, misc.py
+2. rooms.py (7638) -> rooms/ по доменам (высокий риск)
+3. Рефакторинг menu_tasks (убрать дубликат)
+4. handle_text (975) -> text/ по доменам
+5. Универсальный приёмник файлов
+6. modules/ -> core/ через шим
 
 ---
 
@@ -355,18 +162,9 @@ modules/ -> core/ — 176 импортов через шим.
 python-telegram-bot 20+ (async). Application, ContextTypes.DEFAULT_TYPE.
 await query.answer() — ПЕРВЫМ в callback-хендлере.
 await query.edit_message_text() — может падать Message is not modified. try/except.
-filters.Document.ALL, filters.TEXT & ~filters.COMMAND.
 Порядок add_handler — первый матч выигрывает.
 
-SQLite: get_connection() из db.py. row_factory = sqlite3.Row. НЕ забывать conn.close().
-
-Python 3.13: f-строки, match, walrus. UnboundLocalError — классика.
-
-Replit: (venv), pip install --break-system-packages, VPN моргает -> процесс падает.
-
-reportlab: PDF через SimpleDocTemplate.
-
-openpyxl: load_workbook(path, data_only=True), ws.iter_rows(values_only=True).
+SQLite: get_connection() из db.py. row_factory = sqlite3.Row.
 
 ---
 
@@ -387,7 +185,7 @@ openpyxl: load_workbook(path, data_only=True), ws.iter_rows(values_only=True).
 
 1. Прочитай HANDOFF.md, STATE.md, BO_MANIFEST.md.
 2. Спроси Andrey: какая задача?
-3. Свежий grep -n.
+3. Свежий grep -n или show_structure.py.
 4. Бэкап.
 5. Патч одной командой.
 6. py_compile.
@@ -406,7 +204,7 @@ openpyxl: load_workbook(path, data_only=True), ws.iter_rows(values_only=True).
 4. docs/UX_PRINCIPLES.md — 5 мин.
 
 Не читай пока: rooms.py, _legacy.py, migrations/.
-Открывай точечно через sed -n 'X,Yp'.
+Открывай точечно через show_structure.py.
 
 ---
 
