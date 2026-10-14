@@ -379,21 +379,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    if data.startswith("personal_cat_"):
-        parts = data.replace("personal_cat_", "").split("_", 1)
-        amount = int(parts[0])
-        category = parts[1]
-        add_personal_expense(amount, category)
-        context.user_data['pending_personal_expense'] = None
-        context.user_data['waiting_for'] = None
-        await query.edit_message_text(
-            f"✅ Личный расход {amount} ₽ ({category}) записан",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💸 К личным", callback_data="menu_personal")],
-                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-            ])
-        )
+    # === Домен: misc (personal_cat_ — временно, до personal.py) — вынесено в callbacks/misc.py ===
+    from handlers.commands.callbacks.misc import try_handle as _try_misc_cb
+    if await _try_misc_cb(data, query, context):
         return
+
 
     # === Домен: objects (objexp_*) — вынесено в callbacks/objects.py ===
     from handlers.commands.callbacks.objects import try_handle as _try_objects_cb
@@ -407,29 +397,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
-    if data == "menu_dashboard":
-        from modules.dashboard_link import get_dashboard_url
-        url = get_dashboard_url()
-        await query.edit_message_text(
-            f"🌐 Дашборд Бо 7.7\n\n"
-            f"Нажми кнопку ниже, чтобы открыть:\n\n"
-            f"📱 Совет: добавь на главный экран телефона",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🌐 Открыть дашборд", url=url)],
-                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")]
-            ])
-        )
+    # === Домен: misc (menu_dashboard, menu_help) — вынесено в callbacks/misc.py ===
+    from handlers.commands.callbacks.misc import try_handle as _try_misc_cb
+    if await _try_misc_cb(data, query, context):
         return
 
-    if data == "menu_help":
-        await query.edit_message_text(
-            _help_text(),
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")]
-            ]),
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
 
     # === Домен: objects (objtasks_none, objtasks_*, objfin_*, objphotos_*, obj_*) — вынесено в callbacks/objects.py ===
     from handlers.commands.callbacks.objects import try_handle as _try_objects_cb
