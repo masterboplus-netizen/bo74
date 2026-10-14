@@ -273,91 +273,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    if data == "my_tasks":
-        from modules.tasks import get_tasks_by_assignee
-        user_id = update.effective_user.id
-        my = get_tasks_by_assignee(user_id)
-        if not my:
-            await query.edit_message_text(
-                "👤 У тебя нет назначенных задач.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ Назад", callback_data="menu_tasks")],
-                ])
-            )
-            return
-        text = f"👤 МОИ ЗАДАЧИ ({len(my)}):\n\n"
-        buttons = []
-        for i, t in enumerate(my[:20], start=1):
-            d = ''
-            if t['deadline']:
-                d = f" ({t['deadline'][:10]})"
-            obj = t['object_name'] or 'без объекта'
-            text += f"#{t['id']} {t['title']}{d} — {obj}\n"
-            buttons.append([InlineKeyboardButton(f"{i}. {t['title'][:40]}", callback_data=f"task_{t['id']}")])
-        buttons.append([InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")])
-        try:
-            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except Exception as e:
-            if 'not modified' not in str(e).lower():
-                raise
+    # === Домен: tasks (my_tasks, by_assignee, byassigned_* — сессия 16) ===
+    from handlers.commands.callbacks.tasks import try_handle as _try_tasks_cb
+    if await _try_tasks_cb(data, query, context):
         return
-    if data == "by_assignee":
-        from modules.users import get_all_users
-        from modules.tasks import get_tasks_by_assignee
-        users = get_all_users()
-        users = [u for u in users if u.get('role') in ('master', 'prorab', 'designer', 'admin')]
-        buttons = []
-        for u in users:
-            cnt = len(get_tasks_by_assignee(u['tg_id']))
-            label = f"👤 {u.get('name', '—')[:30]} ({cnt})"
-            buttons.append([InlineKeyboardButton(label, callback_data=f"byassignee_{u['tg_id']}")])
-        buttons.append([InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")])
-        try:
-            await query.edit_message_text(
-                "👥 Задачи по исполнителям:",
-                reply_markup=InlineKeyboardMarkup(buttons)
-            )
-        except Exception as e:
-            if 'not modified' not in str(e).lower():
-                raise
-        return
-
-    if data.startswith("byassignee_"):
-        from modules.tasks import get_tasks_by_assignee
-        from modules.users import get_user
-        tg_id = int(data.replace("byassignee_", ""))
-        tasks = get_tasks_by_assignee(tg_id)
-        u = get_user(tg_id)
-        uname = u.get('name') if u else f'id{tg_id}'
-        if not tasks:
-            try:
-                await query.edit_message_text(
-                    f"👤 {uname}\n\nНет активных задач.",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("⬅️ Назад", callback_data="by_assignee")],
-                    ])
-                )
-            except Exception as e:
-                if 'not modified' not in str(e).lower():
-                    raise
-            return
-        text = f"👤 {uname} — {len(tasks)} задач:\n\n"
-        buttons = []
-        for i, t in enumerate(tasks[:20], start=1):
-            d = ''
-            if t['deadline']:
-                d = f" ({t['deadline'][:10]})"
-            obj = t['object_name'] or 'без объекта'
-            text += f"#{t['id']} {t['title']}{d} — {obj}\n"
-            buttons.append([InlineKeyboardButton(f"{i}. {t['title'][:40]}", callback_data=f"task_{t['id']}")])
-        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="by_assignee")])
-        try:
-            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(buttons))
-        except Exception as e:
-            if 'not modified' not in str(e).lower():
-                raise
-        return
-
+    
     if data == "menu_kpi":
         await query.edit_message_text(
             "📊 KPI И АНАЛИТИКА\n\n"

@@ -64,4 +64,101 @@ async def try_handle(data: str, query, context) -> bool:
         )
         return True
 
+# === my_tasks : мои задачи ===
+    if data == "my_tasks":
+        from modules.tasks import get_tasks_by_assignee
+        user_id = query.from_user.id
+        my = get_tasks_by_assignee(user_id)
+        if not my:
+            await query.edit_message_text(
+                "👤 У тебя нет назначенных задач.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Назад", callback_data="menu_tasks")],
+                ])
+            )
+            return True
+        text = f"👤 МОИ ЗАДАЧИ ({len(my)}):\n\n"
+        buttons = []
+        for i, t in enumerate(my[:20], start=1):
+            d = ''
+            if t['deadline']:
+                d = f" ({t['deadline'][:10]})"
+            obj = t['object_name'] or 'без объекта'
+            text += f"#{t['id']} {t['title']}{d} — {obj}\n"
+            buttons.append([InlineKeyboardButton(f"{i}. {t['title'][:40]}", callback_data=f"task_{t['id']}")])
+        buttons.append([InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")])
+        try:
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        except Exception as e:
+            if 'not modified' not in str(e).lower():
+                raise
+        return True
+
+    # === by_assignee : список исполнителей ===
+    if data == "by_assignee":
+        from modules.users import get_all_users
+        from modules.tasks import get_tasks_by_assignee
+        users = get_all_users()
+        users = [u for u in users if u.get('role') in ('master', 'prorab', 'designer')]
+        buttons = []
+        for u in users:
+            cnt = len(get_tasks_by_assignee(u['tg_id']))
+            label = f"👤 {u.get('name', '-')[:30]} ({cnt})"
+            buttons.append([InlineKeyboardButton(label, callback_data=f"byassigned_{u['tg_id']}")])
+        buttons.append([InlineKeyboardButton("⬅️ К задачам", callback_data="menu_tasks")])
+        try:
+            await query.edit_message_text(
+                "👥 Задачи по исполнителям:",
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        except Exception as e:
+            if 'not modified' not in str(e).lower():
+                raise
+        return True
+
+    # === byassigned_* : задачи конкретного исполнителя ===
+    if data.startswith("byassigned_"):
+        from modules.tasks import get_tasks_by_assignee
+        try:
+            user_id = int(data.replace("byassigned_", ""))
+        except ValueError:
+            return True
+        tasks = get_tasks_by_assignee(user_id)
+        # Найти имя
+        from modules.users import get_user
+        u = None
+        try:
+            u = get_user(user_id)
+        except Exception:
+            pass
+        uname = u.get('name', '?') if u else str(user_id)
+        if not tasks:
+            try:
+                await query.edit_message_text(
+                    f"👤 {uname}\n\nНет активных задач.",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("⬅️ Назад", callback_data="by_assignee")],
+                    ])
+                )
+            except Exception as e:
+                if 'not modified' not in str(e).lower():
+                    raise
+            return True
+        text = f"👤 {uname} — {len(tasks)} задач:\n\n"
+        buttons = []
+        for i, t in enumerate(tasks[:20], start=1):
+            d = ''
+            if t['deadline']:
+                d = f" ({t['deadline'][:10]})"
+            obj = t['object_name'] or 'без объекта'
+            text += f"#{t['id']} {t['title']}{d} — {obj}\n"
+            buttons.append([InlineKeyboardButton(f"{i}. {t['title'][:40]}", callback_data=f"task_{t['id']}")])
+        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="by_assignee")])
+        try:
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        except Exception as e:
+            if 'not modified' not in str(e).lower():
+                raise
+        return True
+
     return False
