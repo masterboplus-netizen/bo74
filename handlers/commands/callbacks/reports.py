@@ -7,9 +7,8 @@ report_choose_object, report_obj_*.
 Роутер try_handle(data, query, context) -> bool.
 True = обработано, вызывающий делает return.
 
-Замечание: menu_reports (точка входа) НЕ обрабатывается нигде в проекте —
-известный баг. Кнопка «📊 Отчёты» есть в keyboards.py и onboarding.py,
-но обработчика нет. Требуется отдельный патч feat(reports).
+Точка входа: menu_reports — добавлена 2026-10-14 (восстановлена из
+бэкапа bak_allwork_20261013_221253:993 после случайной потери в сессии 16).
 
 Замечание: импорты из modules.reports — локальные внутри каждой ветки
 (как было в _legacy.py). При отдельном рефакторинге поднять в шапку.
@@ -21,6 +20,23 @@ from modules.objects import get_all_objects
 
 async def try_handle(data: str, query, context) -> bool:
     """Обрабатывает reports-callback-и. True = обработано."""
+
+    # === Точка входа: меню отчётов ===
+    if data == "menu_reports":
+        await query.edit_message_text(
+            "📊 ОТЧЁТЫ\n\nВыбери тип:",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Что сделано (неделя)", callback_data="report_closed_week")],
+                [InlineKeyboardButton("✅ Что сделано (месяц)", callback_data="report_closed_month")],
+                [InlineKeyboardButton("🔄 Что в работе", callback_data="report_open")],
+                [InlineKeyboardButton("📈 Финансы за месяц", callback_data="report_summary_month")],
+                [InlineKeyboardButton("📈 Финансы за неделю", callback_data="report_summary_week")],
+                [InlineKeyboardButton("📈 Финансы за всё время", callback_data="report_summary_all")],
+                [InlineKeyboardButton("🏗️Отчёт по объекту", callback_data="report_choose_object")],
+                [InlineKeyboardButton("⬅️Назад", callback_data="menu_back")],
+            ])
+        )
+        return True
 
     if data.startswith("report_summary_"):
         period = data.replace("report_summary_", "")
