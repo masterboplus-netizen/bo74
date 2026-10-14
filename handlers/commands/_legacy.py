@@ -278,70 +278,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await _try_tasks_cb(data, query, context):
         return
     
-    if data == "menu_kpi":
-        await query.edit_message_text(
-            "📊 KPI И АНАЛИТИКА\n\n"
-            "Выбери отчёт:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("👤 KPI мастеров (30 дн.)", callback_data="kpi_masters")],
-                [InlineKeyboardButton("🏗️ Здоровье объектов", callback_data="kpi_objects")],
-                [InlineKeyboardButton("⚠️ Красная зона", callback_data="kpi_red")],
-                [InlineKeyboardButton("⬅️ Назад", callback_data="menu_back")],
-            ])
-        )
+    # === Домен: KPI (menu_kpi, kpi_masters, kpi_objects, kpi_red — сессия 16) ===
+    from handlers.commands.callbacks.kpi import try_handle as _try_kpi_cb
+    if await _try_kpi_cb(data, query, context):
         return
-
-    if data == "kpi_masters":
-        from modules.kpi import get_master_kpi, format_master_kpi
-        masters = get_master_kpi(30)
-        text = format_master_kpi(masters, 30)
-        try:
-            await query.edit_message_text(
-                text,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ К KPI", callback_data="menu_kpi")],
-                    [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-                ])
-            )
-        except Exception as e:
-            if 'not modified' not in str(e).lower():
-                raise
-        return
-
-    if data == "kpi_objects":
-        from modules.kpi import get_object_health, format_object_health
-        objects = get_object_health()
-        text = format_object_health(objects)
-        try:
-            await query.edit_message_text(
-                text,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ К KPI", callback_data="menu_kpi")],
-                    [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-                ])
-            )
-        except Exception as e:
-            if 'not modified' not in str(e).lower():
-                raise
-        return
-
-    if data == "kpi_red":
-        from modules.kpi import get_red_zone, format_red_zone
-        items = get_red_zone()
-        text = format_red_zone(items)
-        try:
-            await query.edit_message_text(
-                text,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ К KPI", callback_data="menu_kpi")],
-                    [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-                ])
-            )
-        except Exception as e:
-            if 'not modified' not in str(e).lower():
-                raise
-        return
-
+    
     if data == "menu_finance":
         await query.edit_message_text(
             format_finance_summary(),
