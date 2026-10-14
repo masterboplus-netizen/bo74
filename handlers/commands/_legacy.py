@@ -283,32 +283,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await _try_kpi_cb(data, query, context):
         return
     
-    if data == "menu_finance":
-        await query.edit_message_text(
-            format_finance_summary(),
-            reply_markup=finance_keyboard()
-        )
+    # === Домен: Финансы (menu_finance, finobj_* — сессия 16) ===
+    from handlers.commands.callbacks.finance import try_handle as _try_finance_cb
+    if await _try_finance_cb(data, query, context):
         return
-
-    if data.startswith("finobj_"):
-        object_id = int(data.split("_")[1])
-        obj = get_object(object_id)
-        if not obj:
-            await query.edit_message_text("❌ Объект не найден")
-            return
-        f = get_finance_summary(object_id)
-        await query.edit_message_text(
-            f"💰 **{obj['name']}**\n\n"
-            f"Доход: {format_money(f['income'])} ₽\n"
-            f"Расход: {format_money(f['expense'])} ₽\n"
-            f"Баланс: {format_money(f['balance'])} ₽",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⬅️ К финансам", callback_data="menu_finance")]
-            ]),
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
-
+    
     if data == "menu_personal":
         await query.edit_message_text(
             format_personal_summary('month'),
