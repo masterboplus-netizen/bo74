@@ -401,82 +401,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
-    if data.startswith("report_summary_"):
-        period = data.replace("report_summary_", "")
-        from modules.reports import get_summary_report, format_summary_report
-        report = get_summary_report(period)
-        text = format_summary_report(report)
-        await query.edit_message_text(
-            text,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⬅️ К отчётам", callback_data="menu_reports")],
-                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-            ])
-        )
+    # === Домен: reports (report_summary_*, report_closed_*, report_open, report_choose_object, report_obj_*) — вынесено в callbacks/reports.py ===
+    from handlers.commands.callbacks.reports import try_handle as _try_reports_cb
+    if await _try_reports_cb(data, query, context):
         return
 
-    if data == "report_closed_week" or data == "report_closed_month":
-        period = 'week' if data == "report_closed_week" else 'month'
-        from modules.reports import get_closed_tasks_report, format_closed_tasks_report
-        report = get_closed_tasks_report(period)
-        text = format_closed_tasks_report(report)
-        await query.edit_message_text(
-            text,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⬅️ К отчётам", callback_data="menu_reports")],
-                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-            ])
-        )
-        return
-
-    if data == "report_open":
-        from modules.reports import get_open_tasks_report, format_open_tasks_report
-        report = get_open_tasks_report()
-        text = format_open_tasks_report(report)
-        await query.edit_message_text(
-            text,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⬅️ К отчётам", callback_data="menu_reports")],
-                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-            ])
-        )
-        return
-
-    if data == "report_choose_object":
-        objs = get_all_objects()
-        buttons = []
-        for o in objs:
-            buttons.append([InlineKeyboardButton(
-                f"🏗️ {o['name']}",
-                callback_data=f"report_obj_{o['id']}_month"
-            )])
-        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data="menu_reports")])
-        await query.edit_message_text(
-            "📊 Выбери объект для отчёта (за месяц):",
-            reply_markup=InlineKeyboardMarkup(buttons)
-        )
-        return
-
-    if data.startswith("report_obj_"):
-        # report_obj_<obj_id>_<period>
-        parts = data.replace("report_obj_", "").split("_")
-        obj_id = int(parts[0])
-        period = parts[1] if len(parts) > 1 else 'month'
-        from modules.reports import get_object_report, format_object_report
-        report = get_object_report(obj_id, period)
-        text = format_object_report(report)
-        await query.edit_message_text(
-            text,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📅 За неделю", callback_data=f"report_obj_{obj_id}_week")],
-                [InlineKeyboardButton("📅 За месяц", callback_data=f"report_obj_{obj_id}_month")],
-                [InlineKeyboardButton("📅 За всё время", callback_data=f"report_obj_{obj_id}_all")],
-                [InlineKeyboardButton("📸 Фото объекта", callback_data=f"objphotos_{obj_id}")],
-                [InlineKeyboardButton("⬅️ К отчётам", callback_data="menu_reports")],
-                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-            ])
-        )
-        return
 
     if data == "menu_dashboard":
         from modules.dashboard_link import get_dashboard_url
