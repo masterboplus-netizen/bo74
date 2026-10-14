@@ -3,7 +3,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 
 from db import get_connection
-from modules.objects import get_object
+from modules.objects import get_object, get_all_objects
 from modules.finance import get_finance_summary
 
 
@@ -1161,6 +1161,91 @@ async def try_handle(data: str, query, context) -> bool:
             )
         except Exception:
             pass
+        return True
+
+# === est_compare : сравнение объектов — шаг 1 (выбор A) ===
+    if data == "est_compare":
+        objs = get_all_objects()[:10]
+        kb_rows = []
+        for o in objs:
+            kb_rows.append([InlineKeyboardButton(
+                "🏗️ " + str(o.get("name"))[:40],
+                callback_data="est_cmp_a_" + str(o["id"])
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")])
+        try:
+            await query.edit_message_text(
+                "⚖️ Сравнение смет объектов" + chr(10) + chr(10) + "Выбери первый объект:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_compare: " + str(e), flush=True)
+        return True
+
+    # === est_cmp_a_* : выбор второго объекта ===
+    if data.startswith("est_cmp_a_"):
+        a_id = int(data.replace("est_cmp_a_", ""))
+        objs = get_all_objects()[:10]
+        kb_rows = []
+        for o in objs:
+            if o["id"] == a_id:
+                continue
+            kb_rows.append([InlineKeyboardButton(
+                "🏗️ " + str(o.get("name"))[:40],
+                callback_data="est_cmp_b_" + str(a_id) + "_" + str(o["id"])
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="est_compare")])
+        try:
+            await query.edit_message_text(
+                "⚖️ Теперь выбери второй объект:",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_cmp_a: " + str(e), flush=True)
+        return True
+
+    # === est_cmp_b_* : отчёт сравнения A и B ===
+    if data.startswith("est_cmp_b_"):
+        parts = data.replace("est_cmp_b_", "").split("_")
+        try:
+            a_id = int(parts[0])
+            b_id = int(parts[1])
+        except (ValueError, IndexError):
+            return True
+        from core.object_estimate import calc_object_estimate
+        a = calc_object_estimate(a_id) or {}
+        b = calc_object_estimate(b_id) or {}
+        aobj = get_object(a_id)
+        bobj = get_object(b_id)
+        aname = aobj.get("name") if aobj else "?"
+        bname = bobj.get("name") if bobj else "?"
+        lines = ["⚖️ Сравнение смет", ""]
+        lines.append("🏗️ " + str(aname)[:30])
+        lines.append("   Материалы: " + str(a.get("total_materials", 0)))
+        lines.append("   Работы:    " + str(a.get("total_works", 0)))
+        lines.append("   ЭОМ:       " + str(a.get("elec", 0)))
+        lines.append("   Сантехника:" + str(a.get("plumbing", 0)))
+        lines.append("   ВСЕГО:     " + str(a.get("total", 0)))
+        lines.append("")
+        lines.append("🏗️ " + str(bname)[:30])
+        lines.append("   Материалы: " + str(b.get("total_materials", 0)))
+        lines.append("   Работы:    " + str(b.get("total_works", 0)))
+        lines.append("   ЭОМ:       " + str(b.get("elec", 0)))
+        lines.append("   Сантехника:" + str(b.get("plumbing", 0)))
+        lines.append("   ВСЕГО:     " + str(b.get("total", 0)))
+        lines.append("")
+        diff = b.get("total", 0) - a.get("total", 0)
+        lines.append("📊 Разница: " + str(round(diff, 2)) + " ₽")
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ К сравнению", callback_data="est_compare")],
+                    [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
+                ])
+            )
+        except Exception as e:
+            print("est_cmp_b: " + str(e), flush=True)
         return True
 
     return False
