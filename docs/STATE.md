@@ -1,70 +1,58 @@
-# STATE — сессия 16 (13.10.2026, финал)
+# STATE — сессия 16 (13-14.10.2026)
 
-## Итог: 7 коммитов, всё на GitHub
+## Итог: 26 коммитов, handle_callback разрезан на 48%
 
-### Сделано
+### Главное достижение
 
-1. **`parse_date` → `utils.py`** (`ddf37d1`)
-   - 156 строк из `_legacy.py` (3086-3241)
-   - `_legacy.py`: 3242 → 3084 строк
+handle_callback (был 2055 строк) разрезан на домены:
+- handlers/commands/callbacks/tasks.py — my_tasks, by_assignee, byassigned_
+- handlers/commands/callbacks/estimates.py — 30+ поддоменов смет
+- handlers/commands/callbacks/kpi.py — menu_kpi, kpi_masters, kpi_objects, kpi_red
+- handlers/commands/callbacks/finance.py — menu_finance, finobj_
 
-2. **`UnboundLocalError obj` в `parser.py`** (`c9ec6eb`)
-   - Строки 80-84 вне `if found:` → падали при пустом found
-   - Добавлен `else:` с `get_all_objects()`
-
-3. **`tools/show_structure.py`** (`c9ec6eb`)
-   - Структура файла с отступами цифрой
-   - **Правило:** перед патчем — только этот инструмент, не `cat -A`
-
-4. **Кнопка «Без объекта» + фикс add_task callback** (`f7fd1d5`)
-   - `make_choose_keyboard`: кнопка «🚫 Без объекта»
-   - `handle_choose_object`: переписан парсинг (add_task с `_`)
-
-5. **`docs/STATE.md`, `docs/HANDOFF.md`** (`22cc944`, `da05e3e`)
-
-6. **Clean title в parser.py** (`a838670`)
-   - `title` вычисляется выше — общий для обеих веток
-   - `'title': title` в choose_object — без дубля «Задача»
-
-7. **Handler `objtasks_none`** (`fbbd5c5`)
-   - Показывает задачи без объекта по кнопке «🚫 Без объекта»
+_legacy.py: 3102 -> 1625 строк (-48%).
 
 ### Работает в боте
 
-- ✅ Задача без объекта (ID 41, 43)
-- ✅ Кнопка «🚫 Без объекта (2)» в «🏗️ По объектам»
-- ✅ Задачи без объекта в `/tasks`
-- ✅ Title очищен
+- Создание задач без объекта (ID 41, 43)
+- Кнопка Без объекта в По объектам
+- KPI мастеров, объектов, Красная зона
+- Финансы, Сравнение смет объектов
+- Экспорт смет (PDF, TXT, CSV)
+- Редактирование цен, расписания, закупки
+- Периоды, правила ЭОМ
 
-### ⚠️ Известные проблемы (техдолг)
+### Техдолг
 
-**1. Бардак с клавиатурами задач** — 4-5 разных функций:
-- `tasks.py:66` — `tasks_command()` (/tasks)
-- `tasks.py:186` — `tasks_keyboard()` (мёртвая, никто не зовёт)
-- `tasks.py:210` — `tasks_keyboard_by_object()`
-- `_legacy.py:1576` — «Мои задачи / По объектам / По исполнителям»
-- **Плюс:** `tasks.py:117-125` — мы вставили кнопку в tasks_command, но `/tasks` её не показывает (непонятно почему)
+1. menu_tasks — дубликат tasks_command (работает)
+2. _est_pending_price устанавливается, но не читается
+3. Дашборд смет показывает 0
 
-**Нужно:** рефакторинг UI задач — единая функция, единая клавиатура, кнопка «Без объекта» — везде.
+### Что осталось в _legacy.py (~600 строк)
 
-**2. Косметика title:**
-- Опечатка «позонить» вместо «позвонить» при задаче с объектом — баг в парсере (какой-то `.replace` режет).
+- menu_objects
+- personal_* + exp_type_* + personal_cat_ + objexp_*
+- menu_reports + report_*
+- menu_dashboard, menu_help
+- objtasks_none, objtasks_, objfin_, objphotos_, obj_
+- menu_tasks (дубликат)
 
-## Что дальше (приоритет следующей сессии)
+### Что дальше
 
-1. **Рефакторинг UI задач** — единая клавиатура (2-3 часа, средний риск).
-2. **`handle_callback` (2055 строк) → `callbacks/`** по доменам.
-3. **`handle_text` (975) → `text/`** по доменам.
-4. **`rooms.py` (7638) → `rooms/`** по доменам.
-5. **Опечатка «позонить»** в parser.py.
-6. **`modules/` → `core/`** через шим.
+1. Оставшиеся 600 строк -> callbacks/personal.py, reports.py, objects.py
+2. rooms.py (7638) -> rooms/ по доменам
+3. Рефакторинг menu_tasks (убрать дубликат)
+4. handle_text (975) -> text/ по доменам
+5. Универсальный приёмник файлов
+6. modules/ -> core/ через шим
 
-## Инструменты
+### Инструменты
 
-- `python3 tools/show_structure.py <file> <from> <to>` — структура с отступами цифрой.
-- `pkill -9 -f 'python bot.py' ; sleep 2 ; ./start_all.sh ; sleep 5 ; tail -5 bot_start.log` — перезапуск.
+python3 tools/show_structure.py <file> <from> <to>
 
-## Состояние
+pkill -9 -f python bot.py ; sleep 2 ; ./start_all.sh ; sleep 5 ; tail -5 bot_start.log
 
-- Бот работает, `bot_start.log` чист.
-- Все коммиты на GitHub (HEAD: `fbbd5c5`).
+### Состояние
+
+Бот работает, bot_start.log чист.
+HEAD: df7306a. Все коммиты на GitHub.
