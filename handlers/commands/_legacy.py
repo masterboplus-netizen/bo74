@@ -1031,19 +1031,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"⚠️ RETURN на строке 2746", flush=True)
         return
 
-    # Обработка создания нового объекта
-    if context.user_data.get('waiting_for') == 'new_object':
-        object_id = create_object(text, user_id=update.effective_user.id)
-        context.user_data['waiting_for'] = None
-        await update.message.reply_text(
-            f"✅ Объект «{text}» создан",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🏗️ К объекту", callback_data=f"obj_{object_id}")],
-                [InlineKeyboardButton("🏗️ К объектам", callback_data="menu_objects")],
-                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-            ])
-        )
-        print(f"⚠️ RETURN на строке 2760", flush=True)
+    # === Домен: objects (new_object) — вынесено в text/objects.py ===
+    from handlers.commands.text.objects import try_handle as _try_objects_text
+    if await _try_objects_text(update, context, text):
         return
 
     # Обработка ввода даты для задачи
