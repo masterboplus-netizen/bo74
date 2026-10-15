@@ -1036,66 +1036,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await _try_objects_text(update, context, text):
         return
 
-    # Обработка ввода даты для задачи
-    setdate_task = context.user_data.get('setdate_task')
-    if setdate_task:
-        d = parse_date(text)
-        if d:
-            # Сохраняем во временное хранилище, ждём подтверждения
-            context.user_data['confirm_date'] = {
-                'task_id': setdate_task,
-                'date': d.strftime('%Y-%m-%d'),
-                'date_str': d.strftime('%d.%m.%Y')
-            }
-            context.user_data['setdate_task'] = None
-            # Получаем задачу
-            conn = get_connection()
-            c = conn.cursor()
-            c.execute("SELECT t.title, o.name as obj FROM tasks t LEFT JOIN objects o ON t.object_id = o.id WHERE t.id = ?", (setdate_task,))
-            row = c.fetchone()
-            conn.close()
-            title = row['title'] if row else '?'
-            obj = row['obj'] if row and row['obj'] else 'Без объекта'
-            await update.message.reply_text(
-                f"📋 {title}\n{obj}\n\n📅 Дата: {d.strftime('%d.%m.%Y')}\n\nПодтверди:",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("✅ Да", callback_data=f"confirmdate_yes_{setdate_task}_{d.strftime('%Y-%m-%d')}")],
-                    [InlineKeyboardButton("❌ Нет", callback_data=f"confirmdate_no_{setdate_task}")],
-                ])
-            )
-            # Автоподтверждение через 30 секунд
-            context.job_queue.run_once(
-                auto_confirm_date,
-                30,
-                data={
-                    'chat_id': update.effective_chat.id,
-                    'task_id': setdate_task,
-                    'date': d.strftime('%Y-%m-%d'),
-                    'date_str': d.strftime('%d.%m.%Y')
-                },
-                name=f"confirm_{setdate_task}"
-            )
-            print(f"⚠️ RETURN на строке 2801", flush=True)
-            return
-        else:
-            await update.message.reply_text(
-                "❌ Не понял дату. Попробуй: «завтра», «20.09», «пн», «+3»"
-            )
-            print(f"⚠️ RETURN на строке 2806", flush=True)
-            return
-
-    # Обработка переименования задачи
-    rename_task = context.user_data.get('rename_task')
-    if rename_task:
-        conn = get_connection()
-        c = conn.cursor()
-        c.execute("UPDATE tasks SET title = ? WHERE id = ?", (text, rename_task))
-        conn.commit()
-        conn.close()
-        context.user_data['rename_task'] = None
-        await update.message.reply_text(f"✅ Задача переименована: «{text}»")
-        print(f"⚠️ RETURN на строке 2818", flush=True)
+    # === Домен: tasks (setdate_task, rename_task) — вынесено в text/tasks.py ===
+    from handlers.commands.text.tasks import try_handle as _try_tasks_text
+    if await _try_tasks_text(update, context, text):
         return
+
 
     result = parse_message(text)
     action = result.get('action')
