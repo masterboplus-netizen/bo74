@@ -1,7 +1,53 @@
 # STATE — где мы сейчас
 
-> Дата: 2026-10-15. Сессия: 17.
-> HEAD: 881e4e6 — refactor(text): extract rooms domain
+> Дата: 2026-10-16. Сессия: 18.
+> HEAD: 524b5b8 — refactor(estimates): move est_bykind/est_kind_ into callbacks/estimates.py
+
+---
+
+## 0. СЕССИЯ 18 — ЧТО СДЕЛАНО
+
+### 0.1 Fallback вынесен в text/fallback.py
+
+- Строки 595–653 из _legacy.py → text/fallback.py
+- Функция: `async def try_handle(update, context, text) -> bool`
+- Удалены 2 debug-принта (UNKNOWN)
+- Коммит: `9ab3b33`
+
+### 0.2 est_bykind / est_kind_ перенесены в estimates.py
+
+- Блок est_bykind + est_kind_ из _legacy.py → try_handle в callbacks/estimates.py
+- Вставлен перед финальным return False (на уровне try_handle, отступ 4)
+- **Грабли:** при неверном отступе (8 вместо 4) блок попадает внутрь `if est_cmp_b_` — не срабатывает
+- Коммит: `524b5b8`
+
+### 0.3 Создана авто-карта кода
+
+- `tools/map_scan.py` — сканер колбэков и роутеров
+- `docs/CODE_MAP_AUTO.md` — авто-карта (428 строк)
+- Реестр: 375 callback-префиксов, 8 роутеров, 8 text-доменов
+- **Найдено 2 «дыры»:** recognize_receipt (реальный баг), choose_obj_add_task (артефакт f-строки)
+
+### 0.4 Метрики сессии 18
+
+| Файл | Начало 18 | Сейчас |
+|---|---|---|
+| _legacy.py | 656 | 555 |
+| estimates.py | 1252 | 1299 |
+| text/fallback.py | — | создан |
+| tools/map_scan.py | — | создан |
+| docs/CODE_MAP_AUTO.md | — | 428 строк |
+
+Удалено ~20 debug-принтов.
+
+### 0.5 TODO на сессию 19
+
+1. **Баг:** `recognize_receipt` — обработчик `handle_recognize_receipt` есть (receipt.py:10), но не подключён к handle_callback.
+2. **Дубли роутеров:** в _legacy.py 5 вызовов `_try_estimates_cb` (строки ~94–115). Схлопнуть в 1.
+3. **Русификация:** object_kind/status (`active` → «Активный», `waiting` → «В ожидании»).
+4. **est_import** (CSV-прайс) → отдельный домен marketplaces.
+5. **rooms.py** (7638 строк) — God Object. Резать постепенно.
+6. **Сканер:** игнорировать f-строки-артефакты (типа `choose_obj_add_task_none_none_none`).
 
 ---
 
