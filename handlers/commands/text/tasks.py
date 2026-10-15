@@ -10,6 +10,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from db import get_connection
 from handlers.commands.utils import parse_date
+from modules.tasks import create_task
 from handlers.commands.tasks import auto_confirm_date
 
 
@@ -56,13 +57,13 @@ async def try_handle(update, context, text: str) -> bool:
                 name=f"confirm_{setdate_task}"
             )
             print(f"⚠️ RETURN на строке 2801", flush=True)
-            return
+            return True
         else:
             await update.message.reply_text(
                 "❌ Не понял дату. Попробуй: «завтра», «20.09», «пн», «+3»"
             )
             print(f"⚠️ RETURN на строке 2806", flush=True)
-            return
+            return True
 
     # Обработка переименования задачи
     rename_task = context.user_data.get('rename_task')
@@ -75,6 +76,25 @@ async def try_handle(update, context, text: str) -> bool:
         context.user_data['rename_task'] = None
         await update.message.reply_text(f"✅ Задача переименована: «{text}»")
         print(f"⚠️ RETURN на строке 2818", flush=True)
-        return
+        return True
+
+    # Обработка создания новой задачи
+    if context.user_data.get('waiting_for') == 'new_task_text':
+        obj = context.user_data.get('pending_task_object')
+        if obj:
+            tid = create_task(obj['id'], text)
+            context.user_data['waiting_for'] = None
+            context.user_data['pending_task_object'] = None
+            await update.message.reply_text(
+                f"✅ Задача «{text}» добавлена в «{obj['name']}»",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📋 К задаче", callback_data=f"task_{tid}")],
+                    [InlineKeyboardButton("📋 К задачам", callback_data="menu_tasks")],
+                    [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
+                ])
+            )
+            print(f"⚠️ RETURN на строке 2660", flush=True)
+            return True
+
 
     return False

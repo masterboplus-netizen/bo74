@@ -921,115 +921,21 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"⚠️ RETURN на строке 2643", flush=True)
         return
 
-    # Обработка создания новой задачи
-    if context.user_data.get('waiting_for') == 'new_task_text':
-        obj = context.user_data.get('pending_task_object')
-        if obj:
-            tid = create_task(obj['id'], text)
-            context.user_data['waiting_for'] = None
-            context.user_data['pending_task_object'] = None
-            await update.message.reply_text(
-                f"✅ Задача «{text}» добавлена в «{obj['name']}»",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📋 К задаче", callback_data=f"task_{tid}")],
-                    [InlineKeyboardButton("📋 К задачам", callback_data="menu_tasks")],
-                    [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-                ])
-            )
-            print(f"⚠️ RETURN на строке 2660", flush=True)
-            return
-
-    # Обработка создания нового расхода
-    if context.user_data.get('waiting_for') == 'new_expense_text':
-        obj = context.user_data.get('pending_expense_object')
-        if not obj:
-            context.user_data['waiting_for'] = None
-            await update.message.reply_text(
-                "❌ Объект потерялся. Начни заново: «➕ Добавить» → «💰 Расход»",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("➕ Добавить", callback_data="menu_add")],
-                    [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-                ])
-            )
-            print(f"⚠️ RETURN на строке 2674", flush=True)
-            return
-        if obj:
-            amount = parse_amount(text)
-            if amount:
-                category = None
-                _tl = text.lower()
-                for _c in ["материалы", "еда", "транспорт", "инструмент"]:
-                    if _c in _tl:
-                        category = _c
-                        break
-                if category:
-                    add_expense(obj['id'], amount, category)
-                    context.user_data['waiting_for'] = None
-                    context.user_data['pending_expense_object'] = None
-                    await update.message.reply_text(
-                        f"\u2705 Расход {amount} \u20bd ({category}) добавлен в \u00ab{obj['name']}\u00bb",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("\U0001F4B0 К финансам", callback_data="menu_finance")],
-                            [InlineKeyboardButton("\U0001F3E0 Меню", callback_data="menu_back")],
-                        ])
-                    )
-                    print(f"⚠️ RETURN на строке 2695", flush=True)
-                    return
-                else:
-                    context.user_data['pending_expense'] = {
-                        'object_id': obj['id'],
-                        'object_name': obj['name'],
-                        'amount': amount
-                    }
-                    context.user_data['waiting_for'] = 'new_expense_category'
-                    await update.message.reply_text(
-                        f"\U0001F4B0 {amount} \u20bd в \u00ab{obj['name']}\u00bb. За что?",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("\U0001F9F1 Материалы", callback_data="cat_материалы")],
-                            [InlineKeyboardButton("\U0001F354 Еда", callback_data="cat_еда")],
-                            [InlineKeyboardButton("\U0001F697 Транспорт", callback_data="cat_транспорт")],
-                            [InlineKeyboardButton("\U0001F527 Инструмент", callback_data="cat_инструмент")],
-                            [InlineKeyboardButton("\U0001F4E6 Прочее", callback_data="cat_прочее")],
-                        ])
-                    )
-                    print(f"⚠️ RETURN на строке 2713", flush=True)
-                    return
-            else:
-                await update.message.reply_text(
-                    "\u274c Не понял сумму. Попробуй: \u00ab500\u00bb"
-                )
-                print(f"⚠️ RETURN на строке 2718", flush=True)
-                return
-
-    # Обработка личного расхода
-    if context.user_data.get('waiting_for') == 'personal_expense_text':
-        # Разбираем: "300 еда" или "1500 инструмент"
-        parts = text.strip().split(maxsplit=1)
-        amount_str = parts[0] if parts else ''
-        category = parts[1].strip() if len(parts) > 1 else 'прочее'
-        # Убираем лишние символы
-        amount_str = amount_str.replace('₽', '').replace('р', '').replace('руб', '').strip()
-        try:
-            amount = int(amount_str)
-        except ValueError:
-            amount = parse_amount(text)
-            if not amount:
-                await update.message.reply_text(
-                    "❌ Не понял сумму. Попробуй: «300 еда»"
-                )
-                print(f"⚠️ RETURN на строке 2736", flush=True)
-                return
-        add_personal_expense(amount, category)
-        context.user_data['waiting_for'] = None
-        await update.message.reply_text(
-            f"✅ Личный расход {amount} ₽ ({category}) записан",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💸 К личным", callback_data="menu_personal")],
-                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-            ])
-        )
-        print(f"⚠️ RETURN на строке 2746", flush=True)
+    # === Домен: tasks (new_task_text) — вынесено в text/tasks.py ===
+    from handlers.commands.text.tasks import try_handle as _try_tasks_text
+    if await _try_tasks_text(update, context, text):
         return
+
+    # === Домен: finances (new_expense_text) — вынесено в text/finances.py ===
+    from handlers.commands.text.finances import try_handle as _try_fin_text
+    if await _try_fin_text(update, context, text):
+        return
+
+    # === Домен: personal (personal_expense_text) — вынесено в text/personal.py ===
+    from handlers.commands.text.personal import try_handle as _try_pers_text
+    if await _try_pers_text(update, context, text):
+        return
+
 
     # === Домен: objects (new_object) — вынесено в text/objects.py ===
     from handlers.commands.text.objects import try_handle as _try_objects_text
