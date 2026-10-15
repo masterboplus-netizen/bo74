@@ -14,12 +14,21 @@ from db import get_connection
 from modules.objects import get_object
 from modules.tasks import get_tasks_by_object
 from modules.finance import get_finance_summary, add_expense
-from handlers.commands.objects import object_detail_keyboard
+from handlers.commands.objects import object_detail_keyboard, choose_object_for_expense_keyboard_amount
 from handlers.commands.tasks import tasks_keyboard_by_object
 
 
 async def try_handle(data: str, query, context) -> bool:
     """Обрабатывает объектные callback-и. True = обработано."""
+
+    if data.startswith("exp_type_object_"):
+        amount = int(data.replace("exp_type_object_", ""))
+        context.user_data['pending_object_expense_amount'] = amount
+        await query.edit_message_text(
+            f"🏗️ Расход {amount} ₽\n\nВыбери объект:",
+            reply_markup=choose_object_for_expense_keyboard_amount(amount)
+        )
+        return True
 
     if data.startswith("objexp_obj_"):
         # objexp_obj_<amount>_<obj_id>

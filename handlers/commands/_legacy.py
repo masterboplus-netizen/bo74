@@ -293,15 +293,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await _try_personal_cb(data, query, context):
         return
 
-    if data.startswith("exp_type_object_"):
-        amount = int(data.replace("exp_type_object_", ""))
-        context.user_data['pending_object_expense_amount'] = amount
-        await query.edit_message_text(
-            f"🏗️ Расход {amount} ₽\n\nВыбери объект:",
-            reply_markup=choose_object_for_expense_keyboard_amount(amount)
-        )
-        return
-
     # === Домен: misc (personal_cat_ — временно, до personal.py) — вынесено в callbacks/misc.py ===
     from handlers.commands.callbacks.misc import try_handle as _try_misc_cb
     if await _try_misc_cb(data, query, context):
