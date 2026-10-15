@@ -468,28 +468,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # === ДАЛЬШЕ — СТАРАЯ ЛОГИКА (новые задачи, расходы и т.д.) ===
 
-    # === ПРИВЕТСТВИЯ ===
-    greetings = ['привет', 'здравствуй', 'здравствуйте', 'хай', 'hi', 'hello', 'ку', 'добрый день', 'доброе утро', 'добрый вечер']
-    text_low = text.lower().strip()
-    if text_low in greetings or any(text_low.startswith(g) for g in greetings):
-        user_name = update.effective_user.first_name or ''
-        await update.message.reply_text(
-            f"👋 Привет{', ' + user_name if user_name else ''}!\n\n"
-            f"Я *Бо 7.7* — помощник по стройке.\n\n"
-            f"Что умею:\n"
-            f"• «потратил 5000 на материалы Переделкино-2»\n"
-            f"• «добавь в Арбат положить паркет»\n"
-            f"• «500» — спрошу личный/объект\n"
-            f"• /objects, /tasks, /finance — списки\n"
-            f"• /help — все команды",
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🏠 Меню", callback_data="menu_back")],
-                [InlineKeyboardButton("⚙️ Помощь", callback_data="menu_help")],
-            ])
-        )
-        print(f"⚠️ RETURN на строке 2643", flush=True)
-        return
 
     # === Домен: tasks (new_task_text) — вынесено в text/tasks.py ===
     from handlers.commands.text.tasks import try_handle as _try_tasks_text
