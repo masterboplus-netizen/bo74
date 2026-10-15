@@ -1,58 +1,153 @@
-# STATE — сессия 16 (13-14.10.2026)
+# STATE — где мы сейчас
 
-## Итог: 26 коммитов, handle_callback разрезан на 48%
+> Дата: 2026-10-15. Сессия: 17.
+> HEAD: 881e4e6 — refactor(text): extract rooms domain
 
-### Главное достижение
+---
 
-handle_callback (был 2055 строк) разрезан на домены:
-- handlers/commands/callbacks/tasks.py — my_tasks, by_assignee, byassigned_
-- handlers/commands/callbacks/estimates.py — 30+ поддоменов смет
-- handlers/commands/callbacks/kpi.py — menu_kpi, kpi_masters, kpi_objects, kpi_red
-- handlers/commands/callbacks/finance.py — menu_finance, finobj_
+## 1. СЕССИЯ 17 — ЧТО СДЕЛАНО
 
-_legacy.py: 3102 -> 1625 строк (-48%).
+### 1.1 callbacks/ — 8 файлов
 
-### Работает в боте
+- tasks.py (164)
+- estimates.py (~700)
+- kpi.py (79)
+- finance.py (~180)
+- objects.py (163)
+- reports.py (118)
+- misc.py (62)
+- personal.py (99)
 
-- Создание задач без объекта (ID 41, 43)
-- Кнопка Без объекта в По объектам
-- KPI мастеров, объектов, Красная зона
-- Финансы, Сравнение смет объектов
-- Экспорт смет (PDF, TXT, CSV)
-- Редактирование цен, расписания, закупки
-- Периоды, правила ЭОМ
+### 1.2 text/ — новый пакет (7 файлов)
 
-### Техдолг
+- objects.py (30) — new_object
+- tasks.py (100) — setdate_task, rename_task, new_task_text
+- finances.py (81) — new_expense_text
+- personal.py (48) — personal_expense_text
+- crm.py (348) — crm_*, activity_*
+- misc.py (154) — room_rename, obj_rename, panel_comp_rating, task_progress, приветствия
+- rooms.py (39) — room_name, wall_question
 
-1. menu_tasks — дубликат tasks_command (работает)
-2. _est_pending_price устанавливается, но не читается
-3. Дашборд смет показывает 0
+Паттерн: async def try_handle(update, context, text) -> bool
 
-### Что осталось в _legacy.py (~600 строк)
+### 1.3 Метрики
 
-- menu_objects
-- personal_* + exp_type_* + personal_cat_ + objexp_*
-- menu_reports + report_*
-- menu_dashboard, menu_help
-- objtasks_none, objtasks_, objfin_, objphotos_, obj_
-- menu_tasks (дубликат)
+| Файл | Начало 17 | Сейчас |
+|---|---|---|
+| _legacy.py | 1625 | 656 |
+| Дельта | — | −60% |
 
-### Что дальше
+Удалено ~15 debug-принтов.
 
-1. Оставшиеся 600 строк -> callbacks/personal.py, reports.py, objects.py
-2. rooms.py (7638) -> rooms/ по доменам
-3. Рефакторинг menu_tasks (убрать дубликат)
-4. handle_text (975) -> text/ по доменам
-5. Универсальный приёмник файлов
-6. modules/ -> core/ через шим
+---
 
-### Инструменты
+## 2. КОММИТЫ СЕССИИ 17 (15.10.2026)
 
-python3 tools/show_structure.py <file> <from> <to>
+- e556625 — exp_type_object_ → objects.py
+- 5b7a4e3 — new_object → text/objects.py
+- 3b1a959 — setdate_task + rename_task → text/tasks.py
+- ab48e7c — parse_amount в finances & personal
+- abccbc9 — CRM → text/crm.py
+- 3418ac9 — misc domain
+- 14ad561 — bare returns + dup router fix
+- 881e4e6 — rooms domain (HEAD)
+- e68db11 — objects (callbacks)
+- 7dda2e9 — reports (callbacks)
+- b3cc223 — restore menu_reports
+- 9a17111 — misc (callbacks)
 
-pkill -9 -f python bot.py ; sleep 2 ; ./start_all.sh ; sleep 5 ; tail -5 bot_start.log
+---
 
-### Состояние
+## 3. ЧТО ОСТАЛОСЬ В _legacy.py (~656 строк)
 
-Бот работает, bot_start.log чист.
-HEAD: df7306a. Все коммиты на GitHub.
+- handle_callback (роутеры) — ~320
+- handle_text: parse_message + старая логика — ~115
+- Умный fallback — ~60
+- Уточнение объекта — ~10
+- Служебное
+
+---
+
+## 4. ГРАБЛИ СЕССИИ 17
+
+### 4.1 Локальные импорты внутри функций
+При выносе блока — все импорты, что были внутри функций, остаются внутри. Без импорта в шапке — NameError.
+
+**Решение:** AST-проверка после каждого выноса.
+
+### 4.2 Голые return вместо return True
+Голый `return` возвращает None. `if await try_handle():` не сработает → fallback вызывается ещё раз → «задвоение».
+
+**Решение:** regex `re.sub(r'^(\s+)return$', r'\1return True', c, flags=re.MULTILINE)`
+
+### 4.3 Дубли роутеров
+Если добавить второй вызов try_handle для того же домена — блок сработает дважды.
+
+**Решение:** grep по `_try_..._cb` перед вставкой.
+
+### 4.4 Плавающие номера строк
+После каждого выноса номера сдвигаются. Всегда свежий grep/sed перед патчем.
+
+---
+
+## 5. ПРАВИЛА (обновлено)
+
+- Один патч → py_compile → рестарт → тест → коммит.
+- Перед патчем — свежий grep + sed.
+- Порядок патча: бэкап → create new file → правка _legacy.py → py_compile → AST → test.
+- AST-проверка импортов — обязательна.
+- Regex return → return True — обязательна.
+- После выноса — grep на дубли роутеров.
+
+---
+
+## 6. ПРОЕКТЫ РЯДОМ
+
+### Хераборина (worklog-app/)
+- Репо: github.com/masterboplus-netizen/worklog
+- Хостинг: https://masterboplus-netizen.github.io/worklog/
+- Стек: HTML/CSS/JS + AES-256-GCM + Service Worker (PWA)
+- PIN: 201186 (не в git!)
+- Данные: worklog.json → encrypt.py → data.encrypted.json
+
+Функции:
+- Дашборд: время + сообщения + скрины + метрики
+- Дневник: сессии по датам
+- Проекты: 11 фаз с прогресс-барами, раскрытие
+- Baseline: 336ч с июля
+- Gap-правило: 15 минут
+
+## 7. СЛЕДУЮЩИЕ ШАГИ
+
+1. Доделать _legacy.py — fallback, parse_message, уборка (~200 строк).
+2. rooms.py (7638 строк) — God Object, большой рефакторинг.
+3. modules/ → core/ — 176 импортов через шим.
+4. Универсальный приёмник файлов (handle_document).
+5. Редизайн Хераборины — графики, аналитика, месяцы.
+
+## 8. ОТКАТ (шпаргалка)
+
+- git checkout path/to/file.py — откат файла.
+- cp file.py.bak_NAME file.py — из бэкапа.
+- Бэкапы в handlers/commands/_legacy.py.bak_*.
+
+## 9. СТРУКТУРА handlers/commands/
+
+### callbacks/ — 8 файлов
+tasks.py, estimates.py, kpi.py, finance.py, objects.py, reports.py, misc.py, personal.py.
+
+### text/ — 7 файлов
+objects.py, tasks.py, finances.py, personal.py, crm.py, misc.py, rooms.py.
+
+### _legacy.py — 656 строк (было 1625)
+
+## 10. ПРОВЕРЕННЫЕ ИНСТРУМЕНТЫ
+
+- AST-проверка импортов (после каждого выноса).
+- Regex: return → return True (обязательно).
+- Grep на дубли роутеров: grep "_try_" _legacy.py.
+- Cache-bust для Хераборины: index.html ?v=N.
+
+---
+
+Конец STATE.md (обновлён 2026-10-15, сессия 17)
