@@ -1248,4 +1248,52 @@ async def try_handle(data: str, query, context) -> bool:
             print("est_cmp_b: " + str(e), flush=True)
         return True
 
+
+    # === est_bykind / est_kind_* : объекты по типу ===
+    if data == "est_bykind":
+        objs = get_all_objects()
+        groups = {}
+        for o in objs:
+            k = (o.get("object_kind") or o.get("status") or "прочее").lower()
+            groups.setdefault(k, []).append(o)
+        lines = ["🏷 Объекты по типу:", ""]
+        for kind, items in groups.items():
+            lines.append(f"   ▸ {kind}: {len(items)} шт.")
+        lines.append("")
+        lines.append("Выбери тип:")
+        kb_rows = []
+        for kind, items in list(groups.items())[:8]:
+            kb_rows.append([InlineKeyboardButton(
+                "🏷 " + str(kind)[:30] + " (" + str(len(items)) + ")",
+                callback_data="est_kind_" + kind[:30]
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")])
+        try:
+            await query.edit_message_text(
+                chr(10).join(lines),
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_bykind: " + str(e), flush=True)
+    return True
+
+    if data.startswith("est_kind_"):
+        kind = data.replace("est_kind_", "")
+        objs = get_all_objects()
+        matched = [o for o in objs if ((o.get("object_kind") or o.get("status") or "прочее").lower()[:30] == kind)]
+        kb_rows = []
+        for o in matched[:20]:
+            kb_rows.append([InlineKeyboardButton(
+                "🏗️ " + str(o.get("name"))[:40],
+                callback_data="est_object_" + str(o["id"])
+            )])
+        kb_rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="est_bykind")])
+        try:
+            await query.edit_message_text(
+                "🏷 " + kind + " (" + str(len(matched)) + "):",
+                reply_markup=InlineKeyboardMarkup(kb_rows)
+            )
+        except Exception as e:
+            print("est_kind: " + str(e), flush=True)
+    return True
     return False
