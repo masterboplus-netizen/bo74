@@ -13,15 +13,19 @@
 import re
 from pathlib import Path
 
-ROOTS = [Path("handlers/commands"), Path("interfaces/telegram")]
+ROOTS = [Path("handlers/commands"), Path("interfaces/telegram"), Path(".")]
 
 
 def scan_files():
+    skip_dirs = {".venv", "venv", "worklog-app", "node_modules", ".git", "__pycache__", "tests"}
     for root in ROOTS:
         if not root.exists():
             continue
         for py in sorted(root.rglob("*.py")):
-            if ".bak" in py.name or "__pycache__" in str(py):
+            parts = set(py.parts)
+            if parts & skip_dirs:
+                continue
+            if ".bak" in py.name:
                 continue
             yield py
 
@@ -51,6 +55,13 @@ def collect_callbacks():
                 raw = m.group(1).rstrip("_")
                 if raw:
                     handler.setdefault(raw, []).append((py.name, i))
+            # bot.py: CallbackQueryHandler(..., pattern="^prefix")
+            for m in re.finditer(r'pattern=["\']\^?([a-z_|()\\.^$]+)', line):
+                raw = m.group(1)
+                # Берём только простой префикс (первое слово до | или ( или $)
+                raw = re.split(r'[|()$\\]', raw)[0]
+                if raw and raw.isascii() and raw.strip('_'):
+                    handler.setdefault(raw.rstrip('_'), []).append((py.name, i))
     return btn, handler
 
 

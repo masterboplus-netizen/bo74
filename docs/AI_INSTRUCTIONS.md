@@ -146,3 +146,31 @@ cd ~/workspace/worklog-app && git add worklog.json data.encrypted.json && git co
 ---
 
 *Обновлять при изменении процессов.*
+
+---
+
+## 7. АРХИТЕКТУРА РОУТИНГА (3 УРОВНЯ)
+
+Callback'и в Бо обрабатываются в ТРЁХ местах:
+
+### Уровень 1: bot.py — прямые CallbackQueryHandler
+app.add_handler(CallbackQueryHandler(handler, pattern="^prefix"))
+
+Здесь живут: recognize_receipt, receipt_*, photofilt_*, cat_*, task_*,
+photo_*, menu_add, add_*, choose_obj_*, confirmdate_*.
+Парсится сканером map_scan.py (с версии 3).
+
+---
+
+### Уровень 2: _legacy.py → callbacks/*.py
+handle_callback → _try_<domain>_cb(data, query, context).
+Роутеры: tasks, estimates, kpi, finance, objects, reports, misc, personal.
+
+### Уровень 3: _legacy.py → text/*.py
+handle_text → try_handle(update, context, text).
+Домены: fallback, crm, finances, misc, objects, personal, rooms, tasks.
+
+### ПРАВИЛО
+- Прежде чем искать роутер — обнови карту: python3 tools/map_scan.py > docs/CODE_MAP_AUTO.md
+- Если префикса нет в карте — возможно, он в bot.py (см. выше).
+- НЕ патчить роутеры вслепую — сначала grep по всем трём уровням.
