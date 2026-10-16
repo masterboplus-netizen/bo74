@@ -1,7 +1,49 @@
 # STATE — где мы сейчас
 
-> Дата: 2026-10-16. Сессия: 18.
-> HEAD: 90f42e4 — refactor(marketplaces): extract est_import — refactor(estimates): move est_bykind/est_kind_ into callbacks/estimates.py
+> Дата: 2026-10-16. Сессия: 19.
+> HEAD: 341e747 — fix(map_scan): skip backup artifacts + regenerate map.
+
+---
+
+## 0. СЕССИЯ 19 — ГИГИЕНА РЕПО + ФИЛЬТР СКАНЕРА (16.10.2026)
+
+### 0.1 Удаление tracked-бэкапов
+
+- 6 файлов через `git rm`: `backups/rooms_pre_1_*` (2), `core/measures.py.crashed_*`,
+  `handlers/commands.py.before_fix_*`, `handlers/commands.py.broken_*`,
+  `interfaces/telegram/rooms.py.crashed_*`.
+- Коммит: `ddc9718`.
+
+### 0.2 .gitignore +6 масок
+
+Добавлено: `*_pre_1_*`, `*.before_*`, `*.broken_*`, `*.crashed_*`, `*.v1`, `backups/`.
+Коммит: `b98d02d`.
+
+### 0.3 Удаление .v1 (tracked) + 195 untracked-бэкапов
+
+- `handlers/commands.py.v1` и `modules/parser.py.v1` — были **tracked** (не попали в первый grep).
+- Удалено 195 untracked-бэкапов с диска через `find ... -delete`.
+- Коммит: `de249e7`.
+
+### 0.4 tools/map_scan.py — фильтр бэкапов
+
+- Строка 28: расширена проверка `if any(s in py.name for s in (".bak", "_pre_1_", ".before_", ".broken_", ".crashed_", ".v1"))`.
+- `CODE_MAP_AUTO.md`: 428 → 417 строк, 379 префиксов, 0 дыр.
+- Коммит: `341e747`.
+
+### 0.5 ГРАБЛИ СЕССИИ 19
+
+1. **venv/bin/python3 bot.py** — обязательно. Системный `python3` → `ModuleNotFoundError: reportlab`.
+2. **`.v1` не был в первом grep** (маска не включала) → сюрприз в `git status` после удаления.
+3. **nohup без setsid** — логи бота сыпятся в Shell, приглашение зависает. Решение: `setsid ... < /dev/null &`.
+
+### 0.6 TODO на сессию 20
+
+1. **rooms.py** (7638 строк) — God Object. Резать постепенно.
+2. **Домен marketplaces** — расширить (Ozon, WB, Леруа).
+3. **`009_contracts.sql.bak`** — восстановить из git history или подтвердить ненужность.
+4. **`M bo72.db`** — решить: убрать БД из git / добавить в .gitignore.
+5. **Прочие TODO** — см. ROADMAP этапы 2-3.
 
 ---
 

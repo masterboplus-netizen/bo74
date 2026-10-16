@@ -5,7 +5,7 @@
 > **⚠️ СНАЧАЛА ПРОЧТИ:** `docs/AI_INSTRUCTIONS.md`
 > Там — правила, Хераборина (учёт времени), грабли, инструменты.
 > Без него ты будешь задавать Andrey тупые вопросы и он взбесится.
-> Дата: 2026-10-15. Сессия: 17.
+> Дата: 2026-10-16. Сессия: 19 (закрыта).
 
 ---
 
@@ -13,6 +13,7 @@
 
 «Бо 8.1» — цифровая экосистема для строительной компании. Telegram-бот + SQLite + Python 3.13.
 Стек: python-telegram-bot[job-queue], APScheduler, reportlab, openpyxl, rapidfuzz.
+Запуск: `venv/bin/python3 bot.py` (системный python3 → ModuleNotFoundError: reportlab).
 Andrey — автор, работает с мобилы через Replit Shell + VPN, скрин = 40 строк.
 AI — ведёт патчи, следит за архитектурой, разбивает God Objects.
 
@@ -51,24 +52,30 @@ AI — ведёт патчи, следит за архитектурой, раз
 
 ---
 
-## 3. ГДЕ МЫ (сессия 18, 16.10.2026)
+## 3. ГДЕ МЫ (сессия 19, 16.10.2026)
 
-HEAD: 021e93d — docs(state): session 17.
+HEAD: 341e747 — fix(map_scan): skip backup artifacts + regenerate map.
 
 ### Рефакторинг завершён:
 
 **callbacks/** — 8 файлов (tasks, estimates, kpi, finance, objects, reports, misc, personal).
 
-**text/** — 7 файлов (objects, tasks, finances, personal, crm, misc, rooms).
+**text/** — 8 файлов (objects, tasks, finances, personal, crm, misc, rooms, fallback).
 
-**Метрики (сессия 18):**
-- _legacy.py: 656 → 555.
+**Гигиена репо (сессия 19):**
+- Удалено 8 tracked-бэкапов (crashed, broken, before_fix, pre_1, .v1) — коммиты ddc9718, de249e7.
+- Удалено 195 untracked-бэкапов с диска.
+- .gitignore +6 масок (b98d02d): *_pre_1_*, *.before_*, *.broken_*, *.crashed_*, *.v1, backups/.
+- tools/map_scan.py: фильтр бэкапов (341e747).
+
+**Метрики:**
+- _legacy.py: 601 → 487.
 - text/fallback.py: создан (fallback вынесен).
 - estimates.py: 1252 → 1299 (est_bykind/est_kind_ перенесены).
-- tools/map_scan.py: создан (авто-карта).
-- docs/CODE_MAP_AUTO.md: 428 строк.
-- Найдено 375 callback-префиксов, 2 "дыры" (1 баг — recognize_receipt).
-- Удалено ~20 debug-принтов.
+- tools/map_scan.py: обновлён (фильтр бэкапов).
+- docs/CODE_MAP_AUTO.md: 417 строк (было 428).
+- Найдено 379 callback-префиксов, 0 «дыр».
+- callbacks/marketplaces.py: создан (est_import вынесен).
 
 ---
 
