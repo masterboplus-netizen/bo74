@@ -58,58 +58,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
+    print(f"DEBUG cb: {data!r}", flush=True)
 
     # === Домен: tasks (вынесено в callbacks/tasks.py, сессия 16) ===
     from handlers.commands.callbacks.tasks import try_handle as _try_tasks_cb
     if await _try_tasks_cb(data, query, context):
         return
     
-    # === Домен: estimates (est_csv_*, est_period_*, est_per_*, est_rules_*, est_kpi_* — сессия 16) ===
-    from handlers.commands.callbacks.estimates import try_handle as _try_estimates_cb
-    if await _try_estimates_cb(data, query, context):
-        return
-    
-    # === Домен: estimates (est_pdf_*, est_export_*, est_extra_* — сессия 16) ===
-    from handlers.commands.callbacks.estimates import try_handle as _try_estimates_cb
-    if await _try_estimates_cb(data, query, context):
-        return
-    
-    # === Домен: estimates (est_prices_*, est_price_edit_* — сессия 16) ===
-    from handlers.commands.callbacks.estimates import try_handle as _try_estimates_cb
-    if await _try_estimates_cb(data, query, context):
-        return
-    
-    # === Домен: estimates (est_sched_*, est_where_* — сессия 16) ===
-    from handlers.commands.callbacks.estimates import try_handle as _try_estimates_cb
-    if await _try_estimates_cb(data, query, context):
-        return
-    
-    # === Домен: estimates (est_buy_*, est_status_*, est_setstatus_* — сессия 16) ===
-    from handlers.commands.callbacks.estimates import try_handle as _try_estimates_cb
-    if await _try_estimates_cb(data, query, context):
-        return
-    
-    # === Домен: estimates (est_allwork_*, est_allmat_* — сессия 16) ===
-    from handlers.commands.callbacks.estimates import try_handle as _try_estimates_cb
-    if await _try_estimates_cb(data, query, context):
-        return
-    
-    # === Домен: estimates (est_object_floors_*, est_object_rooms_* — сессия 16) ===
-    from handlers.commands.callbacks.estimates import try_handle as _try_estimates_cb
-    if await _try_estimates_cb(data, query, context):
-        return
-    
-    # === Домен: estimates (est_room_per_*, est_room_sess_*, est_room_mat_*, est_room_work_* — сессия 16) ===
-    from handlers.commands.callbacks.estimates import try_handle as _try_estimates_cb
-    if await _try_estimates_cb(data, query, context):
-        return
-    
-    # === Домен: estimates (menu_estimates — сессия 16) ===
-    from handlers.commands.callbacks.estimates import try_handle as _try_estimates_cb
-    if await _try_estimates_cb(data, query, context):
-        return
-    
-    # === Домен: estimates (est_compare, est_cmp_a_, est_cmp_b_ — сессия 16) ===
+    # === Домен: estimates (est_* — сессия 16) ===
     from handlers.commands.callbacks.estimates import try_handle as _try_estimates_cb
     if await _try_estimates_cb(data, query, context):
         return
@@ -136,15 +92,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print("est_import: " + str(e), flush=True)
         return
 
-    # === Домен: estimates (est_kpi_* вынесено в callbacks/estimates.py, сессия 16) ===
-    from handlers.commands.callbacks.estimates import try_handle as _try_estimates_cb
-    if await _try_estimates_cb(data, query, context):
-        return
     
-    # === Домен: estimates (est_export_all, est_dash, est_all, est_search — сессия 16) ===
-    from handlers.commands.callbacks.estimates import try_handle as _try_estimates_cb
-    if await _try_estimates_cb(data, query, context):
-        return
     
     if data == "menu_objects":
         objs = get_all_objects()
