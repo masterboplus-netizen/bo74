@@ -71,25 +71,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
 
-    if data == "est_import":
-        from core.marketplaces import generate_csv_template
-        try:
-            path = generate_csv_template("/tmp/prices_template.csv")
-            with open(path, "rb") as f:
-                await query.message.chat.send_document(
-                    document=f,
-                    filename="prices_template.csv",
-                    caption=(
-                        "📥 Шаблон прайса (CSV)" + chr(10) + chr(10) +
-                        "Заполни и пришли обратно файл — импортирую цены." + chr(10) + chr(10) +
-                        "Формат: component_type;rating;poles;brand;price;currency;market_url;market_sku"
-                    ),
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")],
-                    ])
-                )
-        except Exception as e:
-            print("est_import: " + str(e), flush=True)
+    # === Домен: marketplaces (est_import) — сессия 18 ===
+    from handlers.commands.callbacks.marketplaces import try_handle as _try_market_cb
+    if await _try_market_cb(data, query, context):
         return
 
     
