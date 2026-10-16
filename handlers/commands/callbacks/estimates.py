@@ -7,6 +7,18 @@ from modules.objects import get_object, get_all_objects
 from modules.finance import get_finance_summary
 
 
+from core.spec import status_label, object_kind_label
+
+_KNOWN_STATUSES = ("active", "waiting", "paused", "completed", "closed", "archived")
+
+
+def _kind_label(kind):
+    """Русский ярлык для kind из est_bykind."""
+    if kind in _KNOWN_STATUSES:
+        return status_label(kind)
+    return object_kind_label(kind)
+
+
 async def try_handle(data: str, query, context) -> bool:
     """Обработка callback'ов домена Сметы."""
 
@@ -1258,13 +1270,13 @@ async def try_handle(data: str, query, context) -> bool:
             groups.setdefault(k, []).append(o)
         lines = ["🏷 Объекты по типу:", ""]
         for kind, items in groups.items():
-            lines.append(f"   ▸ {kind}: {len(items)} шт.")
+            lines.append(f"   ▸ {_kind_label(kind)}: {len(items)} шт.")
         lines.append("")
         lines.append("Выбери тип:")
         kb_rows = []
         for kind, items in list(groups.items())[:8]:
             kb_rows.append([InlineKeyboardButton(
-                "🏷 " + str(kind)[:30] + " (" + str(len(items)) + ")",
+                "🏷 " + _kind_label(kind)[:30] + " (" + str(len(items)) + ")",
                 callback_data="est_kind_" + kind[:30]
             )])
         kb_rows.append([InlineKeyboardButton("⬅️ К сметам", callback_data="menu_estimates")])
@@ -1275,7 +1287,7 @@ async def try_handle(data: str, query, context) -> bool:
             )
         except Exception as e:
             print("est_bykind: " + str(e), flush=True)
-    return True
+        return True
 
     if data.startswith("est_kind_"):
         kind = data.replace("est_kind_", "")
@@ -1295,5 +1307,5 @@ async def try_handle(data: str, query, context) -> bool:
             )
         except Exception as e:
             print("est_kind: " + str(e), flush=True)
-    return True
+        return True
     return False
