@@ -25,7 +25,7 @@ def scan_files():
             parts = set(py.parts)
             if parts & skip_dirs:
                 continue
-            if ".bak" in py.name:
+            if any(s in py.name for s in (".bak", "_pre_1_", ".before_", ".broken_", ".crashed_", ".v1")):
                 continue
             yield py
 
