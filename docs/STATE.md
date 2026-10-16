@@ -1,7 +1,7 @@
 # STATE — где мы сейчас
 
 > Дата: 2026-10-16. Сессия: 18.
-> HEAD: 524b5b8 — refactor(estimates): move est_bykind/est_kind_ into callbacks/estimates.py
+> HEAD: 90f42e4 — refactor(marketplaces): extract est_import — refactor(estimates): move est_bykind/est_kind_ into callbacks/estimates.py
 
 ---
 
@@ -40,14 +40,26 @@
 
 Удалено ~20 debug-принтов.
 
-### 0.5 TODO на сессию 19
+### 0.5 ИТОГИ сессии 18 (10 коммитов)
 
-1. **Баг:** `recognize_receipt` — обработчик `handle_recognize_receipt` есть (receipt.py:10), но не подключён к handle_callback.
-2. **Дубли роутеров:** в _legacy.py 5 вызовов `_try_estimates_cb` (строки ~94–115). Схлопнуть в 1.
-3. **Русификация:** object_kind/status (`active` → «Активный», `waiting` → «В ожидании»).
-4. **est_import** (CSV-прайс) → отдельный домен marketplaces.
-5. **rooms.py** (7638 строк) — God Object. Резать постепенно.
-6. **Сканер:** игнорировать f-строки-артефакты (типа `choose_obj_add_task_none_none_none`).
+| # | Задача | Статус | Коммит |
+|---|---|---|---|
+| 1 | recognize_receipt не подключён | ✅ работает через bot.py | — |
+| 2 | Дубли `_try_estimates_cb` (3→1) | ✅ | cfb2af3 |
+| 3 | Русификация object_kind/status | ✅ | 12d629b |
+| 4 | est_import → marketplaces | ✅ | 90f42e4 |
+| 5 | fallback → text/fallback.py | ✅ | 9ab3b33 |
+| 6 | est_bykind → estimates.py | ✅ | 524b5b8 |
+| 7 | map_scan.py + lint_routers.py | ✅ | b76a99f, 0c20083, 63c2fdb |
+| 8 | AI_INSTRUCTIONS.md | ✅ | 1f758eb |
+
+### 0.6 TODO на сессию 19
+
+1. **rooms.py** (7638 строк) — God Object. Резать постепенно.
+2. **Сканер (косметика):** не выделять f-строки-артефакты отдельными префиксами.
+3. **Домен marketplaces** — расширить (Ozon, WB, Леруа: парсинг цен, автообновление).
+4. **`duplicate_if`** в estimates.py — не баг (общий + специфичный префикс).
+5. **Прочие TODO** — см. ROADMAP этапы 2-3.
 
 ---
 
