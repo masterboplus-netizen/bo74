@@ -34,3 +34,11 @@ part_*.txt
 *.db-shm
 *.db-wal
 worklog-app/
+
+# Бэкапы-артефакты (сессия 19)
+*_pre_1_*
+*.before_*
+*.broken_*
+*.crashed_*
+*.v1
+backups/
