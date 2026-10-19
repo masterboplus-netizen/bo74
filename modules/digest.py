@@ -7,7 +7,9 @@ from modules.objects import get_all_objects
 
 def build_morning_digest() -> str:
     """Утренний дайджест: задачи на сегодня + просрочка + объекты"""
-    today = date.today()
+    from datetime import datetime, timezone, timedelta
+    MSK = timezone(timedelta(hours=3))
+    today = datetime.now(MSK).date()
     today_str = today.strftime('%Y-%m-%d')
 
     conn = get_connection()
@@ -76,7 +78,9 @@ def build_morning_digest() -> str:
 
 def build_evening_survey() -> str:
     """Вечерний опрос: что сделал за день"""
-    today = date.today()
+    from datetime import datetime, timezone, timedelta
+    MSK = timezone(timedelta(hours=3))
+    today = datetime.now(MSK).date()
     today_str = today.strftime('%Y-%m-%d')
     today_str_ru = today.strftime('%d.%m.%Y')
 
@@ -157,13 +161,15 @@ async def send_evening_survey(context):
 
 def log_digest_sent(digest_type: str):
     """Записывает факт отправки дайджеста"""
-    from datetime import date
+    from datetime import datetime, timezone, timedelta
+    MSK = timezone(timedelta(hours=3))
+    today_msk = datetime.now(MSK).date().strftime('%Y-%m-%d')
     conn = get_connection()
     c = conn.cursor()
     try:
         c.execute(
             "INSERT OR IGNORE INTO digest_log (digest_type, sent_at) VALUES (?, ?)",
-            (digest_type, date.today().strftime('%Y-%m-%d'))
+            (digest_type, today_msk)
         )
         conn.commit()
     except Exception as e:
@@ -173,12 +179,14 @@ def log_digest_sent(digest_type: str):
 
 def was_digest_sent_today(digest_type: str) -> bool:
     """Проверяет, отправлялся ли дайджест сегодня"""
-    from datetime import date
+    from datetime import datetime, timezone, timedelta
+    MSK = timezone(timedelta(hours=3))
+    today_msk = datetime.now(MSK).date().strftime('%Y-%m-%d')
     conn = get_connection()
     c = conn.cursor()
     c.execute(
         "SELECT COUNT(*) FROM digest_log WHERE digest_type = ? AND sent_at = ?",
-        (digest_type, date.today().strftime('%Y-%m-%d'))
+        (digest_type, today_msk)
     )
     count = c.fetchone()[0]
     conn.close()
