@@ -73,15 +73,6 @@ def get_archived_objects() -> list:
     return [{'id': r[0], 'code': r[1], 'name': r[2], 'status': r[3]} for r in rows]
 
 
-def update_object_status(object_id: int, status: str):
-    if status not in VALID_STATUSES:
-        raise ValueError(f'Недопустимый статус: {status}. Доступно: {VALID_STATUSES}')
-    conn = get_connection()
-    c = conn.cursor()
-    c.execute("UPDATE objects SET status = ? WHERE id = ?", (status, object_id))
-    conn.commit()
-    conn.close()
-
 def update_object(object_id, name=None, address=None, budget=None, status=None):
     """Обновляет поля объекта. None — не менять."""
     conn = get_connection()

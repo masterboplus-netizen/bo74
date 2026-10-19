@@ -4270,8 +4270,8 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
     if data.startswith("obj_archive_"):
         object_id = int(data.replace("obj_archive_", ""))
         try:
-            from modules.objects import update_object_status
-            update_object_status(object_id, "archived")
+            from modules.objects import update_object
+            update_object(object_id, status="archived")
         except Exception as e:
             print("archive: " + str(e), flush=True)
         await _safe_edit(query, "📦 Объект в архиве", InlineKeyboardMarkup([
@@ -4282,8 +4282,8 @@ async def handle_rooms_callback(update: Update, context: ContextTypes.DEFAULT_TY
     if data.startswith("obj_unarchive_"):
         object_id = int(data.replace("obj_unarchive_", ""))
         try:
-            from modules.objects import update_object_status
-            update_object_status(object_id, "active")
+            from modules.objects import update_object
+            update_object(object_id, status="active")
         except Exception as e:
             print("unarchive: " + str(e), flush=True)
         await _safe_edit(query, "✅ Объект восстановлен", InlineKeyboardMarkup([
