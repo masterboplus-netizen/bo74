@@ -4,15 +4,7 @@ from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
 from db import get_connection
-from modules.objects import create_object, get_all_objects, get_object_by_name, get_object
-from modules.tasks import create_task, get_active_tasks, close_task, get_tasks_by_object
-from modules.finance import add_expense, get_finance_summary
-from modules.parser import parse_message, parse_amount
-from modules.personal import add_personal_expense
-from config import ADMIN_IDS
-from handlers.onboarding import ask_role, role_menu_keyboard
-from handlers.commands.start import _help_text, help_command
-from handlers.commands.personal import personal_command, format_personal_summary, personal_keyboard
+from modules.objects import get_all_objects
 from handlers.commands.receipt import (
     handle_recognize_receipt, handle_receipt_save, handle_receipt_object,
     handle_receipt_category, handle_receipt_show
@@ -44,10 +36,6 @@ from handlers.commands.choose_expense import (
     handle_choose_object, make_choose_keyboard,
     expense_category_keyboard, handle_category
 )
-from handlers.commands.document import handle_document
-from handlers.commands.keyboards import main_menu_keyboard
-from handlers.commands.add_menu import handle_add_menu
-from handlers.commands.utils import parse_date
 
 
 _est_extra_pending = None
@@ -360,12 +348,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await _try_parse_text(update, context, text):
         return
 
-    result = parse_message(text)
-    action = result.get('action')
 
 
 
-    # === CRM: ожидаем бюджет сделки ===
 
     # === УМНЫЙ FALLBACK: вынесен в text/fallback.py ===
     from handlers.commands.text.fallback import try_handle as _try_fallback_text
