@@ -44,7 +44,14 @@ async def handle_choose_object(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     if intent == 'expense' and amount:
-        # Сохраняем в user_data и спрашиваем категорию
+        # Если категория уже известна (из parse_message) — сразу записываем
+        if category and category not in ('прочее', 'none', ''):
+            add_expense(obj['id'], amount, category)
+            await query.edit_message_text(
+                f"✅ Расход {amount} ₽ ({category}) добавлен в «{obj['name']}»"
+            )
+            return
+        # Иначе — спрашиваем категорию
         context.user_data['pending_expense'] = {
             'object_id': obj['id'],
             'object_name': obj['name'],
