@@ -60,13 +60,16 @@ def parse_message(text: str) -> dict:
 
     found = find_all_objects_in_text(text)
     # === ДОБАВИТЬ ЗАДАЧУ ===
-    add_words = ['добавь', 'добавить', 'задача', 'новая задача', 'надо', 'нужно']
+    add_words = ['добавь', 'добавить', 'задача', 'задачу', 'новая задача', 'новую задачу', 'надо', 'нужно']
     # Вычисляем title заранее (для обеих ветвей — с объектом и без)
     title = text_lower
     for w in add_words:
         title = title.replace(w, '')
-    for w in ['в', 'на', 'для']:
-        title = title.replace(w, '', 1)
+    for w in ['новая', 'новую']:
+        title = title.replace(w, '')
+    import re as _re_title
+    title = _re_title.sub(r'\b(в|на|для)\b', ' ', title, count=1)
+    title = _re_title.sub(r'\s+', ' ', title).strip()
     title = title.strip() or text
     if any(w in text_lower for w in add_words):
             if found:
