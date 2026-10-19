@@ -203,10 +203,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
-    # === Домен: objects (objtasks_none, objtasks_*, objfin_*, objphotos_*, obj_*) — вынесено в callbacks/objects.py ===
-    from handlers.commands.callbacks.objects import try_handle as _try_objects_cb
-    if await _try_objects_cb(data, query, context):
-        return
 
 
 
