@@ -1,102 +1,3 @@
-        state['step_name'] = 'niche_count'
-        _save_wall_draft(context, room_id)
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("1", callback_data=f"wall_niche_count_1_{room_id}")],
-            [InlineKeyboardButton("2", callback_data=f"wall_niche_count_2_{room_id}")],
-            [InlineKeyboardButton("3", callback_data=f"wall_niche_count_3_{room_id}")],
-            [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
-        ])
-        await update.message.reply_text("🕳 *Сколько нишей на этой стене?*", parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
-        return
-    if first == 'rounded':
-        state['step_name'] = 'rounded'
-        _save_wall_draft(context, room_id)
-        context.user_data['waiting_for'] = 'wall_rounded_radius'
-        await update.message.reply_text("🔄 *Закругление*\n\n📏 Радиус (СМ):", parse_mode=ParseMode.MARKDOWN)
-        return
-    if first == 'wavy':
-        # Уже прошли через 3 точки — пропускаем
-        if state.get('plane') == 'wavy':
-            state['remaining_steps'] = remaining[1:] if len(remaining) > 1 else []
-            _save_wall_draft(context, room_id)
-            await _after_angle_from_update(update, context, room_id)
-            return
-        context.user_data['wall_room_id'] = room_id
-        state['plane'] = 'wavy'
-        state['step_name'] = 'plane_wavy'
-        _save_wall_draft(context, room_id)
-        context.user_data['waiting_for'] = 'wall_round_plane_bottom'
-        await update.message.reply_text("📐 *Разная по высоте*\n\n📏 Введи НИЗ стены (СМ):", parse_mode=ParseMode.MARKDOWN)
-        return
-    if first == 'hidden':
-        state['step_name'] = 'hidden'
-        _save_wall_draft(context, room_id)
-        context.user_data['waiting_for'] = 'wall_hidden_note'
-        await update.message.reply_text("🔧 *Скрытые коммуникации*\n\nОпиши что и где:", parse_mode=ParseMode.MARKDOWN)
-        return
-    await _wall_save_and_next_from_update(update, context, room_id, state.get('step_num') or 1)
-
-
-async def _wall_save_and_next_from_update(update, context, room_id, step):
-    """Сохранение стены (версия для update.message)."""
-    state = _get_wall_state(context)
-    pos = WALL_NAMES.get(step, '?')
-    length = state.get('length') or 0
-    angle = state.get('angle_value') or 90
-    angle_method = state.get('angle_method') or '90'
-    flags = state.get('flags') or {}
-
-    note_parts = []
-    if flags.get('rounded'): note_parts.append('Закругление')
-    if flags.get('wavy'): note_parts.append('Разная по высоте')
-    if flags.get('hidden'): note_parts.append('Скрытые коммуникации')
-    note = '; '.join(note_parts) if note_parts else None
-
-    try: session_id = ensure_session(room_id)
-    except Exception: session_id = None
-
-    kwargs = {
-        'label': f'Стена {pos}', 'wall_pos': pos, 'length': length,
-        'unit': 'см', 'order_num': step,
-        'angle_value': angle, 'angle_method': angle_method,
-        'session_id': session_id,
-    }
-    if flags.get('rounded'): kwargs['has_rounded'] = 1
-    if flags.get('wavy'): kwargs['is_wavy'] = 1
-    if flags.get('hidden'):
-        kwargs['has_hidden'] = 1
-        kwargs['hidden_note'] = note
-    if note: kwargs['note'] = note
-
-    measure_id = add_measure(room_id, 'wall', **kwargs)
-
-    niches = state.get('niches') or []
-    if niches and measure_id:
-        for n in niches:
-            try:
-                add_niche(
-                    measure_id=measure_id, room_id=room_id,
-                    width_bottom=n.get('width'),
-                    width_top=n.get('width_top') or n.get('width'),
-                    height=n.get('height'),
-                    depth_bottom=n.get('depth'),
-                    depth_top=n.get('depth_top') or n.get('depth'),
-                    session_id=session_id,
-                )
-            except Exception as e:
-                print(f"⚠️ add_niche: {e}", flush=True)
-
-    _clear_wall_draft(room_id)
-    next_step = step + 1 if step < 4 else 1
-    _reset_wall_state(context, keep_step_num=next_step)
-
-    summary = f"✅ *Стена {step} ({pos}) сохранена!*\n\n📏 Длина: {length} см\n📐 Угол: {angle}°"
-    if niches: summary += f"\n🕳 Нишей: {len(niches)}"
-
-    if step >= 4:
-        complete_walls_round(room_id)
-        areas = calculate_room_areas(room_id)
-        text = summary + "\n\n🎉 *Все 4 стены замерены!*\n\n"
         if areas.get('walls_net') is not None:
             text += f"📊 Площадь стен: {areas['walls_net']} м²\n"
         if areas.get('floor'):
@@ -123,7 +24,7 @@ async def _show_wall_openings_from_update(update, context, room_id):
     """Экран проёмов через update.message."""
     state = _get_wall_state(context)
     step = state.get('step_num') or 1
-    pos = WALL_NAMES.get(step, '?')
+    pos = core_spec.get_wall_name(step, core_spec.get_total_walls())
     length_cm = state.get('length') or 0
     openings = get_openings_by_wall(room_id, pos)
     text = f"🧱 *Стена {step} — {pos}*\n📏 Длина: *{length_cm} см*\n\n"
@@ -199,7 +100,7 @@ async def _show_wall_length_from_update(update, context, room_id, step):
     _save_wall_draft(context, room_id)
     context.user_data['waiting_for'] = 'wall_round_length'
 
-    pos = WALL_NAMES.get(step, '?')
+    pos = core_spec.get_wall_name(step, core_spec.get_total_walls())
     spec_step = spec.get_wall_step('length', n=step, pos=pos)
     if spec_step:
         caption = f"{spec_step.get('title', '')}\n\n{spec_step.get('subtitle', '')}"
@@ -397,104 +298,3 @@ async def handle_comm_callback(query, context, data):
             'offset_y': '📏 *Новая высота от пола* (СМ):',
             'diameter': '⭕ *Новый диаметр* (мм):',
             'voltage': '⚡ *Напряжение* (220 или 380):',
-        }
-        prompt = prompts.get(field, '✏️ Новое значение:')
-        try:
-            await query.edit_message_text(
-                f"{prompt}\n\n_Напиши и отправь._",
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"comm_show_{comm_id}")],
-                ])
-            )
-        except Exception:
-            pass
-        return True
-
-    if data.startswith("comm_skip_"):
-        # Пропуск шагов — сохраняем как есть
-        parts = data.replace("comm_skip_", "").split("_")
-        # comm_skip_size_<room> / comm_skip_diam_<room> / comm_skip_depth_<room>
-        try:
-            room_id = int(parts[-1])
-        except ValueError:
-            return True
-    # === ПРИВЯЗКА К ГРУППЕ ЭОМ ===
-    if data.startswith("comm_group_unset_"):
-        comm_id = int(data.replace("comm_group_unset_", ""))
-        try:
-            if core_elec:
-                core_elec.unassign_point_from_group(comm_id)
-        except Exception as e:
-            print(f"⚠️ unassign_point_from_group: {e}", flush=True)
-        await _show_comm_card(query, context, comm_id)
-        return True
-
-    if data.startswith("comm_group_set_"):
-        parts = data.replace("comm_group_set_", "").rsplit("_", 1)
-        comm_id = int(parts[0])
-        group_id = int(parts[1])
-        try:
-            if core_elec:
-                core_elec.assign_comm_to_group(comm_id, group_id)
-        except Exception as e:
-            print(f"⚠️ assign_comm_to_group: {e}", flush=True)
-        await _show_comm_card(query, context, comm_id)
-        return True
-
-    if data.startswith("comm_group_"):
-        comm_id = int(data.replace("comm_group_", ""))
-        c = get_comm(comm_id)
-        if not c:
-            try:
-                await query.edit_message_text("❌ Коммуникация не найдена")
-            except Exception:
-                pass
-            return True
-        _room_obj = get_room(c.get('room_id')) if c.get('room_id') else None
-        _floor_id = _room_obj.get('floor_id') if _room_obj else None
-        if not _floor_id:
-            try:
-                await query.edit_message_text(
-                    "⚠️ Комната не привязана к помещению.\n\nСначала привяжи комнату к этажу через «🏠 Помещения».",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("⬅️ Назад", callback_data=f"comm_show_{comm_id}")],
-                    ])
-                )
-            except Exception:
-                pass
-            return True
-        try:
-            groups = core_elec.get_groups_by_floor(_floor_id) if core_elec else []
-        except Exception as e:
-            print(f"⚠️ get_groups_by_floor: {e}", flush=True)
-            groups = []
-        if not groups:
-            try:
-                await query.edit_message_text(
-                    "⚠️ На этом этаже пока нет групп ЭОМ.\n\nСоздай группу через «⚡ Группы этажа».",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("⬅️ Назад", callback_data=f"comm_show_{comm_id}")],
-                    ])
-                )
-            except Exception:
-                pass
-            return True
-        label = get_comm_type_label(c.get('comm_type'))
-        buttons = []
-        for g in groups:
-            g_name = (g.get('name') or f"#{g['id']}")[:30]
-            w = int(g.get('load_watt') or 0)
-            buttons.append([InlineKeyboardButton(
-                f"⚡ {g_name} · {w}Вт",
-                callback_data=f"comm_group_set_{comm_id}_{g['id']}"
-            )])
-        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"comm_show_{comm_id}")])
-        try:
-            await query.edit_message_text(
-                f"📋 *Привязка к группе этажа*\n\n🔧 {label}\n🧱 Стена: {c.get('wall') or '?'}\n\nВыбери группу:",
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=InlineKeyboardMarkup(buttons)
-            )
-        except Exception:
-            pass

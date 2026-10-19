@@ -1,102 +1,3 @@
-    obj = get_object(object_id)
-    obj_name = obj['name'] if obj else '—'
-    text = f"📦 *Комнаты «{obj_name}»*\n\n{format_rooms_list(object_id)}"
-    kb = rooms_list_keyboard(object_id)
-    if update.callback_query:
-        try:
-            await update.callback_query.edit_message_text(
-                text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
-            )
-        except Exception:
-            try:
-                await update.callback_query.message.delete()
-            except Exception:
-                pass
-            await update.callback_query.message.chat.send_message(
-                text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
-            )
-    else:
-        await update.message.reply_text(
-            text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
-        )
-
-
-async def show_room_card(update, context, room_id):
-    """Показ карточки комнаты."""
-    room = get_room(room_id)
-    if not room:
-        if update.callback_query:
-            await update.callback_query.edit_message_text("❌ Комната не найдена")
-        else:
-            await update.message.reply_text("❌ Комната не найдена")
-        return
-    text = format_room_card(room_id)
-    kb = room_card_keyboard(room_id)
-
-    if update.callback_query:
-        query = update.callback_query
-        has_photo = bool(getattr(query.message, "photo", None))
-        if has_photo:
-            try:
-                await query.message.delete()
-            except Exception:
-                pass
-            await query.message.chat.send_message(
-                text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
-            )
-        else:
-            try:
-                await query.edit_message_text(
-                    text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
-                )
-            except Exception as e:
-                if "message is not modified" in str(e).lower():
-                    return
-                try:
-                    await query.message.delete()
-                except Exception:
-                    pass
-                await query.message.chat.send_message(
-                    text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
-                )
-    else:
-        await update.message.reply_text(
-            text, reply_markup=kb, parse_mode=ParseMode.MARKDOWN
-        )
-
-
-# ============================================================
-# МАСТЕР ВЫСОТЫ (3 точки)
-# ============================================================
-
-async def _send_height_scheme(message, context, room_id, step, caption, kb_extra=None):
-    """Отправка PNG-схемы высоты."""
-    kb_rows = list(kb_extra or [])
-    kb_rows.append([InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")])
-    kb = InlineKeyboardMarkup(kb_rows)
-    png = _image_path(f"height_scheme_step{step}.png")
-    if png and os.path.exists(png):
-        try:
-            with open(png, "rb") as f:
-                await message.reply_photo(
-                    photo=f, caption=caption,
-                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb
-                )
-            return
-        except Exception as e:
-            print(f"⚠️ height scheme: {e}", flush=True)
-    await message.reply_text(caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
-
-
-async def _show_height_step(target, context, room_id, method=None, step=1):
-    """Экран шага высоты.
-
-    target — Update или CallbackQuery. Если CallbackQuery — сначала
-    пытаемся edit, при неудаче — новое сообщение.
-    """
-    captions = {
-        1: (
-            "📏 *Высота — шаг 1*\n\n"
             "📍 *Точка 1 — ЦЕНТР комнаты*\n\n"
             "Встань в центре комнаты, приложи дальномер к полу, наведи на потолок.\n\n"
             "Введи результат в СМ:\n\n_Например: 305_"
@@ -148,7 +49,7 @@ async def _show_wall_step(query, context, room_id, step, phase='flags', use_phot
     state['step_name'] = phase
     _save_wall_draft(context, room_id)
 
-    pos = WALL_NAMES.get(step, '?')
+    pos = core_spec.get_wall_name(step, core_spec.get_total_walls())
     flags = state.get('flags') or DEFAULT_FLAGS
 
     spec_step = spec.get_wall_step('flags', n=step, pos=pos)
@@ -242,7 +143,7 @@ async def _show_wall_plane(query, context, room_id):
                 print(f"⚠️ plane (wavy) send: {e}", flush=True)
         return
 
-    spec_step = spec.get_wall_step('plane', n=step, pos=WALL_NAMES.get(step, '?'))
+    spec_step = spec.get_wall_step('plane', n=step, pos=core_spec.get_wall_name(step, core_spec.get_total_walls()))
     if spec_step:
         caption = f"{spec_step.get('title', '')}\n\n{spec_step.get('subtitle', '')}"
         if spec_step.get('hint'):
@@ -273,7 +174,7 @@ async def _show_wall_length(query, context, room_id, step):
     _save_wall_draft(context, room_id)
 
     context.user_data['waiting_for'] = 'wall_round_length'
-    pos = WALL_NAMES.get(step, '?')
+    pos = core_spec.get_wall_name(step, core_spec.get_total_walls())
 
     spec_step = spec.get_wall_step('length', n=step, pos=pos)
     if spec_step:
@@ -306,7 +207,7 @@ async def _show_wall_openings(query, context, room_id, step):
     _save_wall_draft(context, room_id)
 
     context.user_data['waiting_for'] = None
-    pos = WALL_NAMES.get(step, '?')
+    pos = core_spec.get_wall_name(step, core_spec.get_total_walls())
     length_cm = state.get('length') or 0
     openings = get_openings_by_wall(room_id, pos)
 
@@ -341,7 +242,7 @@ async def _show_wall_angle(query, context, room_id, step, use_photo=False):
     context.user_data['waiting_for'] = None
     length_cm = state.get('length') or 0
 
-    spec_step = spec.get_wall_step('angle', n=step, pos=WALL_NAMES.get(step, '?'), length=length_cm)
+    spec_step = spec.get_wall_step('angle', n=step, pos=core_spec.get_wall_name(step, core_spec.get_total_walls()), length=length_cm)
     if spec_step:
         caption = f"{spec_step.get('title', '')}\n\n{spec_step.get('subtitle', '')}"
         if spec_step.get('hint'):
@@ -397,104 +298,3 @@ async def _show_wall_angle(query, context, room_id, step, use_photo=False):
                 return
             except Exception as e2:
                 print(f"⚠️ _show_wall_angle send_photo fallback: {e2}", flush=True)
-        try:
-            await query.get_bot().send_message(
-                chat_id=chat_id, text=caption,
-                parse_mode=ParseMode.MARKDOWN, reply_markup=kb
-            )
-            print(f"🟢 _show_wall_angle: fallback send_message OK", flush=True)
-        except Exception as e3:
-            print(f"⚠️ _show_wall_angle send_message fallback: {e3}", flush=True)
-
-
-# ============================================================
-# НИШИ — ПОКАЗ ЭКРАНОВ
-# ============================================================
-
-async def _show_niche_count(query, context, room_id):
-    """Сколько нишей на стене?"""
-    state = _get_wall_state(context)
-    state['step_name'] = 'niche_count'
-    _save_wall_draft(context, room_id)
-    context.user_data['waiting_for'] = None
-
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("1", callback_data=f"wall_niche_count_1_{room_id}")],
-        [InlineKeyboardButton("2", callback_data=f"wall_niche_count_2_{room_id}")],
-        [InlineKeyboardButton("3", callback_data=f"wall_niche_count_3_{room_id}")],
-        [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
-    ])
-    caption = "🕳 *Сколько нишей на этой стене?*"
-    print(f"🟠 _show_niche_count вызван, room_id={room_id}", flush=True)
-
-    # Правильный выбор: если текущее сообщение — фото, edit_caption; иначе edit_text
-    msg = query.message
-    is_photo = bool(getattr(msg, "photo", None))
-
-    try:
-        if is_photo:
-            await query.edit_message_caption(
-                caption=caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
-            )
-        else:
-            await query.edit_message_text(
-                caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
-            )
-        print(f"🟢 _show_niche_count OK (photo={is_photo})", flush=True)
-    except Exception as e:
-        err = str(e).lower()
-        print(f"⚠️ _show_niche_count edit failed: {e}", flush=True)
-        # Удаляем старое и шлём новое
-        try:
-            await query.message.delete()
-        except Exception:
-            pass
-        try:
-            await query.get_bot().send_message(
-                chat_id=query.message.chat_id, text=caption,
-                parse_mode=ParseMode.MARKDOWN, reply_markup=kb
-            )
-            print(f"🟢 _show_niche_count fallback send OK", flush=True)
-        except Exception as e2:
-            print(f"⚠️ _show_niche_count fallback failed: {e2}", flush=True)
-
-
-async def _show_niche_width(query, context, room_id):
-    """Ширина ниши."""
-    state = _get_wall_state(context)
-    state['step_name'] = 'niche_width'
-    _save_wall_draft(context, room_id)
-
-    count = state.get('niche_count') or 1
-    current = state.get('niche_current') or 1
-    context.user_data['waiting_for'] = 'wall_niche_width'
-
-    spec_step = spec.get_niche_step('width', i=current, count=count)
-    if spec_step:
-        caption = (
-            f"🕳 *Ниша {current} из {count}*\n\n"
-            f"{spec_step.get('subtitle', '📏 Ширина ниши (СМ):')}\n\n"
-            f"_Например: {spec_step.get('example', '80')}_"
-        )
-        image = spec_step.get('image')
-    else:
-        caption = f"🕳 *Ниша {current} из {count}*\n\n📏 *Ширина ниши* (СМ):\n\n_Например: 80_"
-        image = "niche_width.png"
-
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],
-    ])
-    await _send_png_or_edit(query, caption, kb, image)
-
-
-async def _show_niche_depth(query, context, room_id):
-    """Глубина ниши."""
-    state = _get_wall_state(context)
-    state['step_name'] = 'niche_depth'
-    _save_wall_draft(context, room_id)
-    context.user_data['waiting_for'] = 'wall_niche_depth'
-
-    spec_step = spec.get_niche_step('depth')
-    caption = spec_step.get('title', '🕳 *Ниша — ГЛУБИНА* (СМ):')
-    hint = spec_step.get('hint')
-    if hint:

@@ -1,21 +1,3 @@
-            )
-        except Exception:
-            pass
-        return True
-
-    if data.startswith("panel_del_"):
-        panel_id = int(data.replace("panel_del_", ""))
-        try:
-            p = core_elec_panels.get_panel(panel_id)
-            object_id = p.get('object_id') if p else None
-            core_elec_panels.delete_panel(panel_id)
-        except Exception as e:
-            print("panel del: " + str(e), flush=True)
-            object_id = None
-        if object_id:
-            try:
-                await query.edit_message_text(
-                    "✅ Щит удалён",
                     reply_markup=InlineKeyboardMarkup([
                         [InlineKeyboardButton("⬅️ К щитам", callback_data="panels_list_" + str(object_id))],
                     ])
@@ -127,10 +109,7 @@
             [InlineKeyboardButton("⬅️ К щитам", callback_data="panels_list_" + str(p.get('object_id')))],
         ])
         try:
-            await query.edit_message_text(
-                chr(10).join(lines),
-                reply_markup=InlineKeyboardMarkup(kb_rows)
-            )
+            await _safe_edit(query, chr(10).join(lines), InlineKeyboardMarkup(kb_rows))
         except Exception as e:
             print("panel card show: " + str(e), flush=True)
         return True
