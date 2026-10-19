@@ -364,40 +364,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     action = result.get('action')
 
 
-    if action == 'expense':
-        obj = result['object']
-        amount = result['amount']
-        category = result['category']
-        # Известные категории
-        known_categories = ['материалы', 'еда', 'транспорт', 'инструмент', 'сантехника', 'электрика', 'покраска']
-        # Если категория явно из списка — записываем сразу
-        if category and category in known_categories:
-            add_expense(obj['id'], amount, category)
-            await update.message.reply_text(
-                f"✅ Расход {amount} ₽ ({category}) добавлен в «{obj['name']}»"
-            )
-            return
-        # Иначе — спрашиваем категорию
-        context.user_data['pending_expense'] = {
-            'object_id': obj['id'],
-            'object_name': obj['name'],
-            'amount': amount
-        }
-        await update.message.reply_text(
-            f"💰 Расход {amount} ₽ в «{obj['name']}»\n\nЗа что?",
-            reply_markup=expense_category_keyboard()
-        )
-        return
-
-    if action == 'add_task':
-        obj = result['object']
-        title = result['title']
-        tid = create_task(obj['id'], title)
-        await update.message.reply_text(
-            f"✅ Задача «{title}» добавлена в «{obj['name']}». ID: {tid}"
-        )
-        return
-
     if action == 'done_task':
         obj = result['object']
         task = result['task']
