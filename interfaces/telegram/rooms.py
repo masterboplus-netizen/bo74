@@ -15,6 +15,20 @@ import math
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
+from .rooms_walls import (
+    _wall_round_start, _get_wall_state, _reset_wall_state, _save_wall_draft,
+    _load_wall_draft, _clear_wall_draft, _current_wall_pos, _wall_flags_list,
+    _show_wall_step, _show_wall_plane, _show_wall_length, _show_wall_openings,
+    _show_wall_angle, _show_niche_count, _show_niche_width, _show_niche_depth,
+    _show_niche_height, _show_niche_plane, _show_niche_top_width, _show_niche_top_depth,
+    _wall_save_and_next, _wall_finish, handle_wall_round_callback,
+    _after_angle, _wall_round_open_start, _handle_wall_round_input,
+    _after_angle_from_update, _wall_save_and_next_from_update,
+    _show_wall_openings_from_update, _show_niche_depth_from_update,
+    _show_niche_height_from_update, _show_niche_plane_from_update,
+    _show_niche_top_depth_from_update, _show_wall_length_from_update,
+    _handle_wall_round_opening_input,
+)
 
 # --- Ядро: комнаты ---
 from core.rooms import get_rooms, get_room, create_room, delete_room, update_room
