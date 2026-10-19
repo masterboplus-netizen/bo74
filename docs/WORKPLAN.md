@@ -9,8 +9,24 @@
 - parse_message → text/parser.py
 - Уборка
 
-### P2. rooms.py (7638 строк)
-God Object. Разбить: rooms/, elec/, plumbing/, measure/. Высокий риск.
+### P2. rooms.py (7638 строк) — ПЛАН (сессия 20: аудит)
+God Object. Разбить на пакеты:
+- `rooms/walls.py` — обход стен (~2000 строк). **СТАРТ: сессия 21.**
+- `rooms/comm.py` — коммуникации (~300).
+- `rooms/floors.py` — помещения (~300).
+- `rooms/elec.py` — щиты, группы, кабели (~500).
+- `rooms/openings.py` — проёмы (~300).
+- `rooms/reports.py` — отчёты, экспорт (~300).
+- `rooms/measure.py` — замеры (~300).
+
+**Мёртвые функции (удалить в сессии 21):**
+- `_after_niches` (1697)
+- `_show_niche_top_width_from_update` (2181)
+
+**Живые (не трогать):**
+- `handle_measure_input` (5126) — вызывается из `_legacy.py:301`.
+
+**Оценка:** 25–35 часов (10–15 сессий). Высокий риск.
 
 ### P3. modules/ → core/
 176 импортов через шим.

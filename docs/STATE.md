@@ -4,7 +4,26 @@
 
 ---
 
-## 0. СЕССИЯ 20 — РЕФАКТОРИНГ _legacy.py + ФИКС ПАРСЕРА (19.10.2026)
+## 0. СЕССИЯ 20 — РЕФАКТОРИНГ _legacy.py + ФИКС ПАРСЕРА + АУДИТ rooms.py (19.10.2026)
+
+### 0.0 ИТОГ СЕССИИ 20 (13 коммитов)
+- `_legacy.py` 487 → 360 (−127).
+- `text/parse.py` — новый (135 строк, 10 actions).
+- Баг «материалы → еда» — `fe1ad91`.
+- Дубль `update_object_status` — `57c34d5`.
+- Парсер `add_task` («ноая») — `6bad254`.
+- `digest.py` МСК — `13061d6`.
+- Доки (STATE/WORKPLAN/ROADMAP) — `36dfa57`.
+
+### 0.0.1 АУДИТ rooms.py (начало плана)
+- `rooms.py` — 7638 строк, God Object.
+- **Найдены 2 мёртвые функции:** `_after_niches` (1697), `_show_niche_top_width_from_update` (2181). **Удалить в сессии 21.**
+- **`handle_measure_input` (5126)** — ЖИВАЯ (вызывается из `_legacy.py:301`).
+- **План разбора:** `rooms/walls.py` (~2000), `rooms/comm.py` (~300), `rooms/floors.py` (~300), `rooms/elec.py` (~500), `rooms/openings.py` (~300), `rooms/reports.py` (~300), `rooms/measure.py` (~300).
+- **Оценка:** 25–35 часов (10–15 сессий).
+- **Старт:** `rooms/walls.py` — сессия 21.
+
+
 
 ### 0.1 Итоги сессии 20
 
