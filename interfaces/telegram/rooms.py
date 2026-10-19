@@ -1325,125 +1325,6 @@ async def _handle_height_callback(query, context, data):
 # ОБРАБОТЧИК ВВОДА (главный)
 # ============================================================
 
-async def _handle_group_load_input(update, context):
-    """Обработка ввода мощности группы ЭОМ."""
-    if not core_elec:
-        await update.message.reply_text("❌ Модуль ЭОМ не загружен")
-        context.user_data['waiting_for'] = None
-        return
-
-    floor_id = context.user_data.get('group_floor_id')
-    room_id = context.user_data.get('group_room_id')
-    purpose = context.user_data.get('group_purpose')
-    phase = context.user_data.get('group_phase') or 1
-
-    object_id = None
-    if floor_id:
-        try:
-            from core.floors import get_floor
-            floor = get_floor(floor_id)
-            object_id = floor.get('object_id') if floor else None
-        except Exception:
-            pass
-    if not object_id and room_id:
-        try:
-            from core.rooms import get_room
-            room = get_room(room_id)
-            object_id = room.get('object_id') if room else None
-            if not floor_id and room:
-                floor_id = room.get('floor_id')
-        except Exception:
-            pass
-
-    if not (object_id and purpose):
-        await update.message.reply_text("❌ Потерялись данные группы")
-        context.user_data['waiting_for'] = None
-        return
-
-    text_val = (update.message.text or '').strip().replace(',', '.')
-    try:
-        load_watt = float(text_val)
-    except ValueError:
-        await update.message.reply_text("❌ Нужно число (Вт)")
-        return
-
-    if load_watt <= 0 or load_watt > 100000:
-        await update.message.reply_text("❌ Мощность от 1 до 100 000 Вт")
-        return
-
-    supply = core_elec.get_supply(object_id)
-    if not supply:
-        core_elec.set_supply(object_id, phase_count=1, voltage=220)
-
-    voltage = 380 if phase == 3 else 220
-    current = core_elec.calc_current(load_watt, phase, voltage)
-    rating, curve = core_elec.pick_breaker(load_watt, phase, 'C')
-    cable = core_elec.pick_cable(load_watt, phase, voltage)
-    breaker_type = f"{'3P' if phase == 3 else '1P'} {curve}{rating}"
-
-    purpose_label = core_spec.PURPOSE_TYPES.get(purpose, purpose).split(' ', 1)[-1]
-    name = f"{purpose_label} {int(load_watt)}Вт"
-
-    try:
-        group_id = core_elec.create_group(
-            object_id=object_id,
-            room_id=None,
-            name=name,
-            phase=phase,
-            purpose=purpose,
-            cable_type=cable,
-            load_watt=load_watt,
-            breaker_type=breaker_type,
-            breaker_curve=curve,
-            floor_id=floor_id,
-        )
-    except Exception as e:
-        await update.message.reply_text(f"❌ Ошибка создания группы: {e}")
-        context.user_data['waiting_for'] = None
-        return
-
-    for k in ['group_room_id', 'group_floor_id', 'group_purpose', 'group_phase']:
-        context.user_data[k] = None
-    context.user_data['waiting_for'] = None
-
-    _object_panels = []
-    try:
-        if core_elec_panels:
-            _object_panels = core_elec_panels.get_panels(object_id)
-            if len(_object_panels) == 1:
-                core_elec_panels.assign_group_to_panel(group_id, _object_panels[0]["id"])
-                core_elec_panels.recalc_panel_safe(_object_panels[0]["id"])
-    except Exception as _e:
-        print("auto assign: " + str(_e), flush=True)
-
-    text = (
-        f"✅ *Группа создана*\n\n"
-        f"⚡ *{name}*\n"
-        f"Фаза: {phase}ф ({voltage}В)\n"
-        f"Мощность: {int(load_watt)} Вт\n"
-        f"Ток: {current} А\n"
-        f"Автомат: *{breaker_type}*\n"
-        f"Кабель: *{core_spec.get_cable_label(cable)}*"
-        f"Щит: " + (core_elec_panels.get_panel(_object_panels[0]["id"])["name"] if (_object_panels and len(_object_panels) == 1 and core_elec_panels) else "не привязан") + "\n"
-    )
-
-    # Кнопки — ведём к группам этажа
-    kb_btns = []
-    if floor_id:
-        kb_btns.append([InlineKeyboardButton("➕ Ещё группу", callback_data=f"floor_group_new_{floor_id}")])
-        kb_btns.append([InlineKeyboardButton("⚡ К группам этажа", callback_data=f"floor_groups_{floor_id}")])
-    if room_id:
-        kb_btns.append([InlineKeyboardButton("⚡ К группам комнаты", callback_data=f"room_groups_{room_id}")])
-
-        if len(_object_panels) > 1:
-            kb_btns.append([InlineKeyboardButton("⚡ Привязать к щиту", callback_data="group_panel_pick_" + str(group_id))])
-
-    await update.message.reply_text(
-        text, parse_mode=ParseMode.MARKDOWN,
-        reply_markup=InlineKeyboardMarkup(kb_btns) if kb_btns else None
-    )
-
-
 async def handle_measure_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Роутер текстового ввода по waiting_for."""
     step = context.user_data.get('waiting_for')
@@ -2020,6 +1901,7 @@ def _build_panel_total_text(panel_id):
 
 # === Elec (вынесено в rooms_elec.py) ===
 from .rooms_elec import *
+from .rooms_elec import _handle_group_load_input
 from .rooms_elec import _show_route_card
 
 # === Reports (вынесено в rooms_reports.py) ===
