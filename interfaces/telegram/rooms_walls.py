@@ -1183,6 +1183,7 @@ async def handle_wall_round_callback(query, context, data):
 
 
 async def _wall_round_start(query, context, room_id):
+    context.user_data['total_walls_asked'] = False
     """Главный вход в обход стен. Восстанавливает прогресс из БД."""
     progress = get_walls_progress(room_id)
     if progress['walls_count'] >= core_spec.get_total_walls():
