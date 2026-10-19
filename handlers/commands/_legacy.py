@@ -356,31 +356,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
+    from handlers.commands.text.parse import try_handle as _try_parse_text
+    if await _try_parse_text(update, context, text):
+        return
+
     result = parse_message(text)
     action = result.get('action')
 
-    if action == 'ask_expense_type':
-        amount = result['amount']
-        context.user_data['ask_expense_amount'] = amount
-        await update.message.reply_text(
-            f"💰 {amount} ₽ — куда записать?",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💸 Личный расход", callback_data=f"exp_type_personal_{amount}")],
-                [InlineKeyboardButton("🏗️ Расход по объекту", callback_data=f"exp_type_object_{amount}")],
-                [InlineKeyboardButton("❌ Отмена", callback_data="menu_back")],
-            ])
-        )
-        return
-
-    if action == 'income':
-        obj = result['object']
-        amount = result['amount']
-        category = result.get('category', 'доход')
-        add_income(obj['id'], amount, category)
-        await update.message.reply_text(
-            f"💰 Доход {amount} ₽ ({category}) добавлен в «{obj['name']}»"
-        )
-        return
 
     if action == 'expense':
         obj = result['object']
