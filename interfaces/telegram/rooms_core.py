@@ -10,6 +10,7 @@ from core.rooms_ui import format_room_card, format_rooms_list
 from core.measures import get_measures, get_walls_ordered
 from core.db import fetchone, fetchall, commit as db_commit
 from core import spec as core_spec
+from core.room_objects import get_room_objects, format_room_object
 
 def rooms_list_keyboard(object_id):
     """Клавиатура списка комнат объекта."""
@@ -279,5 +280,122 @@ async def _handle_height_callback(query, context, data):
 
 # ============================================================
 # ОБРАБОТЧИК ВВОДА (главный)
+# ============================================================
+
+
+
+# === Дополнительные функции каркаса ===
+
+async def _show_room_progress(query, context, room_id):
+    room = get_room(room_id)
+    if not room:
+        return
+    walls = get_walls_ordered(room_id)
+    h_bottom = room.get('height_bottom')
+    h_avg = room.get('height')
+    height_ok = bool(h_bottom and room.get('height_middle') and room.get('height_top'))
+    walls_ok = len(walls) >= core_spec.get_total_walls()
+    try:
+        r = fetchone("SELECT COUNT(*) as cnt FROM openings WHERE room_id = ?", (room_id,))
+        openings_count = r['cnt'] if r else 0
+    except Exception:
+        openings_count = 0
+    try:
+        r = fetchone("SELECT COUNT(*) as cnt FROM room_comms WHERE room_id = ?", (room_id,))
+        comms_count = r['cnt'] if r else 0
+    except Exception:
+        comms_count = 0
+    text = f"👁 *Что замерено в комнате «{room['name']}»*\n\n"
+    if height_ok:
+        text += f"📏 Высота: ✅ {int(h_avg) if h_avg == int(h_avg) else round(h_avg, 1)} см\n"
+    elif h_bottom:
+        text += f"📏 Высота: ⚠️ частично\n"
+    else:
+        text += f"📏 Высота: ❌ не замерена\n"
+    if walls_ok:
+        text += f"🧱 Стены: ✅ {len(walls)} шт.\n"
+    elif walls:
+        text += f"🧱 Стены: ⚠️ {len(walls)} из 4\n"
+    else:
+        text += f"🧱 Стены: ❌ не замерены\n"
+    text += f"🚪 Проёмы: {'✅ ' + str(openings_count) + ' шт.' if openings_count > 0 else '❌ не замерены'}\n"
+    text += f"🔧 Коммуникации: {'✅ ' + str(comms_count) + ' шт.' if comms_count > 0 else '❌ не замерены'}\n"
+    text += "\n*Что дальше?*"
+    try:
+        await query.edit_message_text(
+            text, parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("▶️ Продолжить замер", callback_data=f"room_start_{room_id}")],
+                [InlineKeyboardButton("📐 К размерам", callback_data=f"room_measures_{room_id}")],
+                [InlineKeyboardButton("📦 К комнате", callback_data=f"room_{room_id}")],
+            ])
+        )
+    except Exception:
+        pass
+
+
+
+async def _show_room_measures(query, context, room_id):
+    measures = get_measures(room_id)
+    if not measures:
+        try:
+            await query.edit_message_text(
+                "📐 Размеров пока нет.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Назад", callback_data=f"room_{room_id}")]
+                ])
+            )
+        except Exception:
+            pass
+        return
+    lines = [f"📐 *Размеры комнаты* ({len(measures)}):\n"]
+    for m in measures:
+        lines.append(format_measure(m, show_area=True))
+    areas = calculate_room_areas(room_id)
+    lines.append("")
+    if areas.get('walls_net') is not None:
+        lines.append(f"Стены: {areas['walls_net']} м²")
+    lines.append(f"Пол: {areas['floor']} м²")
+    try:
+        await query.edit_message_text(
+            "\n".join(lines), parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Назад", callback_data=f"room_{room_id}")]
+            ])
+        )
+    except Exception:
+        pass
+
+
+
+async def _show_room_objects(query, context, room_id):
+    objects = get_room_objects(room_id)
+    if not objects:
+        try:
+            await query.edit_message_text(
+                "🪑 Мебели/техники пока нет.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("⬅️ Назад", callback_data=f"room_{room_id}")]
+                ])
+            )
+        except Exception:
+            pass
+        return
+    lines = [f"🪑 *Мебель/техника* ({len(objects)}):\n"]
+    for o in objects:
+        lines.append(format_room_object(o))
+    try:
+        await query.edit_message_text(
+            "\n".join(lines), parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("⬅️ Назад", callback_data=f"room_{room_id}")]
+            ])
+        )
+    except Exception:
+        pass
+
+
+# ============================================================
+# ROOM_START И ВЫСОТА
 # ============================================================
 
