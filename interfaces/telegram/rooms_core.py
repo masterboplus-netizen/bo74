@@ -208,3 +208,76 @@ async def _show_height_step(target, context, room_id, method=None, step=1):
 # ОБХОД СТЕН: ПОКАЗ ЭКРАНОВ
 # ============================================================
 
+
+
+# === Дополнительные функции каркаса ===
+
+async def _handle_height_callback(query, context, data):
+    """Обработка callback'ов высоты."""
+    if data.startswith("room_height_ask_"):
+        room_id = int(data.replace("room_height_ask_", ""))
+        context.user_data['height_room_id'] = room_id
+        try:
+            await query.edit_message_text(
+                "📏 *Высота потолка*\n\nВысота одинаковая во всей комнате\nили отличается в разных точках?",
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Одинаковая (1 замер)", callback_data=f"room_height_same_start_{room_id}")],
+                    [InlineKeyboardButton("📏 Разная (3 замера)", callback_data=f"room_height_three_start_{room_id}")],
+                    [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
+                ])
+            )
+        except Exception:
+            pass
+        return True
+
+    if data.startswith("room_height_same_start_"):
+        room_id = int(data.replace("room_height_same_start_", ""))
+        context.user_data['height_room_id'] = room_id
+        context.user_data['height_mode'] = 'same'
+        context.user_data['waiting_for'] = 'room_height_same'
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        caption = (
+            "📏 *Высота потолка*\n\n"
+            "Введи ОДНУ цифру в СМ — она применится ко всем точкам:\n\n"
+            "_Например: 305_"
+        )
+        png = _image_path("height_scheme_step1.png")
+        if png and os.path.exists(png):
+            try:
+                with open(png, "rb") as f:
+                    await query.message.chat.send_photo(
+                        photo=f, caption=caption, parse_mode=ParseMode.MARKDOWN
+                    )
+                return True
+            except Exception:
+                pass
+        await query.message.chat.send_message(caption, parse_mode=ParseMode.MARKDOWN)
+        return True
+
+    if data.startswith("room_height_three_start_"):
+        room_id = int(data.replace("room_height_three_start_", ""))
+        context.user_data['height_room_id'] = room_id
+        context.user_data['height_step'] = 1
+        context.user_data['height_bottom'] = None
+        context.user_data['height_middle'] = None
+        context.user_data['height_top'] = None
+        context.user_data['waiting_for'] = 'room_height_point'
+        context.user_data['height_mode'] = 'three'
+        await _show_height_step(query, context, room_id, step=1)
+        return True
+
+    if data.startswith("room_height_same_"):
+        # Старое — уже обрабатывается вводом
+        return True
+
+    return False
+
+
+# ============================================================
+# ОБРАБОТЧИК ВВОДА (главный)
+# ============================================================
+
