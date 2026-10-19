@@ -364,61 +364,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     action = result.get('action')
 
 
-    if action == 'done_task':
-        obj = result['object']
-        task = result['task']
-        close_task(task['id'], user_id=update.effective_user.id)
-        await update.message.reply_text(
-            f"✅ Задача «{task['title']}» в «{obj['name']}» выполнена!"
-        )
-        return
-
-    if action == 'done_task_not_found':
-        obj = result['object']
-        await update.message.reply_text(
-            f"❌ В «{obj['name']}» не нашёл задачу с «{result['query']}». Посмотри /tasks"
-        )
-        return
-
-    if action == 'finance':
-        obj = result['object']
-        f = get_finance_summary(obj['id'])
-        await update.message.reply_text(
-            f"💰 {obj['name']}\n\nДоход: {f['income']} ₽\nРасход: {f['expense']} ₽\nБаланс: {f['balance']} ₽"
-        )
-        return
-
-    if action == 'list_tasks':
-        tasks = get_active_tasks()
-        if not tasks:
-            await update.message.reply_text("✅ Нет активных задач")
-            return
-        text_out = f"📋 Активные задачи ({len(tasks)}):\n\n"
-        for t in tasks[:15]:
-            text_out += f"• #{t['id']} {t['title']}\n"
-        await update.message.reply_text(text_out)
-        return
-
-    if action == 'list_objects':
-        objs = get_all_objects()
-        text_out = f"🏗️ Объекты ({len(objs)}):\n\n"
-        for o in objs:
-            text_out += f"• {o['name']}\n"
-        await update.message.reply_text(text_out)
-        return
-
-    if action == 'choose_object':
-        objects = result['objects']
-        intent = result.get('intent', 'expense')
-        amount = result.get('amount')
-        category = result.get('category', 'прочее')
-        if intent == 'add_task':
-            context.user_data['pending_task_title'] = result.get('title') or result.get('original_text', '')
-        await update.message.reply_text(
-            f"🤔 Нашёл несколько объектов. Какой именно?",
-            reply_markup=make_choose_keyboard(objects, intent, amount, category)
-        )
-        return
 
     # === CRM: ожидаем бюджет сделки ===
 
