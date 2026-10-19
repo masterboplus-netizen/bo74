@@ -87,3 +87,22 @@ KPI.
 ---
 
 *Конец API.md*
+
+---
+
+## 🏛️ АРХИТЕКТУРА ПАКЕТА `rooms/` (сессия 20, 2026-10-19)
+
+**Проблема:** `rooms.py` — 7904 строки, God Object. Нарушает Манифест (Этапы 5–7: API, Web, Mobile).
+
+**Решение:** 4 слоя.
+
+1. **Слой UI-хелперов** — `interfaces/telegram/rooms/_helpers.py`
+   - `_safe_edit`, `_send_png_or_edit`, `_send_png_or_reply`, `_image_path`.
+2. **Слой каркаса (Telegram)** — `interfaces/telegram/rooms/core.py`
+   - `handle_rooms_callback`, `show_rooms_list`, `show_room_card`, `_show_height_step`.
+3. **Слой Telegram-доменов** — `interfaces/telegram/rooms/`
+   - `walls.py` (обход стен, ниши, углы), `comm.py` (коммуникации), `openings.py` (проёмы), `floors.py` (помещения), `elec.py` (щиты, группы, кабели), `plumbing.py` (сантехника), `works.py` (работы), `reports.py` (отчёты, экспорт).
+4. **Слой бизнес-логики (сессия 22+)** — `core/rooms_logic/`
+   - Без Telegram-зависимостей. Для Web (FastAPI) и Mobile (Flutter).
+
+**Правило:** сначала хелперы, потом Telegram-домены, потом — бизнес-логику в `core/rooms_logic/`.

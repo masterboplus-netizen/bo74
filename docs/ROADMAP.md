@@ -372,3 +372,17 @@
 - Смета щита: компоненты × кол-во × цена
 - Смета монтажа: длина × (кабель + расходники)
 - Общая: щиты + монтаж
+
+---
+
+## 🏛️ АРХИТЕКТУРА ПАКЕТА `rooms/` (решение сессии 20)
+
+**Проблема:** `rooms.py` — 7904 строки, God Object. Нарушает Манифест (Этапы 5–7: API, Web, Mobile).
+
+**Решение — 4 слоя:**
+1. **`rooms/_helpers.py`** — общие UI-хелперы (`_safe_edit`, `_send_png_or_edit`, `_image_path`).
+2. **`rooms/core.py`** — каркас (`handle_rooms_callback`, `show_rooms_list`, `show_room_card`).
+3. **`rooms/*.py`** — домены (`walls`, `comm`, `openings`, `floors`, `elec`, `plumbing`, `works`, `reports`).
+4. **`core/rooms_logic/`** (сессия 22+) — бизнес-логика без Telegram (для Web, Mobile).
+
+**Правило выноса:** `_helpers` → `core` → `walls` → `comm` → `openings` → `floors` → `elec` → `plumbing` → `works` → `reports` → `core/rooms_logic`.
