@@ -302,3 +302,101 @@ async def _show_floor_card(query, floor_id):
         print(f"⚠️ _show_floor_card: {e}", flush=True)
 
 
+
+
+# === Дополнительные функции этажей ===
+
+async def _show_floor_rooms_list(query, context, floor_id):
+    """Список комнат помещения (кликабельный)."""
+    f = core_floors.get_floor(floor_id)
+    if not f:
+        try:
+            await query.edit_message_text("❌ Помещение не найдено")
+        except Exception:
+            pass
+        return
+    floor_name = f.get('floor_name') or f"Этаж {f.get('floor_number')}"
+    object_id = f.get('object_id')
+    rooms = core_floors.get_rooms_of_floor(floor_id)
+
+    text = f"📦 *Комнаты «{floor_name}»*\n\n"
+    if not rooms:
+        text += "_Пока комнат нет._"
+    else:
+        text += f"Всего: {len(rooms)}\n"
+
+    buttons = []
+    for r in rooms:
+        buttons.append([InlineKeyboardButton(
+            f"📦 {r['name']}",
+            callback_data=f"room_{r['id']}"
+        )])
+    buttons.append([InlineKeyboardButton("➕ Добавить комнату", callback_data=f"room_add_{floor_id}")])
+    buttons.append([InlineKeyboardButton("⬅️ К помещению", callback_data=f"floor_{floor_id}")])
+
+    try:
+        await query.edit_message_text(
+            text, parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    except Exception as e:
+        print(f"⚠️ _show_floor_rooms_list: {e}", flush=True)
+
+
+async def _do_delete_floor(query, floor_id):
+    f = core_floors.get_floor(floor_id)
+    if not f:
+        return
+    object_id = f.get('object_id')
+    core_floors.delete_floor(floor_id)
+    await _show_floors_list(query, object_id)
+
+
+
+async def _show_floor_groups(query, floor_id):
+    """Список групп этажа."""
+    if not core_elec:
+        try:
+            await query.edit_message_text("❌ Модуль ЭОМ не загружен")
+        except Exception:
+            pass
+        return
+
+    f = core_floors.get_floor(floor_id)
+    name = f.get('floor_name') or f"Этаж {f.get('floor_number')}" if f else "?"
+
+    groups = core_elec.get_groups_by_floor(floor_id)
+
+    lines = [f"⚡ *Группы этажа* «{name}»\n"]
+    if not groups:
+        lines.append("_Пока групп нет._\n")
+    else:
+        total_w = 0
+        for g in groups:
+            lines.append(core_elec.format_group_with_rooms(g['id']))
+            total_w += g.get('load_watt') or 0
+        lines.append(f"\n📊 *Групп: {len(groups)} · Σ {int(total_w)} Вт*")
+
+    # Распределение по фазам L1/L2/L3 (для объекта этажа)
+    try:
+        _floor = core_floors.get_floor(floor_id)
+        _obj_id = _floor.get('object_id') if _floor else None
+        if _obj_id:
+            _phase_text = core_elec.format_phase_distribution(_obj_id)
+            if _phase_text:
+                lines.append("")
+                lines.append(_phase_text)
+    except Exception as e:
+        print(f"⚠️ floor phase distribution: {e}", flush=True)
+
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🍳 Из шаблона (кухня)", callback_data=f"floor_kitchen_{floor_id}")],
+        [InlineKeyboardButton("➕ Создать группу", callback_data=f"floor_group_new_{floor_id}")],
+        [InlineKeyboardButton("⬅️ К помещению", callback_data=f"floor_{floor_id}")],
+    ])
+    try:
+        await query.edit_message_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+    except Exception as e:
+        print(f"⚠️ _show_floor_groups: {e}", flush=True)
+
+
