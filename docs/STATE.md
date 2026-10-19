@@ -323,3 +323,13 @@ objects.py, tasks.py, finances.py, personal.py, crm.py, misc.py, rooms.py.
 4. **`core/rooms_logic/`** (сессия 22+) — бизнес-логика без Telegram (для Web, Mobile).
 
 **Правило выноса:** `_helpers` → `core` → `walls` → `comm` → `openings` → `floors` → `elec` → `plumbing` → `works` → `reports` → `core/rooms_logic`.
+
+### 0.0.2 ИТОГ СЕССИИ 20 (финал)
+- **Коммиты:** 13 (+ 3 финальных: доки, архитектура, AI_INSTRUCTIONS).
+- **Вынос _legacy.py:** 487 → 360.
+- **Вынос text/parse.py:** 135 строк (10 actions).
+- **Закрыто багов:** 5 (материалы, ноая, МСК, дубль, wall_niche).
+- **Аудит rooms.py:** прочитан весь код (part_aa...part_ba), составлена карта доменов.
+- **Архитектура rooms/:** утверждена (4 слоя: _helpers, core, domains, core/rooms_logic для Web/Mobile).
+- **Доки обновлены:** STATE, ROADMAP, WORKPLAN, ARCHITECTURE, API, MASTER_GUIDE, BO_MANIFEST, AI_INSTRUCTIONS.
+- **Следующий шаг (сессия 21):** создание  и .
