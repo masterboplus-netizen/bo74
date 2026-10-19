@@ -197,6 +197,27 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # === Обработка ответа на "Сколько стен?" ===
+    if context.user_data.get('waiting_for') == 'total_walls':
+        text = (update.message.text or "").strip()
+        try:
+            n = int(text)
+            if n < 3:
+                await update.message.reply_text("❌ Минимум 3 стены")
+                return
+            from core import spec as core_spec
+            core_spec.set_total_walls(n)
+            context.user_data['waiting_for'] = None
+            context.user_data['total_walls_asked'] = True
+            await update.message.reply_text(f"✅ Стён: {n}. Начинаем обход.")
+            from interfaces.telegram.rooms import _wall_round_start
+            room_id = context.user_data.get('wall_room_id')
+            if room_id:
+                await _wall_round_start(update, context, room_id)
+        except ValueError:
+            await update.message.reply_text("❌ Введи число (3 и больше)")
+        return
+
     text = update.message.text
 
     # --- ПОИСК ПО СМЕТАМ ---

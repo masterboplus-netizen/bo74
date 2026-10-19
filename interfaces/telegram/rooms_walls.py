@@ -49,17 +49,114 @@ def _get_rooms_helpers():
     from . import rooms as _r
     return _r
 
-def _safe_edit(*args, **kwargs):
-    return _get_rooms_helpers()._safe_edit(*args, **kwargs)
+async def _safe_edit(query, text, kb=None):
+    """Универсальный edit: text -> caption -> delete+send.
 
-def _send_png_or_edit(*args, **kwargs):
-    return _get_rooms_helpers()._send_png_or_edit(*args, **kwargs)
+    Используется для надёжного обновления сообщения независимо от того,
+    текст это или фото."""
+    is_photo = bool(getattr(query.message, "photo", None))
+    try:
+        if is_photo:
+            await query.edit_message_caption(caption=text, parse_mode=None, reply_markup=kb)
+        else:
+            await query.edit_message_text(text, parse_mode=None, reply_markup=kb)
+        return True
+    except Exception as e1:
+        err = str(e1).lower()
+        if "message is not modified" in err:
+            return True
+        print("_safe_edit edit failed: " + str(e1), flush=True)
+    try:
+        await query.message.delete()
+    except Exception:
+        pass
+    try:
+        await query.get_bot().send_message(
+            chat_id=query.message.chat_id, text=text, reply_markup=kb
+        )
+        print("_safe_edit send_message OK", flush=True)
+        return True
+    except Exception as e2:
+        print("_safe_edit send failed: " + str(e2), flush=True)
+        return False
 
-def _send_png_or_reply(*args, **kwargs):
-    return _get_rooms_helpers()._send_png_or_reply(*args, **kwargs)
 
-def _image_path(*args, **kwargs):
-    return _get_rooms_helpers()._image_path(*args, **kwargs)
+
+# ============================================================
+# КОНСТАНТЫ
+# ============================================================
+
+WALL_NAMES = core_spec.WALL_NAMES
+WALL_NAMES_REVERSE = {v: k for k, v in WALL_NAMES.items()}
+
+DEFAULT_FLAGS = {"niche": False, "rounded": False, "wavy": False, "hidden": False}
+
+
+# ============================================================
+# ЕДИНЫЙ STATE СТЕНЫ
+# ============================================================
+
+
+
+
+def _image_path(filename):
+    """Путь к PNG-схеме."""
+    if not filename:
+        return None
+    base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.join(base, "docs", "images", filename)
+
+async def _send_png_or_edit(query, caption, kb, png_filename=None):
+    """Отправляет фото или редактирует сообщение."""
+    png = _image_path(png_filename)
+    chat_id = query.message.chat_id
+    if png and os.path.exists(png):
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        try:
+            with open(png, "rb") as f:
+                await query.get_bot().send_photo(
+                    chat_id=chat_id, photo=f, caption=caption,
+                    parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                )
+            return
+        except Exception as e:
+            print(f"⚠️ send_photo: {e}", flush=True)
+        try:
+            await query.get_bot().send_message(
+                chat_id=chat_id, text=caption,
+                parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
+            return
+        except Exception as e:
+            print(f"⚠️ send_message fallback: {e}", flush=True)
+        return
+    msg = query.message
+    is_photo = bool(getattr(msg, "photo", None))
+    try:
+        if is_photo:
+            await query.edit_message_caption(caption=caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        else:
+            await query.edit_message_text(caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+    except Exception as e:
+        err = str(e).lower()
+        if "message is not modified" in err:
+            return
+        print(f"⚠️ _send_png_or_edit edit failed: {e}", flush=True)
+
+async def _send_png_or_reply(message, caption, kb=None, png_filename=None):
+    """Отправляет фото или текст (для update.message)."""
+    png = _image_path(png_filename)
+    if png and os.path.exists(png):
+        try:
+            with open(png, "rb") as f:
+                await message.reply_photo(photo=f, caption=caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+            return
+        except Exception as e:
+            print(f"⚠️ reply_photo: {e}", flush=True)
+    await message.reply_text(caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
 
 def _get_wall_state(context):
     """Возвращает единый state текущей стены (создаёт, если нет)."""
