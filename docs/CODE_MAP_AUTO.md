@@ -24,6 +24,7 @@
 - `text/finances.py`
 - `text/misc.py`
 - `text/objects.py`
+- `text/parse.py`
 - `text/personal.py`
 - `text/rooms.py`
 - `text/tasks.py`
@@ -44,7 +45,7 @@
 | `add_expense` | add_menu.py:23, add_menu.py:76, tasks.py:20 | add_menu.py:47, add_menu.py:47 |
 | `add_object` | add_menu.py:21, tasks.py:18, add_menu.py:21 | add_menu.py:29, add_menu.py:29 |
 | `add_task` | add_menu.py:22, add_menu.py:63, tasks.py:19 | add_menu.py:39, add_menu.py:39 |
-| `by_assignee` | _legacy.py:146, tasks.py:140, tasks.py:156 | tasks.py:98, tasks.py:98 |
+| `by_assignee` | _legacy.py:134, tasks.py:140, tasks.py:156 | tasks.py:98, tasks.py:98 |
 | `byassigned` | tasks.py:107, tasks.py:107 | tasks.py:120, tasks.py:123, tasks.py:120 |
 | `cables` | — | rooms.py:4572, rooms.py:4572 |
 | `cables_add` | rooms.py:6062, rooms.py:6062 | rooms.py:6074, rooms.py:6075, rooms.py:6074 |
@@ -55,9 +56,9 @@
 | `cal_ignore` | tasks.py:815, tasks.py:820, tasks.py:821 | tasks.py:493, tasks.py:493 |
 | `cal_nav` | — | tasks.py:497, tasks.py:498, tasks.py:497 |
 | `cal_quick` | — | tasks.py:505, tasks.py:511, tasks.py:505 |
-| `cat` | choose_expense.py:101, choose_expense.py:102, choose_expense.py:103 | choose_expense.py:119, bot.py:230, bot.py:100 |
+| `cat` | choose_expense.py:108, choose_expense.py:109, choose_expense.py:110 | choose_expense.py:126, bot.py:230, bot.py:100 |
 | `choose_obj` | — | bot.py:231, bot.py:101 |
-| `choose_obj_add_task_none_none_none` | choose_expense.py:91, choose_expense.py:91 | — |
+| `choose_obj_add_task_none_none_none` | choose_expense.py:98, choose_expense.py:98 | — |
 | `client` | crm.py:65, crm.py:103, crm.py:117 | crm.py:137, crm.py:139, crm.py:137 |
 | `comm` | rooms.py:2361, rooms.py:2361 | rooms.py:4643, rooms.py:4643 |
 | `comm_add` | rooms.py:2534, rooms.py:2628, rooms.py:5738 | rooms.py:2287, rooms.py:2288, rooms.py:2287 |
@@ -106,7 +107,7 @@
 | `est_dash` | estimates.py:1156, estimates.py:1156 | estimates.py:146, estimates.py:146 |
 | `est_export` | estimates.py:256, estimates.py:256 | estimates.py:462, estimates.py:464, estimates.py:462 |
 | `est_export_all` | estimates.py:1157, estimates.py:1157 | estimates.py:111, estimates.py:111 |
-| `est_extra` | _legacy.py:292, estimates.py:523, _legacy.py:292 | estimates.py:489, estimates.py:494, estimates.py:489 |
+| `est_extra` | _legacy.py:276, estimates.py:523, _legacy.py:276 | estimates.py:489, estimates.py:494, estimates.py:489 |
 | `est_extra_add` | estimates.py:505, estimates.py:505 | estimates.py:491, estimates.py:514, estimates.py:516 |
 | `est_import` | estimates.py:1162, estimates.py:1162 | marketplaces.py:7, marketplaces.py:7 |
 | `est_kind` | estimates.py:1280, estimates.py:1280 | estimates.py:1292, estimates.py:1293, estimates.py:1292 |
@@ -115,7 +116,7 @@
 | `est_kpi_objs` | estimates.py:1159, estimates.py:1159 | estimates.py:60, estimates.py:60 |
 | `est_kpi_red` | estimates.py:1160, estimates.py:1160 | estimates.py:77, estimates.py:77 |
 | `est_month` | — | estimates.py:30, estimates.py:32, estimates.py:30 |
-| `est_object` | _legacy.py:240, estimates.py:52, estimates.py:310 | estimates.py:248, estimates.py:250, estimates.py:248 |
+| `est_object` | _legacy.py:224, estimates.py:52, estimates.py:310 | estimates.py:248, estimates.py:250, estimates.py:248 |
 | `est_object_floors` | — | estimates.py:958, estimates.py:960, estimates.py:958 |
 | `est_object_rooms` | — | estimates.py:998, estimates.py:1000, estimates.py:998 |
 | `est_pdf` | estimates.py:257, estimates.py:257 | estimates.py:432, estimates.py:434, estimates.py:432 |
@@ -139,8 +140,8 @@
 | `est_status` | — | estimates.py:797, estimates.py:799, estimates.py:797 |
 | `est_where` | estimates.py:740, estimates.py:740 | estimates.py:701, estimates.py:706, estimates.py:701 |
 | `est_where_mat` | estimates.py:714, estimates.py:714 | estimates.py:703, estimates.py:727, estimates.py:728 |
-| `exp_type_object` | _legacy.py:373, crm.py:554, _legacy.py:373 | objects.py:24, objects.py:25, objects.py:24 |
-| `exp_type_personal` | _legacy.py:372, _legacy.py:372 | personal.py:80, personal.py:81, personal.py:80 |
+| `exp_type_object` | crm.py:554, parse.py:28, crm.py:554 | objects.py:24, objects.py:25, objects.py:24 |
+| `exp_type_personal` | parse.py:27, parse.py:27 | personal.py:80, personal.py:81, personal.py:80 |
 | `finobj` | finance.py:69, finance.py:69 | finance.py:25, finance.py:25 |
 | `floor` | rooms.py:2824, rooms.py:2842, rooms.py:3028 | rooms.py:2932, rooms.py:2933, rooms.py:4583 |
 | `floor_estimate` | estimates.py:985, rooms.py:3116, estimates.py:985 | rooms.py:2831, rooms.py:2833, rooms.py:2831 |
@@ -168,18 +169,18 @@
 | `kpi_objects` | kpi.py:16, kpi.py:16 | kpi.py:44, kpi.py:44 |
 | `kpi_red` | kpi.py:17, kpi.py:17 | kpi.py:62, kpi.py:62 |
 | `menu_add` | add_menu.py:34, keyboards.py:16, objects.py:98 | add_menu.py:17, add_menu.py:17 |
-| `menu_back` | _legacy.py:155, _legacy.py:374, add_menu.py:24 | tasks.py:58, tasks.py:58 |
+| `menu_back` | _legacy.py:143, add_menu.py:24, estimates.py:1166 | tasks.py:58, tasks.py:58 |
 | `menu_crm` | crm.py:67, crm.py:85, crm.py:194 | crm.py:39, crm.py:39 |
 | `menu_dashboard` | keyboards.py:15, keyboards.py:15, onboarding.py:30 | misc.py:39, misc.py:39 |
-| `menu_estimates` | _legacy.py:232, _legacy.py:242, estimates.py:172 | estimates.py:1154, estimates.py:1154 |
+| `menu_estimates` | _legacy.py:216, _legacy.py:226, estimates.py:172 | estimates.py:1154, estimates.py:1154 |
 | `menu_finance` | finance.py:42, objects.py:66, keyboards.py:9 | finance.py:14, finance.py:14 |
 | `menu_help` | keyboards.py:17, misc.py:148, keyboards.py:17 | misc.py:52, misc.py:52 |
 | `menu_kpi` | estimates.py:69, estimates.py:86, estimates.py:103 | kpi.py:10, kpi.py:10 |
-| `menu_objects` | keyboards.py:7, objects.py:24, rooms.py:4260 | _legacy.py:81, _legacy.py:81 |
+| `menu_objects` | keyboards.py:7, objects.py:24, rooms.py:4260 | _legacy.py:69, _legacy.py:69 |
 | `menu_personal` | misc.py:33, personal.py:75, keyboards.py:13 | personal.py:18, personal.py:18 |
 | `menu_reports` | reports.py:49, reports.py:63, reports.py:76 | reports.py:25, reports.py:25 |
-| `menu_tasks` | tasks.py:37, tasks.py:47, tasks.py:76 | _legacy.py:93, _legacy.py:93 |
-| `my_tasks` | _legacy.py:145, _legacy.py:145 | tasks.py:68, tasks.py:68 |
+| `menu_tasks` | tasks.py:37, tasks.py:47, tasks.py:76 | _legacy.py:81, _legacy.py:81 |
+| `my_tasks` | _legacy.py:133, _legacy.py:133 | tasks.py:68, tasks.py:68 |
 | `newexp_obj` | objects.py:111, objects.py:111 | add_menu.py:68, add_menu.py:69, add_menu.py:68 |
 | `newtask_obj` | objects.py:96, objects.py:96 | add_menu.py:55, add_menu.py:56, add_menu.py:55 |
 | `obj` | objects.py:65, objects.py:136, crm.py:435 | objects.py:142, rooms.py:4376, rooms.py:4378 |
@@ -360,7 +361,7 @@
 | `setrange` | tasks.py:263, tasks.py:263 | tasks.py:465, tasks.py:467, tasks.py:465 |
 | `setrole` | onboarding.py:54 | onboarding.py:80, onboarding.py:82 |
 | `skip_photo` | tasks.py:159, tasks.py:159 | tasks.py:169, bot.py:226, tasks.py:169 |
-| `task` | _legacy.py:143, tasks.py:46, tasks.py:88 | tasks.py:680, tasks.py:680 |
+| `task` | _legacy.py:131, tasks.py:46, tasks.py:88 | tasks.py:680, tasks.py:680 |
 | `taskaddprog` | tasks.py:413, tasks.py:413 | tasks.py:374, tasks.py:375, tasks.py:374 |
 | `taskaddprogskip` | misc.py:93, misc.py:93 | tasks.py:355, tasks.py:356, tasks.py:355 |
 | `taskassign` | tasks.py:238, tasks.py:238 | tasks.py:422, tasks.py:424, tasks.py:422 |
@@ -376,8 +377,8 @@
 | `taskprio` | tasks.py:239, tasks.py:239 | tasks.py:759, tasks.py:759 |
 | `taskrename` | tasks.py:240, tasks.py:240 | tasks.py:781, tasks.py:781 |
 | `taskrestore` | tasks.py:243, tasks.py:243 | tasks.py:600, tasks.py:601, tasks.py:600 |
-| `tasks_archive_list` | _legacy.py:153, tasks.py:245, tasks.py:622 | tasks.py:26, tasks.py:26 |
-| `tasks_byobj` | _legacy.py:154, tasks.py:117, _legacy.py:154 | tasks.py:14, tasks.py:14 |
+| `tasks_archive_list` | _legacy.py:141, tasks.py:245, tasks.py:622 | tasks.py:26, tasks.py:26 |
+| `tasks_byobj` | _legacy.py:142, tasks.py:117, _legacy.py:142 | tasks.py:14, tasks.py:14 |
 | `unknown_as_client` | fallback.py:49, fallback.py:49 | crm.py:502, crm.py:502 |
 | `unknown_as_expense` | fallback.py:51, fallback.py:51 | crm.py:535, crm.py:535 |
 | `unknown_as_object` | fallback.py:48, fallback.py:48 | crm.py:400, crm.py:400 |
