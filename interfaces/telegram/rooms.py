@@ -1694,12 +1694,6 @@ async def _after_angle(query, context, room_id):
     await _wall_save_and_next(query, context, room_id, step_num)
 
 
-async def _after_niches(query, context, room_id):
-    """После нишей — обрабатываем следующий remaining_step или сохраняем."""
-    # Просто делегируем в _after_angle, но remaining_steps уже обрезан
-    await _after_angle(query, context, room_id)
-
-
 async def _wall_round_open_start(query, context, room_id, opening_type):
     """Старт добавления проёма при обходе."""
     state = _get_wall_state(context)
@@ -2176,13 +2170,6 @@ async def _show_niche_plane_from_update(update, context, room_id):
         [InlineKeyboardButton("⬅️ Отмена", callback_data=f"room_{room_id}")],
     ])
     await update.message.reply_text(caption, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
-
-
-async def _show_niche_top_width_from_update(update, context, room_id):
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ Назад в комнату", callback_data=f"room_{room_id}")],
-    ])
-    await update.message.reply_text("🕳 *Ширина СВЕРХУ* (СМ):", parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
 
 
 async def _show_niche_top_depth_from_update(update, context, room_id):
