@@ -42,3 +42,4 @@ worklog-app/
 *.crashed_*
 *.v1
 backups/
+bo72.db
