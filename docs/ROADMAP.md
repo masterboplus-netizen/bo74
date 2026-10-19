@@ -55,11 +55,11 @@
 - [ ] 035_is_test.sql
 
 ### 1.7. Баг-фиксы
-- [ ] wall_niche_count_ — callback не доходит
-- [ ] Парсер add_task в modules/parser.py
-- [ ] Дубликат update_object в modules/objects.py
-- [ ] check_object_vs_comms — единицы (м vs см)
-- [ ] log_digest_sent — часовой пояс
+- [ ] wall_niche_count_ — callback не доходит (сессия 20: не трогали, сессия 21)
+- [x] Парсер add_task в modules/parser.py (сессия 20: 6bad254)
+- [x] Дубликат update_object в modules/objects.py (сессия 20: 57c34d5)
+- [ ] check_object_vs_comms — единицы (м vs см) — ОТЛОЖЕНО (P6 в WORKPLAN, архитектура)
+- [x] log_digest_sent — часовой пояс (сессия 20: 13061d6)
 
 **Результат:** бот работает стабильно, обход стен не теряет прогресс, код чистый.
 
