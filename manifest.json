@@ -1,5 +1,7 @@
 {
   "name": "Бо 8.1 — Стройка",
+  "id": "/bo74/",
+  "scope": "/bo74/",
   "short_name": "Бо",
   "start_url": "/bo74/",
   "display": "standalone",
