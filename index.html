@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Бо 8.1 — Веб-панель</title>
+    <style>
+        body { font-family: -apple-system, Arial, sans-serif; background: #f5f5f7; color: #1d1d1f; padding: 40px; }
+        h1 { font-size: 32px; }
+        .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); max-width: 800px; margin: 20px auto; }
+        .btn { display: inline-block; padding: 10px 20px; background: #007aff; color: white; border-radius: 8px; text-decoration: none; margin-top: 10px; }
+    </style>
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#007aff">
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+    </script>
+</head>
+<body>
+    <div class="card">
+        <h1>🏗️ Бо 8.1 — Веб-панель</h1>
+        <p>Это первый шаг к сайту. Здесь будет список объектов, комнат, замеров и смет.</p>
+        <p><strong>Проверка API:</strong></p>
+        <ul>
+            <li><a href="/api/rooms/70/walls" class="btn" target="_blank">Стены комнаты 70</a></li>
+            <li><a href="/api/rooms/70/report" class="btn" target="_blank">Отчёт комнаты 70</a></li>
+        </ul>
+    </div>
+</body>
+</html>
