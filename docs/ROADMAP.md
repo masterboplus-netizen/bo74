@@ -386,3 +386,35 @@
 4. **`core/rooms_logic/`** (сессия 22+) — бизнес-логика без Telegram (для Web, Mobile).
 
 **Правило выноса:** `_helpers` → `core` → `walls` → `comm` → `openings` → `floors` → `elec` → `plumbing` → `works` → `reports` → `core/rooms_logic`.
+
+---
+
+## 🌐 WEB/MOBILE: СТАРТ (сессия 23)
+
+**Дата:** 2026-10-20, 12:08.
+
+**Что сделано:**
+1. **`core/rooms_logic/`** — бизнес-логика (без Telegram):
+   - `walls.py` (прогресс, площади).
+   - `comm.py` (коммуникации).
+   - `openings.py` (проёмы).
+   - `elec.py` (группы, щиты).
+   - `floors.py` (этажи).
+   - `reports.py` (полный отчёт).
+2. **`interfaces/api/`** — FastAPI (порт 8080):
+   - `main.py` — 3 роута (`/`, `/api/rooms/{id}/walls`, `/api/rooms/{id}/report`).
+   - `templates/index.html` — веб-панель.
+3. **`.replit`** — добавлен воркфлоу `FastAPI` (порт 8080).
+
+**Что работает:**
+- `uvicorn` запущен на 8080, сайт открывается.
+- API отдаёт JSON (стены, отчёты).
+
+**Следующие шаги (сессия 24):**
+- Расширить API (комнаты, объекты, ЭОМ).
+- Сделать полноценный фронтенд (React или Vue).
+- Вынести `rooms_elec.py` (P8) — **до** UI.
+
+**Документация:**
+- `docs/ARCHITECTURE.md` — обновить (API + core/rooms_logic).
+- `docs/API.md` — описать роуты.
