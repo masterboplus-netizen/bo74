@@ -1,9 +1,12 @@
-modules = ["nodejs-20", "python-base-3.13"]
-run = "python main.py"
+run = "venv/bin/python3 web_app.py"
 
 [nix]
 channel = "stable-25_05"
-packages = ["mailutils", "nano", "python313Packages.flask", "python313Packages.python-dotenv", "python313Packages.python-telegram-bot"]
+packages = ["python313Packages.fastapi", "python313Packages.uvicorn", "python313Packages.jinja2", "python313Packages.python-telegram-bot", "python313Packages.apscheduler", "python313Packages.reportlab", "python313Packages.openpyxl", "python313Packages.rapidfuzz"]
+
+[[ports]]
+localPort = 8080
+externalPort = 80
 
 [workflows]
 runButton = "Project"
@@ -14,42 +17,9 @@ mode = "parallel"
 author = "agent"
 
 [[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Telegram Bot"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Dashboard"
-
-[[workflows.workflow]]
-name = "Telegram Bot"
-author = "agent"
+task = "shell.exec"
+args = "venv/bin/python3 web_app.py"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python bot.py"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow]]
-name = "FastAPI"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "venv/bin/python3 -m uvicorn interfaces.api.main:app --host 0.0.0.0 --port 8080"
-
-[[workflows.workflow]]
-name = "Dashboard"
-mode = "parallel"
-author = 65448632
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python web_dashboard.py"
-
-[[ports]]
-localPort = 8080
-externalPort = 80
+args = "venv/bin/python3 bot.py"

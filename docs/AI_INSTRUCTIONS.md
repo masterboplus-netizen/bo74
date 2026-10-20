@@ -274,3 +274,23 @@ nothing to commit, working tree clean +  в .
 **Документация:**
 - `docs/ARCHITECTURE.md` — обновить (API + core/rooms_logic).
 - `docs/API.md` — описать роуты.
+
+---
+
+## 🌐 ВЕБ-АРХИТЕКТУРА REEPILIT (20.10.2026)
+
+**Проблема:** Replit упорно отказывается запускать FastAPI (`uvicorn`) в Preview. Он поддерживает только стандартные `http.server` / `socketserver` или Flask.
+
+**Решение:**
+1. **Дашборд (`web_dashboard.py`)** — работает на 8080 (стандартный `socketserver`).
+2. **Новый сайт (`web_app.py`)** — работает на 8080 (тоже `socketserver`, но отдаёт API из `core/rooms_logic/`). 
+3. **Бот (`bot.py`)** — работает в фоне (через Replit Workflows).
+
+**Итог:**
+- `.replit` запускает `web_app.py` (сайт) и `bot.py` (бот) параллельно.
+- **Дашборд временно отключен** (потому что конфликтует за порт 8080).
+- **Чтобы открыть дашборд:** нужно сменить порт (`PORT = 8081` в `web_dashboard.py`) и запустить вручную в Shell (или сделать кнопку в `web_app.py`, которая будет проксировать дашборд).
+
+**Документация:**
+- `docs/ARCHITECTURE.md` — добавлен раздел «Веб-архитектура Replit».
+- `docs/AI_INSTRUCTIONS.md` — добавлено правило: «Если Replit не запускает сайт — проверить `socketserver`, а не `uvicorn`».

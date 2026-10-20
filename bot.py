@@ -253,5 +253,16 @@ def main():
     app.run_polling(drop_pending_updates=True)
 
 
+
+# === FastAPI в фоне (для Replit) ===
+import threading
+import uvicorn
+from interfaces.api.main import app as fastapi_app
+
+def run_fastapi():
+    uvicorn.run(fastapi_app, host='0.0.0.0', port=8080)
+
+threading.Thread(target=run_fastapi, daemon=True).start()
+
 if __name__ == "__main__":
     main()
