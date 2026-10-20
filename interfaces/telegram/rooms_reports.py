@@ -8,6 +8,9 @@ from telegram.constants import ParseMode
 from core.rooms import get_rooms, get_room
 from core.db import fetchone, fetchall, commit as db_commit
 from core import spec as core_spec
+from core.export.csv_export import save_csv, export_csv
+from core.export.dxf import save_dxf, export_dxf
+from core.export.json_export import save_json, export_json
 async def handle_reports_callback(query, context, data):
     """Меню планов и отчётов."""
     if data.startswith("room_estimate_"):
