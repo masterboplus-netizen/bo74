@@ -5,6 +5,7 @@ from telegram.constants import ParseMode
 
 from db import get_connection
 from modules.objects import get_all_objects
+from interfaces.telegram.rooms import _handle_wall_round_input
 from handlers.commands.receipt import (
     handle_recognize_receipt, handle_receipt_save, handle_receipt_object,
     handle_receipt_category, handle_receipt_show
