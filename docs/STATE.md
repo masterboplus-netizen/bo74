@@ -372,3 +372,10 @@ objects.py, tasks.py, finances.py, personal.py, crm.py, misc.py, rooms.py.
 - **Веб (bo-web):** Создан чистый интерфейс (главное меню, список объектов).
 - **Хераборина:** Добавлен проект `bo-web`, исправлены отступы карточек.
 - **Следующий шаг:** Перенос API на Render (чтобы не спал) или добавление экрана "Комнаты".
+
+## Сессия 21 (продолжение) — Веб-домен
+- **Домен:** Настроен `masterbo.work.gd` (freedomain.one).
+- **DNS:** A-записи GitHub (185.199.x.x) прописаны и работают.
+- **GitHub Pages:** Статус `built`, cname `masterbo.work.gd`.
+- **SSL:** Сертификат еще не выпущен (ждем).
+- **Следующий шаг:** Проверить `https_certificate` в API. Если `approved` — открыть `https://masterbo.work.gd`.
