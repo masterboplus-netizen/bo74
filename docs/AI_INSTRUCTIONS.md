@@ -294,3 +294,7 @@ nothing to commit, working tree clean +  в .
 **Документация:**
 - `docs/ARCHITECTURE.md` — добавлен раздел «Веб-архитектура Replit».
 - `docs/AI_INSTRUCTIONS.md` — добавлено правило: «Если Replit не запускает сайт — проверить `socketserver`, а не `uvicorn`».
+
+## 8. ФОРМАТ ССЫЛОК ДЛЯ ANDREY
+- Всегда давать ссылки в виде текста (например: https://masterboplus-netizen.github.io/bo-web/), чтобы их можно было скопировать нажатием.
+- Не прятать ссылки в картинки или кнопки.
