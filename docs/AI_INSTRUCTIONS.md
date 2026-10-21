@@ -304,3 +304,9 @@ nothing to commit, working tree clean +  в .
 - Пример:
   # Открой в браузере: https://masterboplus-netizen.github.io/bo-web/
   # Или проверь настройки здесь: https://github.com/masterboplus-netizen/bo-web/settings/pages
+
+
+## 9. ССЫЛКИ В БЛОКАХ КОДА (КРИТИЧНО)
+- Когда AI дает ссылку, он ОБЯЗАН оформлять её как блок кода, чтобы Andrey мог нажать Копировать.
+- Пример:
+    https://masterboplus-netizen.github.io/bo-web/
