@@ -14,10 +14,10 @@
 ## 2. ЧТО ПРОЧИТАТЬ ПЕРВЫМ ДЕЛОМ
 
 Прежде чем писать код или предлагать изменения, прочитай эти документы по порядку:
-1. documenty/01_BO_CORE/RULES.md — Строгие правила работы (STRICT MODE).
-2. documenty/01_BO_CORE/MANIFEST.md — Философия и суть проекта.
-3. documenty/01_BO_CORE/ARCHITECTURE.md — Как устроено ядро.
-4. documenty/01_BO_CORE/STATE.md — Где мы находимся сейчас (текущие баги и планы).
+1. docs/01_BO_CORE/RULES.md — Строгие правила работы (STRICT MODE).
+2. docs/01_BO_CORE/MANIFEST.md — Философия и суть проекта.
+3. docs/01_BO_CORE/ARCHITECTURE.md — Как устроено ядро.
+4. docs/01_BO_CORE/STATE.md — Где мы находимся сейчас (текущие баги и планы).
 
 ## 3. КАК ОБНОВИТЬ КАРТУ КОДА
 

@@ -5,8 +5,8 @@
 > Читать перед началом работы с тайм-трекером.
 
 ## 1. ЧТО ЧИТАТЬ В НАЧАЛЕ СЕССИИ (по Хераборине)
-1. documenty/05_KHERABORINA/KHERABORINA_INSTRUCTIONS.md ← этот файл
-2. documenty/01_BO_CORE/HANDOFF.md — как войти в проекты
+1. docs/05_KHERABORINA/KHERABORINA_INSTRUCTIONS.md ← этот файл
+2. docs/01_BO_CORE/HANDOFF.md — как войти в проекты
 
 ## 2. ОБЩИЕ ПРАВИЛА РАБОТЫ
 - Один патч → тест в браузере → коммит.
