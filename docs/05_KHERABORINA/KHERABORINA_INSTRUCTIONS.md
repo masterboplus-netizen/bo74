@@ -57,4 +57,50 @@
 - Репо: github.com/masterboplus-netizen/worklog
 - Хостинг: https://masterboplus-netizen.github.io/worklog/
 
-**Конец инструкций.**
+**Конец инструкций.**## 5. ОБНОВЛЕНИЕ ДАННЫХ (Одной командой)
+
+Вместо ручного внесения правок, проверки JSON, шифрования и пуша, используйте единый Python-скрипт. 
+Он сам считает количество сессий за день, присвоит правильный ID (защита от перезаписи), зашифрует данные и запушит на GitHub.
+
+Шаблон для терминала (скопируйте и поменяйте настройки в начале):
+
+python3 - <<'PY'
+import json, os, subprocess, sys
+from pathlib import Path
+
+# === НАСТРОЙКИ СЕССИИ ===
+S_DATE = "2026-10-26"
+S_START = "02:31"
+S_END = "03:55"
+S_DURATION = 84
+S_PROJECT = "bo81"
+S_NOTE = "Текст заметки"
+S_EVENTS = 35
+S_SCREENS = 12
+# ==========================
+
+p = Path('worklog.json')
+data = json.loads(p.read_text(encoding='utf-8'))
+day_sessions = [s for s in data['sessions'] if s.get('date') == S_DATE]
+S_ID = f"s_{S_DATE.replace('-', '')}_{len(day_sessions) + 1}"
+
+new_session = {
+    "id": S_ID, "date": S_DATE, "start": S_START, "end": S_END,
+    "duration_min": S_DURATION, "project": S_PROJECT, "note": S_NOTE,
+    "events": S_EVENTS, "screens": S_SCREENS
+}
+data['sessions'].append(new_session)
+p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+print(f'Сессия {S_ID} добавлена.')
+
+res = subprocess.run(['.venv/bin/python', 'encrypt.py'], env={**os.environ, 'WORKLOG_PIN': '201186'}, capture_output=True, text=True)
+if res.returncode != 0: sys.exit(f'ОШИБКА: {res.stderr}')
+print(res.stdout.strip())
+
+subprocess.run(['git', 'add', 'worklog.json', 'data.encrypted.json'])
+subprocess.run(['git', 'commit', '-m', f'data: session {S_DATE} {S_START}-{S_END}'])
+res_push = subprocess.run(['git', 'push', 'origin', 'main'], capture_output=True, text=True)
+if res_push.returncode != 0: sys.exit(f'PUSH: {res_push.stderr}')
+print('Успешно запушено!')
+PY
+
