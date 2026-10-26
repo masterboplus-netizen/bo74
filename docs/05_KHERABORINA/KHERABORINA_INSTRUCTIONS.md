@@ -77,6 +77,7 @@ S_PROJECT = "bo81"
 S_NOTE = "Текст заметки"
 S_EVENTS = 35
 S_SCREENS = 12
+S_TASKS_DONE = 0  # <--- НОВОЕ: сколько задач закрыто
 # ==========================
 
 p = Path('worklog.json')
