@@ -1,49 +1,33 @@
 # API.md — API Бо (REST)
 
-> **Дата:** 2026-10-25
+> **Дата:** 2026-10-29
 > **Планируется:** Этап 6 (Веб и интеграции).
 
 ## 1. АУТЕНТИФИКАЦИЯ
 Bearer Token (позже). Пока — только внутренние вызовы.
 
-## 2. ЭНДПОИНТЫ
+## 2. ЭНДПОИНТЫ (со статусами)
 
-### GET /api/summary
-Общая сводка. Возвращает: objects_count, tasks_open, tasks_done, income, expense, balance.
+| Метод | Путь | Статус | Описание |
+|---|---|---|---|
+| GET | /api/summary | 🔴 план | Сводка (objects_count, tasks_open, income, expense, balance) |
+| GET | /api/objects | 🟢 реализовано | Список объектов (из bo72.db) |
+| GET | /api/object/{id} | 🔴 план | Детали объекта (object, tasks, finance, photos) |
+| GET | /api/object/{id}/photos | 🔴 план | Фото объекта |
+| GET | /api/room/{id} | 🔴 план | Комната (measures, openings, niches, comms, areas) |
+| GET | /api/room/{id}/walls | 🟢 реализовано | Данные о стенах комнаты |
+| GET | /api/room/{id}/report | 🟢 реализовано | Полный отчет по комнате |
+| GET | /api/room/{id}/model | 🔴 план | Модель комнаты (JSON) |
+| GET | /api/room/{id}/export/{format} | 🔴 план | Экспорт (json, dxf, csv, pdf, ifc) |
+| GET | /api/tasks | 🔴 план | Список задач |
+| GET | /api/finance | 🔴 план | Финансы |
+| GET | /api/kpi | 🔴 план | KPI |
 
-### GET /api/objects
-Список объектов. Возвращает: [{id, name, status, budget, income, expense, tasks_open, tasks_done}]
-
-### GET /api/object/{id}
-Детали объекта. Возвращает: {object, tasks, finance, photos}.
-
-### GET /api/object/{id}/photos
-Фото объекта. Возвращает: [{id, stage, caption, taken_at, task_title, file_id}].
-
-### GET /api/room/{id}
-Комната. Возвращает: {room, measures, openings, niches, comms, areas}.
-
-### GET /api/room/{id}/model
-Модель комнаты (JSON). Возвращает: полную модель для экспорта.
-
-### GET /api/room/{id}/export/{format}
-Экспорт комнаты. Форматы: json, dxf, csv, pdf, ifc. Возвращает: файл.
-
-### GET /api/tasks
-Список задач. Параметры: object_id, status, assigned_to.
-Возвращает: [{id, title, status, deadline, object_name}].
-
-### GET /api/finance
-Финансы. Параметры: object_id, period. Возвращает: сводку.
-
-### GET /api/kpi
-KPI. Возвращает: по мастерам, по объектам.
-
-## 3. ВЕБХУКИ
-### POST /webhook/task_created
-### POST /webhook/task_done
-### POST /webhook/photo_added
-### POST /webhook/export_ready
+## 3. ВЕБХУКИ (все 🔴 план)
+- POST /webhook/task_created
+- POST /webhook/task_done
+- POST /webhook/photo_added
+- POST /webhook/export_ready
 
 ## 4. SDK
 Планируется: Python SDK, JavaScript SDK, Мобильный SDK.
