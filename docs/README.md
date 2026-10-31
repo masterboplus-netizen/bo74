@@ -23,23 +23,56 @@
 
 ## 📌 ТОЧНЫЕ RAW-ССЫЛКИ ДЛЯ КАЖДОГО ПРОЕКТА
 
-**01_BO_CORE (Ядро):**
+**01_BO_CORE (Ядро) — Документация:**
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/01_BO_CORE/MANIFEST.md
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/01_BO_CORE/STATE.md
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/01_BO_CORE/RULES.md
 
-**02_BO_TELEGRAM (Бот):**
+**01_BO_CORE (Ядро) — Код (в корне репозитория):**
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/main.py
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/config.py
+
+**02_BO_TELEGRAM (Бот) — Документация:**
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/02_BO_TELEGRAM/UI_MAP.md
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/02_BO_TELEGRAM/STATE_BOT.md
 
-**03_BO_WEB (Веб):**
+**02_BO_TELEGRAM (Бот) — Код (в корне репозитория):**
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/bot.py
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/db.py
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/web_dashboard.py
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/main_render.py
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/keep_alive.py
+
+**03_BO_WEB (Веб) — Документация:**
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/03_BO_WEB/WEB_STATE.md
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/03_BO_WEB/API.md
 
-**05_KHERABORINA (Трекер):**
+**03_BO_WEB (Веб) — Код:**
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/bo-web/index.html
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/bo-web/js/main.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/bo-web/js/api/supabase.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/bo-web/js/api/objects.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/bo-web/js/screens/objects.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/bo-web/js/screens/objectDetail.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/bo-web/js/screens/objectEdit.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/bo-web/js/modals/add_menu.js
+
+**05_KHERABORINA (Трекер) — Документация:**
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/05_KHERABORINA/KHERABORINA_INSTRUCTIONS.md
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/05_KHERABORINA/CODE_MAP.md
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/05_KHERABORINA/TODO.md
+
+**05_KHERABORINA (Трекер) — Код:**
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/worklog-app/index.html
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/worklog-app/js/app.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/worklog-app/js/auth.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/worklog-app/js/chart.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/worklog-app/js/dashboard.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/worklog-app/js/diary.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/worklog-app/js/projects.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/worklog-app/js/safe.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/worklog-app/js/ui.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/worklog-app/js/utils.js
 
 ## 1. ЯДРО (01_BO_CORE)
 Здесь лежит вся бизнес-логика, архитектура и правила работы.
