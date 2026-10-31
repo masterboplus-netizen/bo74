@@ -1,168 +1,61 @@
-# ХЕРАБОРИНА — Инструкции для AI (Правила, данные, шифрование)
+# AI_INSTRUCTIONS — правила для AI-чата (читать ПЕРВЫМ)
 
-> **Хераборина (worklog-app)** — это PWA-трекер времени Andrey. 
-> **Важно:** Это отдельный проект, НЕ часть Бо 8.1. 
-> Читать перед началом работы с тайм-трекером.
+> Хераборина — PWA-трекер времени Andrey. Отдельный проект, НЕ часть Бо 8.1.
 
-## 1. ЧТО ЧИТАТЬ В НАЧАЛЕ СЕССИИ (по Хераборине)
-1. docs/05_KHERABORINA/KHERABORINA_INSTRUCTIONS.md ← этот файл
-2. docs/01_BO_CORE/HANDOFF.md — как войти в проекты
+## 1. ЧТО ЧИТАТЬ В НАЧАЛЕ СЕССИИ
+1. `docs/AI_INSTRUCTIONS.md` ← этот файл
+2. `docs/HANDOFF.md` — как войти
+3. `docs/STATE.md` — где мы
+4. `docs/CODE_MAP.md` — карта кода
 
-## 2. ОБЩИЕ ПРАВИЛА РАБОТЫ
+**ПЕРВОЕ СООБЩЕНИЕ НОВОГО ЧАТА (ОБЯЗАТЕЛЬНО):** Выдать пользователю ОДНИМ блоком raw-ссылки на все доки ВСЕХ активных проектов (Хераборина, Бо 8.1, Бо Веб, ФК Богородское) — чтобы он открыл их одним link box. Никаких cat/curl, никаких нескольких блоков. Один блок, все ссылки, копируется целиком.
+
+## 2. ПРАВИЛА РАБОТЫ
 - Один патч → тест в браузере → коммит.
 - Одна команда — один блок.
 - Перед патчем — свежий grep/sed (номера строк плавают).
-- Бэкап перед риском: cp file file.bak_ИМЯ_20261025_132751.
-- Откат: git checkout path/to/file.
+- Бэкап перед риском: `cp file file.bak_ИМЯ_$(date +%Y%m%d_%H%M%S)`.
+- Откат: `git checkout path/to/file`.
 
-## 3. ПРАВИЛО ПОЛУНОЧИ (КРИТИЧНО)
+### 2.1. ПРАВИЛО ПОЛУНОЧИ (КРИТИЧНО)
 Сессия НЕ может пересекать полночь. Если Andrey работал с 20:24 до 00:44:
 - Создать ДВЕ сессии:
-  - s_YYYYMMDD_N (дата старта): 20:24 → 23:59.
-  - s_YYYYMMDD+1_1 (следующий день): 00:00 → 00:44.
+  - `s_YYYYMMDD_N` (дата старта): 20:24 → 23:59.
+  - `s_YYYYMMDD+1_1` (следующий день): 00:00 → 00:44.
 - Дневник = СЕССИИ (могут быть множественные в один день).
 - Вкладка «Время» = ДНИ (уникальные даты, не количество сессий).
 - Среднее/день = сумма реальных часов / кол-во уникальных дней.
+- Пример: `s_20261016_3` (20:24→23:59, 215мин) + `s_20261017_1` (00:00→00:44, 44мин).
 
-*Пример: s_20261016_3 (20:24→23:59, 215мин) + s_20261017_1 (00:00→00:44, 44мин).*
+## 3. PIN И ДАННЫЕ
+- PIN: `201186` (НЕ в git!).
+- `worklog.json` → `encrypt.py` → `data.encrypted.json`.
+- `encrypt.py` — только `.venv/bin/python` (системный python3 не имеет cryptography).
+- Команда шифрования: `WORKLOG_PIN='201186' .venv/bin/python encrypt.py`
 
-## 4. PIN И ДАННЫЕ
-- **PIN:** 201186 (НЕ в git!).
-- **Данные:** worklog.json → encrypt.py → data.encrypted.json.
-- encrypt.py — только .venv/bin/python (системный python3 не имеет cryptography).
-- **Команда шифрования:** WORKLOG_PIN='201186' .venv/bin/python encrypt.py
+## 4. ОБНОВЛЕНИЕ ДАННЫХ (4 шага)
+1. Добавить/правка сессии в `worklog.json`.
+2. Проверка: `python3 -m json.tool worklog.json > /dev/null && echo "JSON OK"`
+3. Шифрование: `WORKLOG_PIN='201186' .venv/bin/python encrypt.py`
+4. Push: `git add worklog.json data.encrypted.json && git commit -m "data: ..." && git push origin main`
 
-## 5. ОБНОВЛЕНИЕ ДАННЫХ (4 шага)
-1) Добавить/правка сессии в worklog.json.
-2) Проверка: python3 -m json.tool worklog.json > /dev/null && echo JSON OK
-3) Шифрование: WORKLOG_PIN='201186' .venv/bin/python encrypt.py
-4) Push: git add worklog.json data.encrypted.json && git commit -m data: ... && git push origin main
+## 5. CACHE-BUST — ВАЖНО
+Браузер держит старый `app.js`/`style.css`. После правки `app.js`/`style.css` → увеличить `?v=N` в `index.html`. Сейчас `v=3`.
 
-## 6. CACHE-BUST — ВАЖНО
-Браузер держит старый app.js/style.css.
-После правки app.js/style.css → увеличить ?v=N в index.html.
-Сейчас v=3.
+## 6. ГРАБЛИ
+- Cache-bust: забыл поднять `?v=N` → пользователь видит старый UI.
+- `encrypt.py` системным python3 → `ModuleNotFoundError: cryptography`.
+- `worklog.json` в `.gitignore`, но закоммичен через `git add -f` ранее → правки требуют `git add` (просто, без `-f`, т.к. уже отслеживается).
+- PIN показывать через `showScreen('pin-screen')` (не 'pin').
+- Сервис-воркер `sw.js` — исключает `data.encrypted.json` из кэша (иначе не расшифруется).
+- `sed -i` на Android (busybox) ломает UTF-8 (кириллица превращается в кракозябры). Для записи русских строк использовать python3 (`Path.read_text/write_text` с `encoding='utf-8'`).
 
-## 7. ГРАБЛИ
-1. **Cache-bust:** забыл поднять ?v=N → пользователь видит старый UI.
-2. **encrypt.py системным python3** → ModuleNotFoundError: cryptography.
-3. **sed -i на Android (busybox) ломает UTF-8.** Для записи русских строк использовать python3 (Path.read_text/write_text с encoding='utf-8').
-
-## 8. ЧЕГО AI НЕ ДЕЛАЕТ
-- НЕ коммитит worklog.json без data.encrypted.json.
+## 7. ЧЕГО AI НЕ ДЕЛАЕТ
+- НЕ коммитит `worklog.json` без `data.encrypted.json` (иначе данные разъедутся).
 - НЕ даёт 2+ команд разом, если могут упасть.
 - НЕ патчит вслепую — сначала grep/sed.
 
-## 9. ССЫЛКИ
-- Репо: github.com/masterboplus-netizen/worklog
-- Хостинг: https://masterboplus-netizen.github.io/worklog/
-
-**Конец инструкций.**## 5. ОБНОВЛЕНИЕ ДАННЫХ (Одной командой)
-
-Вместо ручного внесения правок, проверки JSON, шифрования и пуша, используйте единый Python-скрипт. 
-Он сам считает количество сессий за день, присвоит правильный ID (защита от перезаписи), зашифрует данные и запушит на GitHub.
-
-Шаблон для терминала (скопируйте и поменяйте настройки в начале):
-
-python3 - <<'PY'
-import json, os, subprocess, sys
-from pathlib import Path
-
-# === НАСТРОЙКИ СЕССИИ ===
-S_DATE = "2026-10-26"
-S_START = "02:31"
-S_END = "03:55"
-S_DURATION = 84
-S_PROJECT = "bo81"
-S_NOTE = "Текст заметки"
-S_EVENTS = 35
-S_SCREENS = 12
-S_TASKS_DONE = 0  # <--- НОВОЕ: сколько задач закрыто
-# ==========================
-
-p = Path('worklog.json')
-data = json.loads(p.read_text(encoding='utf-8'))
-day_sessions = [s for s in data['sessions'] if s.get('date') == S_DATE]
-S_ID = f"s_{S_DATE.replace('-', '')}_{len(day_sessions) + 1}"
-
-new_session = {
-    "id": S_ID, "date": S_DATE, "start": S_START, "end": S_END,
-    "duration_min": S_DURATION, "project": S_PROJECT, "note": S_NOTE,
-    "events": S_EVENTS, "screens": S_SCREENS
-}
-data['sessions'].append(new_session)
-p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
-print(f'Сессия {S_ID} добавлена.')
-
-res = subprocess.run(['.venv/bin/python', 'encrypt.py'], env={**os.environ, 'WORKLOG_PIN': '201186'}, capture_output=True, text=True)
-if res.returncode != 0: sys.exit(f'ОШИБКА: {res.stderr}')
-print(res.stdout.strip())
-
-subprocess.run(['git', 'add', 'worklog.json', 'data.encrypted.json'])
-subprocess.run(['git', 'commit', '-m', f'data: session {S_DATE} {S_START}-{S_END}'])
-res_push = subprocess.run(['git', 'push', 'origin', 'main'], capture_output=True, text=True)
-if res_push.returncode != 0: sys.exit(f'PUSH: {res_push.stderr}')
-print('Успешно запушено!')
-PY
-
-
----
-## 5.1. АКТУАЛЬНЫЙ ШАБЛОН ЗАПИСИ СЕССИИ (С ЗАДАЧАМИ)
-
-cd ~/workspace/worklog-app && python3 - <<'PY'
-import json, os, subprocess, sys
-from pathlib import Path
-
-# === НАСТРОЙКИ СЕССИИ (МЕНЯЙ ТОЛЬКО ЗДЕСЬ) ===
-S_DATE = "2026-10-26"
-S_START = "21:00"
-S_END = "23:25"
-S_DURATION = 145
-S_PROJECT = "bo81"
-S_NOTE = "Текст заметки"
-S_EVENTS = 50
-S_SCREENS = 20
-S_TASKS_DONE = 0  # <--- НОВОЕ: сколько задач закрыто
-# ================================================
-
-p = Path('worklog.json')
-if not p.exists():
-    sys.exit('ОШИБКА: worklog.json не найден.')
-
-data = json.loads(p.read_text(encoding='utf-8'))
-
-existing = [s for s in data['sessions'] if s.get('date') == S_DATE and s.get('start') == S_START]
-if existing:
-    print(f"Сессия {S_START} уже есть. Обновляем...")
-    existing[0].update({
-        'end': S_END, 'duration_min': S_DURATION, 'note': S_NOTE,
-        'events': S_EVENTS, 'screens': S_SCREENS, 'tasks_done': S_TASKS_DONE
-    })
-    print("Сессия обновлена.")
-else:
-    day_sessions = [s for s in data['sessions'] if s.get('date') == S_DATE]
-    S_ID = f"s_{S_DATE.replace('-', '')}_{len(day_sessions) + 1}"
-    new_session = {
-        "id": S_ID, "date": S_DATE, "start": S_START, "end": S_END,
-        "duration_min": S_DURATION, "project": S_PROJECT, "note": S_NOTE,
-        "events": S_EVENTS, "screens": S_SCREENS, "tasks_done": S_TASKS_DONE
-    }
-    data['sessions'].append(new_session)
-    print(f'Сессия {S_ID} добавлена.')
-
-p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
-
-print('Шифрование...')
-res = subprocess.run(['.venv/bin/python', 'encrypt.py'], env={**os.environ, 'WORKLOG_PIN': '201186'}, capture_output=True, text=True)
-if res.returncode != 0:
-    sys.exit(f'ОШИБКА ШИФРОВАНИЯ: {res.stderr}')
-print(res.stdout.strip())
-
-print('Отправка на GitHub...')
-subprocess.run(['git', 'add', 'worklog.json', 'data.encrypted.json'])
-subprocess.run(['git', 'commit', '-m', f'data: session {S_DATE} {S_START}-{S_END}'])
-res_push = subprocess.run(['git', 'push', 'origin', 'main'], capture_output=True, text=True)
-if res_push.returncode != 0:
-    sys.exit(f'ОШИБКА PUSH: {res_push.stderr}')
-print('Успешно запушено!')
-PY
+## 8. ССЫЛКИ
+- Репо: `github.com/masterboplus-netizen/worklog`
+- Хостинг: `https://masterboplus-netizen.github.io/worklog/`
+- Локально: `~/workspace/worklog-app/`
