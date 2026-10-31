@@ -9,6 +9,7 @@
    - Сначала спроси пользователя: «Над каким проектом работаем?» (Ядро, Telegram, Веб, Хераборина).
    - Дождись ответа.
    - Затем пришли все Raw-ссылки на документы **и код** ЭТОГО проекта **одним блоком кода**.
+5. **⏱ ФИКСАЦИЯ СЕССИИ (ОБЯЗАТЕЛЬНО):** Как только ты получил документы и определился с проектом, ты обязан зафиксировать время начала сессии. В процессе работы ты считаешь количество отправленных сообщений, просмотренных экранов (скринов) и закрытых задач. В конце сессии (или по команде пользователя «Сохрани сессию») ты используешь скрипт из раздела «Скрипт для записи сессии» ниже.
 
 **Пример правильной ссылки (одна):**
     https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/main.py
@@ -17,7 +18,7 @@
     https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/main.py
     https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/config.py
 
-> **Дата:** 2026-10-25
+> **Дата:** 2026-11-01
 > **Главное правило:** Старые документы лежат в папке /docs (архив). Мы работаем только с этой новой структурой.
 
 ## 📌 ТОЧНЫЕ RAW-ССЫЛКИ ДЛЯ КАЖДОГО ПРОЕКТА
@@ -119,5 +120,67 @@ https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/encrypt.py
 
 ## 5. АРХИВ (_ARCHIVE)
 Старые снимки кода, бэкапы и устаревшие версии.
+
+## 6. СКРИПТ ДЛЯ ЗАПИСИ СЕССИИ (ШАБЛОН)
+
+В конце работы (или по команде «Сохрани сессию») используйте этот скрипт:
+
+cd ~/workspace/worklog-app && python3 - <<'PY'
+import json, os, subprocess, sys
+from pathlib import Path
+
+# === НАСТРОЙКИ СЕССИИ (МЕНЯЙ ТОЛЬКО ЗДЕСЬ) ===
+S_DATE = "2026-11-01"      # Дата сессии (YYYY-MM-DD)
+S_START = "21:00"          # Время начала
+S_END = "23:25"            # Время окончания
+S_DURATION = 145           # Длительность в минутах
+S_PROJECT = "bo81"         # Название проекта
+S_NOTE = "Текст заметки"   # Краткое описание работы
+S_EVENTS = 50              # Кол-во сообщений/событий
+S_SCREENS = 20             # Кол-во просмотренных экранов
+S_TASKS_DONE = 0           # Кол-во закрытых задач
+# ================================================
+
+p = Path('worklog.json')
+if not p.exists():
+    sys.exit('ОШИБКА: worklog.json не найден.')
+
+data = json.loads(p.read_text(encoding='utf-8'))
+
+existing = [s for s in data['sessions'] if s.get('date') == S_DATE and s.get('start') == S_START]
+if existing:
+    print(f"Сессия {S_START} уже есть. Обновляем...")
+    existing[0].update({
+        'end': S_END, 'duration_min': S_DURATION, 'note': S_NOTE,
+        'events': S_EVENTS, 'screens': S_SCREENS, 'tasks_done': S_TASKS_DONE
+    })
+    print("Сессия обновлена.")
+else:
+    day_sessions = [s for s in data['sessions'] if s.get('date') == S_DATE]
+    S_ID = f"s_{S_DATE.replace('-', '')}_{len(day_sessions) + 1}"
+    new_session = {
+        "id": S_ID, "date": S_DATE, "start": S_START, "end": S_END,
+        "duration_min": S_DURATION, "project": S_PROJECT, "note": S_NOTE,
+        "events": S_EVENTS, "screens": S_SCREENS, "tasks_done": S_TASKS_DONE
+    }
+    data['sessions'].append(new_session)
+    print(f'Сессия {S_ID} добавлена.')
+
+p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+
+print('Шифрование...')
+res = subprocess.run(['.venv/bin/python', 'encrypt.py'], env={**os.environ, 'WORKLOG_PIN': '201186'}, capture_output=True, text=True)
+if res.returncode != 0:
+    sys.exit(f'ОШИБКА ШИФРОВАНИЯ: {res.stderr}')
+print(res.stdout.strip())
+
+print('Отправка на GitHub...')
+subprocess.run(['git', 'add', 'worklog.json', 'data.encrypted.json'])
+subprocess.run(['git', 'commit', '-m', f'data: session {S_DATE} {S_START}-{S_END}'])
+res_push = subprocess.run(['git', 'push', 'origin', 'main'], capture_output=True, text=True)
+if res_push.returncode != 0:
+    sys.exit(f'ОШИБКА PUSH: {res_push.stderr}')
+print('Успешно запушено!')
+PY
 
 **Конец карты документации.**
