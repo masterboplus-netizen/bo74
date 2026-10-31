@@ -3,55 +3,7 @@
 ## 🚨 ГЛАВНОЕ ПРАВИЛО ДЛЯ ИИ (ЧИТАТЬ ПЕРВЫМ)
 
 1. **Формат ссылок:** Всегда давай ссылки в виде блока кода.
-2. **Получение кода:** Пользователь сам присылает Raw-ссылки (cd ~/workspace/bo-web && \
-python3 - <<'PY'
-import re, subprocess
-
-p_html = 'index.html'
-html = open(p_html, encoding='utf-8').read()
-
-# 1. Настраиваем body как простой Flex-контейнер на весь экран
-html = html.replace(
-    'body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--fg); margin: 0; padding: 0; height: 100vh; display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }',
-    'body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--fg); margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }'
-)
-
-# 2. Шапка — просто блок, без фиксов и з-индексов наложения
-html = html.replace(
-    'style="display: flex; justify-content: space-between; align-items: center; padding: 20px 20px 10px 20px; background: var(--bg); z-index: 103;"',
-    'style="display: flex; justify-content: space-between; align-items: center; padding: 20px 20px 10px 20px; background: var(--bg); flex-shrink: 0; z-index: 103;"'
-)
-
-# 3. Контент — занимает ВСЁ оставшееся место и скроллится
-html = html.replace(
-    '<div id="app-content" style="position: relative; z-index: 102; padding: 10px 20px; overflow-y: auto; padding-bottom: 20px;">Загрузка...</div>',
-    '<div id="app-content" style="position: relative; z-index: 102; padding: 10px 20px; flex-grow: 1; overflow-y: auto;">Загрузка...</div>'
-)
-
-# 4. Нижнее меню — жестко фиксированной высоты
-html = html.replace(
-    'z-index: 100; display: flex; flex-direction: column; height: 140px;',
-    'z-index: 100; display: flex; flex-direction: column; height: 140px; flex-shrink: 0;'
-)
-
-open(p_html, 'w', encoding='utf-8').write(html)
-print('✅ index.html: сделаны 3 отдельных контейнера (Flex)')
-
-# 5. Обновляем кеш и версии
-sw = open('sw.js', encoding='utf-8').read()
-sw = re.sub(r'bo-cache-v\d+', 'bo-cache-v151', sw)
-open('sw.js', 'w', encoding='utf-8').write(sw)
-
-html = open(p_html, encoding='utf-8').read()
-html = re.sub(r'app2\.js\?v=\d+', 'app2.js?v=151', html)
-open(p_html, 'w', encoding='utf-8').write(html)
-print('✅ Кеш обновлен до v151')
-
-subprocess.run(['git', 'add', 'index.html', 'app2.js', 'sw.js'])
-subprocess.run(['git', 'commit', '-m', 'fix(web): 3 отдельных flex-контейнера, без гридов'])
-res = subprocess.run(['git', 'push'])
-print('🚀 ГОТОВО' if res.returncode == 0 else '⚠️ Push не прошёл')
-PY). Не нужно просить его копировать текст в чат.
+2. **Получение кода:** Пользователь сам присылает Raw-ссылки (raw.githubusercontent.com). Не нужно просить его копировать текст в чат.
 3. **Группировка:** Если нужно несколько ссылок, они должны быть в ОДНОМ блоке кода (каждая на новой строке). Не разбивай их на отдельные блоки.
 4. **Алгоритм начала работы:** 
    - Сначала спроси пользователя: «Над каким проектом работаем?» (Ядро, Telegram, Веб, Хераборина).
@@ -59,17 +11,12 @@ PY). Не нужно просить его копировать текст в ч
    - Затем пришли все Raw-ссылки на документы **и код** ЭТОГО проекта **одним блоком кода**.
 
 **Пример правильной ссылки (одна):**
-```text
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/core/geometry.py
-```
+    https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/core/geometry.py
 
 **Пример правильной группировки (несколько ссылок в ОДНОМ блоке):**
-```text
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/05_KHERABORINA/KHERABORINA_INSTRUCTIONS.md
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/05_KHERABORINA/CODE_MAP.md
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/05_KHERABORINA/TODO.md
-```
-
+    https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/05_KHERABORINA/KHERABORINA_INSTRUCTIONS.md
+    https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/05_KHERABORINA/CODE_MAP.md
+    https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/05_KHERABORINA/TODO.md
 
 > **Дата:** 2026-10-25
 > **Главное правило:** Старые документы лежат в папке /docs (архив). Мы работаем только с этой новой структурой.
