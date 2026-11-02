@@ -131,15 +131,21 @@ import json, os, subprocess, sys
 from pathlib import Path
 
 # === НАСТРОЙКИ СЕССИИ (МЕНЯЙ ТОЛЬКО ЗДЕСЬ) ===
-S_DATE = "2026-11-01"      # Дата сессии (YYYY-MM-DD)
-S_START = "21:00"          # Время начала
-S_END = "23:25"            # Время окончания
-S_DURATION = 145           # Длительность в минутах
-S_PROJECT = "bo81"         # Название проекта
+S_DATE = "2026-11-02"      # Дата сессии (YYYY-MM-DD)
+S_START = "12:00"          # Время начала
+S_END = "18:00"            # Время окончания
+S_DURATION = 360           # Длительность в минутах
+S_PROJECT = "bo-core"      # Название проекта
 S_NOTE = "Текст заметки"   # Краткое описание работы
 S_EVENTS = 50              # Кол-во сообщений/событий
 S_SCREENS = 20             # Кол-во просмотренных экранов
 S_TASKS_DONE = 0           # Кол-во закрытых задач
+
+# СПИСОК ВЫПОЛНЕННЫХ ЗАДАЧ (с привязкой к фазе!)
+S_TASKS = [
+    { "text": "Название задачи 1", "phase": "13. Telegram-бот" },
+    { "text": "Название задачи 2", "phase": "1. Фундамент" }
+]
 # ================================================
 
 p = Path('worklog.json')
@@ -153,7 +159,8 @@ if existing:
     print(f"Сессия {S_START} уже есть. Обновляем...")
     existing[0].update({
         'end': S_END, 'duration_min': S_DURATION, 'note': S_NOTE,
-        'events': S_EVENTS, 'screens': S_SCREENS, 'tasks_done': S_TASKS_DONE
+        'events': S_EVENTS, 'screens': S_SCREENS, 'tasks_done': S_TASKS_DONE,
+        'tasks': S_TASKS
     })
     print("Сессия обновлена.")
 else:
@@ -162,7 +169,8 @@ else:
     new_session = {
         "id": S_ID, "date": S_DATE, "start": S_START, "end": S_END,
         "duration_min": S_DURATION, "project": S_PROJECT, "note": S_NOTE,
-        "events": S_EVENTS, "screens": S_SCREENS, "tasks_done": S_TASKS_DONE
+        "events": S_EVENTS, "screens": S_SCREENS, "tasks_done": S_TASKS_DONE,
+        "tasks": S_TASKS
     }
     data['sessions'].append(new_session)
     print(f'Сессия {S_ID} добавлена.')
