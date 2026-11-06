@@ -323,3 +323,31 @@ PY
 - Attention Hijacking (перехват внимания через topic transition) — перехват внимания через смену темы
 
 **Конец карты документации.**
+
+---
+
+## 📤 КАК ПУШИТЬ ИЗМЕНЕНИЯ (ИНСТРУКЦИЯ ДЛЯ ИИ)
+
+У нас 3 активных локальных Git-репозитория:
+1. Корень (~/workspace) — репозиторий bo74 (документация, код бота Telegram, ядро, ФК).
+2. worklog-app (~/workspace/worklog-app) — репозиторий worklog (код трекера).
+3. bo-web (~/workspace/bo-web) — репозиторий bo-web (код веб-приложения).
+
+**Команды для пуша:**
+
+**1. Корень (bo74):**
+cd ~/workspace && git add -A && git commit -m "твое сообщение" && git push origin main
+
+**2. Трекер (worklog):**
+cd ~/workspace/worklog-app && git add -A && git commit -m "твое сообщение" && git push origin main
+
+**3. Веб (bo-web):**
+cd ~/workspace/bo-web && git add -A && git commit -m "твое сообщение" && git push origin main
+
+**Если Git ругается "rejected":**
+cd ~/workspace && git push -f origin main (и аналогично для других).
+
+**Проверка после пуша:**
+cd ~/workspace && git status (должно быть "nothing to commit, working tree clean").
+
+**ВНИМАНИЕ:** В профиле GitHub есть еще репозитории (bo-app-v2, bo-pwa и др.). Они не привязаны локально и не используются в текущей работе. Удалять или архивировать их без отдельного разрешения пользователя ЗАПРЕЩЕНО.
