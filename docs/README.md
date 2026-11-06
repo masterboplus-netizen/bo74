@@ -10,7 +10,7 @@
    - Сначала спроси пользователя: «Над каким проектом работаем?» (Ядро, Telegram, Веб, Хераборина).
    - Дождись ответа.
    - Затем пришли все Raw-ссылки на документы **и код** ЭТОГО проекта **одним блоком кода**.
-5. **⏱ ФИКСАЦИЯ СЕССИИ (ОБЯЗАТЕЛЬНО):** Как только ты получил документы и определился с проектом, ты обязан зафиксировать время начала сессии. В процессе работы ты считаешь количество отправленных сообщений, просмотренных экранов (скринов) и закрытых задач. В конце сессии (или по команде пользователя «Сохрани сессию») ты используешь скрипт из раздела «Скрипт для записи сессии» ниже.
+5. **⏱ ФИКСАЦИЯ СЕССИИ (ОБЯЗАТЕЛЬНО):** Как только ты получил документы и определился с проектом, ты обязан зафиксировать время начала сессии и дату. В процессе работы ты считаешь количество отправленных сообщений, просмотренных экранов (скринов) и закрытых задач. В конце сессии (или по команде пользователя «Сохрани сессию») ты используешь скрипт из раздела «Скрипт для записи сессии» ниже.
 
 **Пример правильной ссылки (одна):**
     https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/main.py
@@ -122,74 +122,120 @@ https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/encrypt.py
 ## 5. АРХИВ (_ARCHIVE)
 Старые снимки кода, бэкапы и устаревшие версии.
 
-## 6. СКРИПТ ДЛЯ ЗАПИСИ СЕССИИ (ШАБЛОН)
+## 6. 📝 Как записывать сессии (Инструкция для ИИ)
 
-В конце работы (или по команде «Сохрани сессию») используйте этот скрипт:
+**ВАЖНО:** Сессии записываются **напрямую в Supabase**. Не используйте `add_session.py` (он для старого формата).
+
+
+### 🛑 Правило полуночи (STRICT MODE)
+Если время сессии пересекает **00:00 (полночь)**, её необходимо записывать **как ДВЕ отдельные сессии**:
+1.  **Сессия 1:** с начального времени до **23:59** (дата остается текущей).
+2.  **Сессия 2:** с **00:00** до конечного времени (дата меняется на следующую).
+
+*Пример:*
+*   Работали с `19:48` до `01:00`.
+*   Записываем сессию 1: `19:48` — `23:59` (дата: сегодня).
+*   Записываем сессию 2: `00:00` — `01:00` (дата: завтра).
+
+## 🛑 СТРОГИЙ АЛГОРИТМ ЗАПИСИ СЕССИИ ДЛЯ ИИ
+
+**ВНИМАНИЕ! ИИ ЗАПРЕЩЕНО выдумывать названия фаз и задач!**
+
+1. Когда пользователь говорит «Записываем сессию», ИИ ОБЯЗАН первым делом отправить ему ссылку на API Supabase в блоке кода:
+   ```text
+   https://ruomhtlvyqmaqhqqsfqn.supabase.co/rest/v1/worklog_phases?select=id,name,project_id,order_num&apikey=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1b21odGx2eXFtYXFocXFzZnFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzOTQwMjUsImV4cCI6MjEwODk3MDAyNX0.7FWm5KVmMqyVxNjXMhcGhgzb6nD8aLfie7cxBlohIO4
+   ```
+2. Пользователь присылает эту ссылку обратно в чат.
+3. ИИ ЧИТАЕТ JSON по этой ссылке, видит реальные названия фаз и выбирает подходящую. Если фазы нет, он может предложить создать новую (но только с разрешения пользователя).
+4. Только после этого ИИ пишет финальный скрипт для терминала.
+
+### Скрипт для записи (использовать только после получения JSON):
 
 cd ~/workspace/worklog-app && python3 - <<'PY'
-import json, os, subprocess, sys
-from pathlib import Path
+import sys
+from supabase import create_client
 
-# === НАСТРОЙКИ СЕССИИ (МЕНЯЙ ТОЛЬКО ЗДЕСЬ) ===
-S_DATE = "2026-11-02"      # Дата сессии (YYYY-MM-DD)
-S_START = "12:00"          # Время начала
-S_END = "18:00"            # Время окончания
-S_DURATION = 360           # Длительность в минутах
-S_PROJECT = "bo-core"      # Название проекта
-S_NOTE = "Текст заметки"   # Краткое описание работы
-S_EVENTS = 50              # Кол-во сообщений/событий
-S_SCREENS = 20             # Кол-во просмотренных экранов
-S_TASKS_DONE = 0           # Кол-во закрытых задач
+SUPABASE_URL = "https://ruomhtlvyqmaqhqqsfqn.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1b21odGx2eXFtYXFocXFzZnFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzOTQwMjUsImV4cCI6MjEwODk3MDAyNX0.7FWm5KVmMqyVxNjXMhcGhgzb6nD8aLfie7cxBlohIO4"
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# СПИСОК ВЫПОЛНЕННЫХ ЗАДАЧ (с привязкой к фазе!)
+S_DATE = "2026-11-03"
+S_START = "11:30"
+S_END = "13:50"
+S_DURATION = 140
+S_PROJECT = "bo-core"      
+S_NOTE = "Краткое описание"
+S_EVENTS = 60
+S_SCREENS = 25
+
 S_TASKS = [
-    { "text": "Название задачи 1", "phase": "13. Telegram-бот" },
-    { "text": "Название задачи 2", "phase": "1. Фундамент" }
-]
-# ================================================
-
-p = Path('worklog.json')
-if not p.exists():
-    sys.exit('ОШИБКА: worklog.json не найден.')
-
-data = json.loads(p.read_text(encoding='utf-8'))
-
-existing = [s for s in data['sessions'] if s.get('date') == S_DATE and s.get('start') == S_START]
-if existing:
-    print(f"Сессия {S_START} уже есть. Обновляем...")
-    existing[0].update({
-        'end': S_END, 'duration_min': S_DURATION, 'note': S_NOTE,
-        'events': S_EVENTS, 'screens': S_SCREENS, 'tasks_done': S_TASKS_DONE,
-        'tasks': S_TASKS
-    })
-    print("Сессия обновлена.")
-else:
-    day_sessions = [s for s in data['sessions'] if s.get('date') == S_DATE]
-    S_ID = f"s_{S_DATE.replace('-', '')}_{len(day_sessions) + 1}"
-    new_session = {
-        "id": S_ID, "date": S_DATE, "start": S_START, "end": S_END,
-        "duration_min": S_DURATION, "project": S_PROJECT, "note": S_NOTE,
-        "events": S_EVENTS, "screens": S_SCREENS, "tasks_done": S_TASKS_DONE,
-        "tasks": S_TASKS
+    { 
+        "phase": "13. Telegram-бот",
+        "task": "Название задачи",
+        "subtasks": ["Подзадача 1"],
+        "status": "done" 
     }
-    data['sessions'].append(new_session)
-    print(f'Сессия {S_ID} добавлена.')
+]
 
-p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+base_date_str = S_DATE.replace('-', '')
+existing_sessions = supabase.table('worklog_sessions').select('id').like('id', f's_{base_date_str}_%').execute()
+existing_ids = [s['id'] for s in existing_sessions.data]
+counter = 1
+while True:
+    session_id = f"s_{base_date_str}_{counter}"
+    if session_id not in existing_ids:
+        break
+    counter += 1
 
-print('Шифрование...')
-res = subprocess.run(['.venv/bin/python', 'encrypt.py'], env={**os.environ, 'WORKLOG_PIN': '201186'}, capture_output=True, text=True)
-if res.returncode != 0:
-    sys.exit(f'ОШИБКА ШИФРОВАНИЯ: {res.stderr}')
-print(res.stdout.strip())
+try:
+    supabase.table('worklog_sessions').insert({
+        "id": session_id,
+        "project_id": S_PROJECT,
+        "date": S_DATE,
+        "start_time": S_START,
+        "end_time": S_END,
+        "duration_min": S_DURATION,
+        "events": S_EVENTS,
+        "screens": S_SCREENS,
+        "tasks_done": len([t for t in S_TASKS if t.get('status') == 'done']),
+        "note": S_NOTE
+    }).execute()
+    print(f"OK: Сессия {session_id} создана")
+except Exception as e:
+    print(f"ОШИБКА: {e}")
+    sys.exit(1)
 
-print('Отправка на GitHub...')
-subprocess.run(['git', 'add', 'worklog.json', 'data.encrypted.json'])
-subprocess.run(['git', 'commit', '-m', f'data: session {S_DATE} {S_START}-{S_END}'])
-res_push = subprocess.run(['git', 'push', 'origin', 'main'], capture_output=True, text=True)
-if res_push.returncode != 0:
-    sys.exit(f'ОШИБКА PUSH: {res_push.stderr}')
-print('Успешно запушено!')
+for t in S_TASKS:
+    phase_res = supabase.table('worklog_phases').select('id').eq('name', t['phase']).eq('project_id', S_PROJECT).eq('is_archived', False).execute()
+    if not phase_res.data:
+        print(f"❌ Фаза '{t['phase']}' не найдена.")
+        sys.exit(1)
+    else:
+        phase_id = phase_res.data[0]['id']
+
+    task_res = supabase.table('worklog_tasks').select('id').eq('name', t['task']).eq('phase_id', phase_id).execute()
+    if task_res.data:
+        task_id = task_res.data[0]['id']
+        supabase.table('worklog_tasks').update({"status": t.get('status', 'planned')}).eq('id', task_id).execute()
+    else:
+        new_task = supabase.table('worklog_tasks').insert({
+            "phase_id": phase_id,
+            "name": t['task'],
+            "status": t.get('status', 'planned')
+        }).execute()
+        task_id = new_task.data[0]['id']
+
+    for sub in t.get('subtasks', []):
+        exists = supabase.table('worklog_subtasks').select('id').eq('task_id', task_id).eq('name', sub).execute()
+        if not exists.data:
+            supabase.table('worklog_subtasks').insert({
+                "task_id": task_id,
+                "name": sub,
+                "status": "done" if t.get('status') == 'done' else "planned",
+                "session_id": session_id
+            }).execute()
+
+print("✅ Сессия и задачи успешно записаны!")
 PY
 
 ---
