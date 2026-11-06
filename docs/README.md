@@ -168,13 +168,18 @@ S_SCREENS = 5
 # вы можете поставить True (или ИИ спросит у вас разрешение).
 ALLOW_CREATE = False
 
-# ВНИМАНИЕ: Ключ "subtasks" пока не поддерживается функцией save_worklog_session.
-# Передавайте только задачу. Подзадачи добавляйте отдельно.
+# ВНИМАНИЕ: Ключ "subtasks" теперь ПОДДЕРЖИВАЕТСЯ функцией save_worklog_session.
+# Передавайте подзадачи прямо в массиве tasks. 
+# Пример: "subtasks": [{"name": "Подзадача 1", "status": "done"}]
 S_TASKS = [
     { 
         "phase": "9. Задачи и Чек-листы",
         "task": "Название задачи",
-        "status": "done"
+        "status": "done",
+        "subtasks": [
+            { "name": "Подзадача 1", "status": "done" },
+            { "name": "Подзадача 2", "status": "in_progress" }
+        ]
     }
 ]
 
