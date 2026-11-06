@@ -195,7 +195,7 @@ payload = {
     "date": S_DATE,
     "start_time": S_START,
     "end_time": S_END,
-    "duration_min": 0,
+    "duration_min": None, # База сама посчитает время по start_time и end_time
     "events": S_EVENTS,
     "screens": S_SCREENS,
     "note": S_NOTE,
