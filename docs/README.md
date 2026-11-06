@@ -159,24 +159,26 @@ SUPABASE_URL = "https://ruomhtlvyqmaqhqqsfqn.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1b21odGx2eXFtYXFocXFzZnFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzOTQwMjUsImV4cCI6MjEwODk3MDAyNX0.7FWm5KVmMqyVxNjXMhcGhgzb6nD8aLfie7cxBlohIO4"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-S_DATE = "2026-11-03"
-S_START = "11:30"
-S_END = "13:50"
-S_DURATION = 140
-S_PROJECT = "bo-core"      
-S_NOTE = "Краткое описание"
-S_EVENTS = 60
-S_SCREENS = 25
+# === НАСТРОЙКИ СЕССИИ (МЕНЯЙ ТОЛЬКО ЗДЕСЬ) ===
+S_DATE = "2026-11-06"
+S_START = "20:00"
+S_END = "01:00"
+S_PROJECT = "bo-web"
+S_NOTE = "Тестовая сессия"
+S_EVENTS = 10
+S_SCREENS = 5
+ALLOW_CREATE = True
 
 S_TASKS = [
     { 
-        "phase": "13. Telegram-бот",
+        "phase": "9. Задачи и Чек-листы",
         "task": "Название задачи",
-        "subtasks": ["Подзадача 1"],
-        "status": "done" 
+        "status": "done",
+        "subtasks": ["Подзадача 1"]
     }
 ]
 
+# === ЛОГИКА ЗАПИСИ (НЕ ТРОГАЙ) ===
 base_date_str = S_DATE.replace('-', '')
 existing_sessions = supabase.table('worklog_sessions').select('id').like('id', f's_{base_date_str}_%').execute()
 existing_ids = [s['id'] for s in existing_sessions.data]
@@ -187,55 +189,26 @@ while True:
         break
     counter += 1
 
+payload = {
+    "session_id": session_id,
+    "project_id": S_PROJECT,
+    "date": S_DATE,
+    "start_time": S_START,
+    "end_time": S_END,
+    "duration_min": 0,
+    "events": S_EVENTS,
+    "screens": S_SCREENS,
+    "note": S_NOTE,
+    "allow_create": ALLOW_CREATE,
+    "tasks": S_TASKS
+}
+
 try:
-    supabase.table('worklog_sessions').insert({
-        "id": session_id,
-        "project_id": S_PROJECT,
-        "date": S_DATE,
-        "start_time": S_START,
-        "end_time": S_END,
-        "duration_min": S_DURATION,
-        "events": S_EVENTS,
-        "screens": S_SCREENS,
-        "tasks_done": len([t for t in S_TASKS if t.get('status') == 'done']),
-        "note": S_NOTE
-    }).execute()
-    print(f"OK: Сессия {session_id} создана")
+    res = supabase.rpc('save_worklog_session', {'payload': payload}).execute()
+    print(f"✅ УСПЕХ: {res.data}")
 except Exception as e:
-    print(f"ОШИБКА: {e}")
+    print(f"❌ ОШИБКА: {e}")
     sys.exit(1)
-
-for t in S_TASKS:
-    phase_res = supabase.table('worklog_phases').select('id').eq('name', t['phase']).eq('project_id', S_PROJECT).eq('is_archived', False).execute()
-    if not phase_res.data:
-        print(f"❌ Фаза '{t['phase']}' не найдена.")
-        sys.exit(1)
-    else:
-        phase_id = phase_res.data[0]['id']
-
-    task_res = supabase.table('worklog_tasks').select('id').eq('name', t['task']).eq('phase_id', phase_id).execute()
-    if task_res.data:
-        task_id = task_res.data[0]['id']
-        supabase.table('worklog_tasks').update({"status": t.get('status', 'planned')}).eq('id', task_id).execute()
-    else:
-        new_task = supabase.table('worklog_tasks').insert({
-            "phase_id": phase_id,
-            "name": t['task'],
-            "status": t.get('status', 'planned')
-        }).execute()
-        task_id = new_task.data[0]['id']
-
-    for sub in t.get('subtasks', []):
-        exists = supabase.table('worklog_subtasks').select('id').eq('task_id', task_id).eq('name', sub).execute()
-        if not exists.data:
-            supabase.table('worklog_subtasks').insert({
-                "task_id": task_id,
-                "name": sub,
-                "status": "done" if t.get('status') == 'done' else "planned",
-                "session_id": session_id
-            }).execute()
-
-print("✅ Сессия и задачи успешно записаны!")
 PY
 
 ---
