@@ -364,3 +364,9 @@ cd ~/workspace && git status (должно быть "nothing to commit, working 
 **ВНИМАНИЕ:** В профиле GitHub есть еще репозитории (bo-app-v2, bo-pwa и др.). Они не привязаны локально и не используются в текущей работе. Удалять или архивировать их без отдельного разрешения пользователя ЗАПРЕЩЕНО.
 
 11. **СБРОС СЧЕТЧИКА ПОСЛЕ ЗАПИСИ:** После успешной записи сессии (когда скрипт выдал `✅ УСПЕХ`), ИИ ОБЯЗАН в следующем ответе обнулить счетчик (сообщений — 1, экранов — 0) и убрать строку «⚠️ Есть незаписанная сессия».
+
+**05_KHERABORINA (Трекер) — Деревья проектов:**
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/worklog_tree_bo-web.txt
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/worklog_tree_kheraborina.txt
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/worklog_tree_bo-core.txt
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/worklog_tree_fclub1952.txt
