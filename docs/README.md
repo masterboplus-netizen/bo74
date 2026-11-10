@@ -138,7 +138,14 @@ https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/encrypt.py
 
 1. Когда пользователь говорит «Записываем сессию», ИИ ОБЯЗАН первым делом отправить ему ссылку на API Supabase в блоке кода:
    ```text
+   **Фазы:**
    https://ruomhtlvyqmaqhqqsfqn.supabase.co/rest/v1/worklog_phases?select=id,name,project_id,order_num&apikey=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1b21odGx2eXFtYXFocXFzZnFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzOTQwMjUsImV4cCI6MjEwODk3MDAyNX0.7FWm5KVmMqyVxNjXMhcGhgzb6nD8aLfie7cxBlohIO4
+   
+   **Задачи:**
+   https://ruomhtlvyqmaqhqqsfqn.supabase.co/rest/v1/worklog_tasks?select=id,phase_id,name,status&apikey=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1b21odGx2eXFtYXFocXFzZnFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzOTQwMjUsImV4cCI6MjEwODk3MDAyNX0.7FWm5KVmMqyVxNjXMhcGhgzb6nD8aLfie7cxBlohIO4
+   
+   **Проекты:**
+   https://ruomhtlvyqmaqhqqsfqn.supabase.co/rest/v1/worklog_projects?select=id,name&apikey=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ1b21odGx2eXFtYXFocXFzZnFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMzOTQwMjUsImV4cCI6MjEwODk3MDAyNX0.7FWm5KVmMqyVxNjXMhcGhgzb6nD8aLfie7cxBlohIO4
    ```
 2. Пользователь присылает эту ссылку обратно в чат.
 3. ИИ ЧИТАЕТ JSON по этой ссылке, видит реальные названия фаз и выбирает подходящую. Если фазы нет, он может предложить создать новую (но только с разрешения пользователя).
