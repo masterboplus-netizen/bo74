@@ -22,43 +22,53 @@
 > **Дата:** 2026-11-01
 > **Главное правило:** Старые документы лежат в папке /docs (архив). Мы работаем только с этой новой структурой.
 
-## 📌 ТОЧНЫЕ RAW-ССЫЛКИ ДЛЯ КАЖДОГО ПРОЕКТА
+## 📌 АКТУАЛЬНЫЕ RAW-ССЫЛКИ (03_BO_WEB)
 
-**01_BO_CORE (Ядро) — Документация:**
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/01_BO_CORE/MANIFEST.md
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/01_BO_CORE/STATE.md
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/01_BO_CORE/RULES.md
-
-**01_BO_CORE (Ядро) — Код:**
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/main.py
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/config.py
-
-**03_BO_WEB (Веб) — Документация (в bo74):**
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/03_BO_WEB/WEB_STATE.md
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/03_BO_WEB/API.md
-
-**03_BO_WEB (Веб) — Код (в bo-web):**
-https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/index.html
-https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/main.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/api/albums_folders.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/api/objects.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/api/photos.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/api/supabase.js
-https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/photos.js
-https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/task_gallery.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/main.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/add_menu.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/audio_modal.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/camera_modal.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/diary_edit.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/finance_operation.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/menu_items.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/object_create.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/object_edit.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/photo_search.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/photo_select.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/photo_title.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/photo_upload.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/task_actions.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/task_create.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/task_field_edit.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/albums.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/calendar.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/cashflow.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/diary.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/finance.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/folders.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/menu.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/notepad.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/objectDetail.js
-
-**05_KHERABORINA (Трекер) — Документация (в bo74):**
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/05_KHERABORINA/KHERABORINA_INSTRUCTIONS.md
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/05_KHERABORINA/CODE_MAP.md
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/05_KHERABORINA/AI_RULES.md
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/05_KHERABORINA/worklog_tree_bo-web.txt
-
-**05_KHERABORINA (Трекер) — Код (в worklog):**
-https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/index.html
-https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/app.js
-https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/style.css
-https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/crypto.js
-https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/sw.js
-https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/encrypt.py
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/objectEdit.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/objects.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/photos.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/settings.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/taskDetail.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/taskEdit.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/task_detail_parts.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/task_gallery.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/tasks.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/ui/calendar_modal.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/ui/calendar_widget.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/ui/confirm.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/ui/confirm_v2.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/ui/debug.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/ui/floating_menu.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/ui/stub.js
 
 ## 1. ЯДРО (01_BO_CORE)
 Здесь лежит вся бизнес-логика, архитектура и правила работы.
