@@ -30,3 +30,16 @@
 Фиксировано 30 дней. Строит byDay: date -> сумма duration_min. max = max(60, max_duration). Для каждого дня: h = val ? max(4, round(val/max*100)) : 2 (пустой — 2%).
 
 **Конец CODE_MAP.md**
+## 🆕 Новые функции (добавлены в ходе WBS-миграции)
+
+### js/modals/object_edit.js
+- `window.openObjectEdit(objOrId)` — открывает форму редактирования. Принимает ID или объект. Загружает данные из `objects` + `locations` + `addresses`.
+- `window.saveObject(objId)` — сохраняет объект. Создает записи в `addresses` и `locations`, привязывает `location_id` к объекту.
+- `window.closeObjectEdit()` — закрывает форму.
+
+### js/screens/objectDetail.js
+- `openObject(objectId)` — карточка объекта. Загружает данные с JOIN (`locations.addresses`). Собирает адрес в строку.
+
+### js/modals/photo_upload.js
+- `window.openSmartCategoryPicker(files, taskId)` — умное окно для загрузки нескольких фото с выбором категорий.
+- `window.uploadTaskPhoto(taskId, input)` — вызывает `openSmartCategoryPicker`.
