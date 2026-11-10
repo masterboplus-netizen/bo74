@@ -29,41 +29,30 @@ https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/01_BO_CORE
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/01_BO_CORE/STATE.md
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/01_BO_CORE/RULES.md
 
-**01_BO_CORE (Ядро) — Код (репозиторий bo74):**
+**01_BO_CORE (Ядро) — Код:**
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/main.py
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/config.py
-
-**02_BO_TELEGRAM (Бот) — Документация:**
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/02_BO_TELEGRAM/UI_MAP.md
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/02_BO_TELEGRAM/STATE_BOT.md
-
-**02_BO_TELEGRAM (Бот) — Код (репозиторий bo74):**
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/bot.py
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/db.py
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/web_dashboard.py
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/main_render.py
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/keep_alive.py
 
 **03_BO_WEB (Веб) — Документация (в bo74):**
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/03_BO_WEB/WEB_STATE.md
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/03_BO_WEB/API.md
 
-**03_BO_WEB (Веб) — Код (репозиторий bo-web):**
+**03_BO_WEB (Веб) — Код (в bo-web):**
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/index.html
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/main.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/api/supabase.js
-https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/api/objects.js
-https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/objects.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/photos.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/task_gallery.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/object_edit.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/objectDetail.js
-https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/objectEdit.js
-https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/add_menu.js
 
 **05_KHERABORINA (Трекер) — Документация (в bo74):**
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/05_KHERABORINA/KHERABORINA_INSTRUCTIONS.md
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/05_KHERABORINA/CODE_MAP.md
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/05_KHERABORINA/TODO.md
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/05_KHERABORINA/AI_RULES.md
+https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/docs/05_KHERABORINA/worklog_tree_bo-web.txt
 
-**05_KHERABORINA (Трекер) — Код (репозиторий worklog):**
+**05_KHERABORINA (Трекер) — Код (в worklog):**
 https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/index.html
 https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/app.js
 https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/style.css
