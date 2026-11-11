@@ -1,0 +1,47 @@
+app.js | init() | Инициализация (кнопки, загрузка, сейф) | working
+app.js | setupTabs() | Вкладки (дашборд, календарь, проекты, график, профиль) | working
+app.js | switchTab() | Переключение вкладок | working
+app.js | showScreen() | Показ/скрытие экранов | working
+app.js | showJoke() | Пасхалка (шутка) | working
+app.js | showCreators() | Создатели (модалка) | working
+dashboard.js | getProgressColor() | Цвет прогресса (красный, желтый, синий, зеленый) | working
+dashboard.js | startRingAnimation() | Анимация колец | working
+dashboard.js | renderHeroRings() | Рендер колец (большое + три малых) | working
+dashboard.js | renderDashboard() | Рендер дашборда | working
+projects.js | renderProjects() | Рендер проектов (модули, эпики, задачи, подзадачи) | working
+projects.js | openAnalyticsSheet() | Аналитика проекта (шторка) | working
+utils.js | renderRingSVG() | Рендер кольца (SVG) | working
+utils.js | getProgressColor() | Цвет прогресса (дубль из dashboard.js) | working
+utils.js | fmtH() | Форматирование часов | working
+utils.js | calcTotals() | Подсчет итогов (время, скрины, сообщения) | working
+utils.js | renderActivityPage() | Страница активности (график) | working
+utils.js | renderActivityPageV2() | Новая лента графика (V2) | working
+supabase_client.js | loadDataFromSupabase() | Загрузка проектов, фаз, задач, подзадач, сессий | working
+diary.js | mergeMidnightSessions() | Склейка ночных сессий (по 15 минут) | working
+diary.js | renderDiary() | Рендер календаря (год, месяц, неделя, 30 дней) | working
+diary.js | formatDiaryDate() | Форматирование даты | working
+chart.js | renderActivityPageV2() | Рендер графика (ось Y, лента, тултип, метрики) | working
+chart.js | updateChart() (внутри) | Обновление графика (maxVal, ось Y, столбики) | working
+chart.js | Обработчик скролла | Скрывает тултип, сбрасывает выделение, обновляет график | working
+chart.js | Обработчик клика | Выделяет день, показывает тултип | working
+chart.js | Смена метрики | Переключение Время/Сообщения/Скрины/Задачи | working
+safe.js | showSafe() | Показ сейфа (сброс, скрытие дашборда) | working
+safe.js | _safeBind() | Привязка событий (touchstart, touchmove, touchend) | working
+safe.js | startGame() | Старт по тапу, таймер 10 секунд | working
+safe.js | checkTargetAngle() | Проверка углов (150°, 330°), удержание 1 сек | working
+safe.js | _safeError() | Ошибка (вибрация, красный свет, сброс) | working
+safe.js | _safeUnlock() | Разблокировка (PIN 201186, показ дашборда) | working
+auth.js | setupPinPad() | Привязка кнопок PIN-пада | working
+auth.js | onPinKey() | Обработка нажатий (цифры, del, clear) | working
+auth.js | updatePinDisplay() | Обновление точек на экране PIN | working
+auth.js | tryUnlock() | Проверка PIN (загрузка из Supabase) | working
+auth.js | submitPin() | Отправка PIN (разблокировка или ошибка) | working
+auth.js | lock() | Блокировка (вызов сейфа) | working
+auth.js | showScreen() | Показ/скрытие экранов | working
+index.html | Каркас | CSS, скрипты, контейнеры, навигация, сейф, window.onerror | working
+encrypt.py | main() | Шифрование worklog.json -> data.encrypted.json (AES-256-GCM, PBKDF2) | working
+crypto.js | b64ToBuf() | Base64 -> Buffer | working
+crypto.js | bufToB64() | Buffer -> Base64 | working
+crypto.js | deriveKey() | PBKDF2 -> AES-256-GCM ключ | working
+crypto.js | decryptData() | Расшифровка данных (PIN, salt, iv) | working
+crypto.js | encryptData() | Шифрование данных (PIN, salt, iv) | working
