@@ -60,13 +60,49 @@ def generate_tree(project_id):
         f.write("\n".join(lines))
     print(f"✅ Дерево обновлено: {path}")
 
-def save_session(date, start, end, project, note, events, screens, tasks_list, subtasks_list):
+
+def generate_incidents_dump():
+    try:
+        incidents = supabase.table('worklog_incidents').select('*').order('id').execute().data
+        if not incidents:
+            return
+            
+        lines = ["=== ЖУРНАЛ ИНЦИДЕНТОВ ===\n"]
+        for inc in incidents:
+            lines.append(f"--- ИНЦИДЕНТ #{inc['id']}: {inc['title']} ---")
+            lines.append(f"Дата: {inc['created_at'][:10]} | Проект: {inc['project_id']}")
+            if inc.get('symptom'): lines.append(f"Симптом: {inc['symptom']}")
+            
+            steps = supabase.table('worklog_incident_steps').select('*').eq('incident_id', inc['id']).order('step_number').execute().data
+            if steps:
+                lines.append("Шаги диагностики:")
+                for st in steps:
+                    lines.append(f"  {st['step_number']}. {st['action']} -> {st['result']}")
+            
+            if inc.get('solution'): lines.append(f"Решение: {inc['solution']}")
+            if inc.get('lesson'): lines.append(f"Урок: {inc['lesson']}")
+            lines.append("-" * 50 + "\n")
+            
+        with open('tracker/incidents_dump.txt', 'w', encoding='utf-8') as f:
+            f.write("\n".join(lines))
+    except Exception as e:
+        print(f"⚠️ Ошибка при создании дампа инцидентов: {e}")
+
+def save_session(date, start, end, project, note, events, screens, tasks_list, subtasks_list, tags_list, errors_count=0):
     base_date_str = date.replace('-', '')
     existing = supabase.table('worklog_sessions').select('id').like('id', f's_{base_date_str}_%').execute()
     existing_ids = [s['id'] for s in existing.data]
     counter = 1
     while f"s_{base_date_str}_{counter}" in existing_ids: counter += 1
     session_id = f"s_{base_date_str}_{counter}"
+
+    if not tags_list:
+        print("❌ ОШИБКА: Укажите хотя бы один тег через --tags (например: #fix #ui)")
+        sys.exit(1)
+        
+    if not tasks_list:
+        print("❌ ОШИБКА: Укажите хотя бы одну задачу через --tasks (Фаза:Задача:Статус)")
+        sys.exit(1)
 
     tasks_payload = []
     for task_str in tasks_list:
@@ -95,13 +131,14 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
         "session_id": session_id, "project_id": project, "date": date,
         "start_time": start, "end_time": end, "duration_min": None,
         "events": events, "screens": screens, "note": note,
-        "allow_create": False, "tasks": tasks_payload
+        "allow_create": False, "tasks": tasks_payload, "tags": tags_list, "errors_count": errors_count
     }
 
     try:
         res = supabase.rpc('save_worklog_session', {'payload': payload}).execute()
         print(f"✅ УСПЕХ: Сессия {session_id} записана: {res.data}")
         generate_tree(project)
+        generate_incidents_dump()
     except Exception as e:
         print(f"❌ ОШИБКА: {e}")
         sys.exit(1)
@@ -117,5 +154,7 @@ if __name__ == "__main__":
     parser.add_argument('--screens', type=int, default=0)
     parser.add_argument('--tasks', nargs='+', default=[])
     parser.add_argument('--subtasks', nargs='+', default=[])
+    parser.add_argument('--tags', nargs='+', default=[], help="Список тегов, например: #fix #ui")
+    parser.add_argument('--errors', type=int, default=0, help="Количество инцидентов (ошибок) за сессию")
     args = parser.parse_args()
-    save_session(args.date, args.start, args.end, args.project, args.note, args.events, args.screens, args.tasks, args.subtasks)
+    save_session(args.date, args.start, args.end, args.project, args.note, args.events, args.screens, args.tasks, args.subtasks, args.tags, args.errors)
