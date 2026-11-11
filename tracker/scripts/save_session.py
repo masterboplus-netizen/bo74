@@ -60,7 +60,7 @@ def generate_tree(project_id):
         f.write("\n".join(lines))
     print(f"✅ Дерево обновлено: {path}")
 
-def save_session(date, start, end, project, note, events, screens, tasks_list):
+def save_session(date, start, end, project, note, events, screens, tasks_list, subtasks_list):
     base_date_str = date.replace('-', '')
     existing = supabase.table('worklog_sessions').select('id').like('id', f's_{base_date_str}_%').execute()
     existing_ids = [s['id'] for s in existing.data]
@@ -75,8 +75,21 @@ def save_session(date, start, end, project, note, events, screens, tasks_list):
         phase_name, task_name, status = parts[0], parts[1], parts[2]
         phase_id = find_or_create_phase(project, phase_name)
         if not phase_id: continue
-        if not find_or_create_task(phase_id, task_name, status): continue
-        tasks_payload.append({"phase": phase_name, "task": task_name, "status": status})
+        task_id = find_or_create_task(phase_id, task_name, status)
+        if not task_id: continue
+        
+        task_obj = {"phase": phase_name, "task": task_name, "status": status, "subtasks": []}
+        
+        # Ищем подзадачи, которые относятся к этой фазе и задаче
+        for sub_str in subtasks_list:
+            sparts = sub_str.split('|')
+            if len(sparts) >= 3:
+                s_phase, s_task, s_name = sparts[0], sparts[1], sparts[2]
+                s_status = sparts[3] if len(sparts) > 3 else 'done'
+                if s_phase.strip() == phase_name.strip() and s_task.strip() == task_name.strip():
+                    task_obj["subtasks"].append({"name": s_name.strip(), "status": s_status.strip()})
+        
+        tasks_payload.append(task_obj)
 
     payload = {
         "session_id": session_id, "project_id": project, "date": date,
@@ -103,5 +116,6 @@ if __name__ == "__main__":
     parser.add_argument('--events', type=int, default=0)
     parser.add_argument('--screens', type=int, default=0)
     parser.add_argument('--tasks', nargs='+', default=[])
+    parser.add_argument('--subtasks', nargs='+', default=[])
     args = parser.parse_args()
-    save_session(args.date, args.start, args.end, args.project, args.note, args.events, args.screens, args.tasks)
+    save_session(args.date, args.start, args.end, args.project, args.note, args.events, args.screens, args.tasks, args.subtasks)
