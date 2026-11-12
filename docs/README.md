@@ -370,3 +370,22 @@ https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/w
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/worklog_tree_kheraborina.txt
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/worklog_tree_bo-core.txt
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/worklog_tree_fclub1952.txt
+
+
+## 14. ФОРМАТ ПОДПИСИ (ОБЯЗАТЕЛЬНО)
+
+Каждый ответ ИИ должен заканчиваться подписью:
+
+```
+⏱ Счётчик (kheraborina): сообщений — X, экранов — Y, задач — Z (закрыто: A, в работе: B).
+🕒 Старт: HH:MM | Последнее: HH:MM | Длительность: HH:MM.
+📚 Docs: CODE_MAP.md, UI_SPEC.md, AI_RULES.md, README.md.
+✅ Незаписанных сессий нет.
+
+🚨 Активный инцидент: [Название] (открыт/закрыт).
+
+📋 Работа:
+- 🔄 В работе: ...
+- ✅ Сделано: ...
+- 🐛 Ошибки: N open (№...).
+```
