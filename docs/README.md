@@ -123,6 +123,8 @@ https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/ui/stub.js
 
 ## 6. 📝 Как записывать сессии
 
+**ПЕРЕД ЗАПИСЬЮ:** Посмотри дерево проекта (ссылки на tracker/trees/*.txt в конце этого файла) и возьми оттуда ТОЧНЫЕ названия фаз (модулей), эпиков, задач и подзадач. Не копируй пример, не гадай.
+
 **ВАЖНО:** Используй скрипт `tracker/scripts/save_session.py`.
 
 Команда:
