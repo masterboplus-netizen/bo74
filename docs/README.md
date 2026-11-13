@@ -127,7 +127,7 @@ https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/ui/stub.js
 
 Команда:
 ```bash
-cd ~/workspace && python3 tracker/scripts/save_session.py --date "2026-11-12" --start "20:50" --end "22:00" --project "kheraborina" --note "Итог" --tasks "4.1. Сетка:Сетка месяца:done" --subtasks "4.1. Сетка|Сетка месяца|Фикс|done" --tags "#fix" "#ui" --errors 0
+cd ~/workspace && python3 tracker/scripts/save_session.py --date "ГГГГ-ММ-ДД" --start "ЧЧ:ММ" --end "ЧЧ:ММ" --project "ID_ПРОЕКТА" --note "Краткий итог сессии" --tasks "ФАЗА:ЗАДАЧА:СТАТУС" --subtasks "ФАЗА|ЗАДАЧА|ПОДЗАДАЧА|СТАТУС" --tags "#тег1" "#тег2" --errors 0
 ```
 
 Обязательные поля:
