@@ -121,23 +121,20 @@ https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/ui/stub.js
 ## 5. АРХИВ (_ARCHIVE)
 Старые снимки кода, бэкапы и устаревшие версии.
 
-## 6. 𝓝𝓝 Как записывать сессии
+## 6. 📝 Как записывать сессии
 
 **ВАЖНО:** Используй скрипт `tracker/scripts/save_session.py`.
 
 Команда:
 ```bash
-cd ~/workspace && python3 tracker/scripts/save_session.py \
-  --date "2026-11-12" --start "20:50" --end "22:00" \
-  --project "kheraborina" \
-  --note "Итог сессии" \
-  --tasks "4.1. Сетка:Сетка месяца:done" \
-  --subtasks "4.1. Сетка|Сетка месяца|Фикс|done" \
-  --tags "#fix" "#ui" \
-  --errors 0
+cd ~/workspace && python3 tracker/scripts/save_session.py --date "2026-11-12" --start "20:50" --end "22:00" --project "kheraborina" --note "Итог" --tasks "4.1. Сетка:Сетка месяца:done" --subtasks "4.1. Сетка|Сетка месяца|Фикс|done" --tags "#fix" "#ui" --errors 0
 ```
 
-Обязательно: `--tasks`, `--tags`, `--note`.
+Обязательные поля:
+1. --tasks (Фаза:Задача:Статус)
+2. --tags (#fix, #feat, #refactor, #ui, #db, #docs, #test, #infra)
+3. --note (итог сессии)
+
 ## 🛑 СТРОГИЙ АЛГОРИТМ ЗАПИСИ СЕССИИ ДЛЯ ИИ
 
 **ВНИМАНИЕ! ИИ ЗАПРЕЩЕНО выдумывать названия фаз и задач!**
