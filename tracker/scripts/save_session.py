@@ -88,6 +88,17 @@ def generate_incidents_dump():
     except Exception as e:
         print(f"⚠️ Ошибка при создании дампа инцидентов: {e}")
 
+def validate_tags(tags_list):
+    if not tags_list:
+        return
+    allowed_tags = supabase.table('worklog_tags').select('name').execute().data
+    allowed_names = {t['name'] for t in allowed_tags}
+    for tag in tags_list:
+        if tag not in allowed_names:
+            print(f"❌ ОШИБКА: Тег '{tag}' не найден в справочнике допустимых тегов.")
+            print(f"Доступные теги: {', '.join(sorted(allowed_names))}")
+            sys.exit(1)
+
 def save_session(date, start, end, project, note, events, screens, tasks_list, subtasks_list, tags_list, errors_count=0, bugs_list=None):
     base_date_str = date.replace('-', '')
     existing = supabase.table('worklog_sessions').select('id').like('id', f's_{base_date_str}_%').execute()
@@ -99,6 +110,8 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
     if not tags_list:
         print("❌ ОШИБКА: Укажите хотя бы один тег через --tags (например: #fix #ui)")
         sys.exit(1)
+    
+    validate_tags(tags_list)
         
     if not tasks_list:
         print("❌ ОШИБКА: Укажите хотя бы одну задачу через --tasks (Фаза:Задача:Статус)")
