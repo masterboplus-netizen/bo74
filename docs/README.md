@@ -117,6 +117,7 @@ https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/ui/stub.js
 - CODE_MAP.md — Карта кода (app.js, style.css).
 - TODO.md — Текущие задачи и баги.
 - WORKLOG.md — Краткое описание работы трекера.
+- **Архитектура БД (Supabase):** Время фиксируется на уровне задач (`worklog_tasks`) и подзадач (`worklog_subtasks`). Общее время задачи = собственное время + сумма времени подзадач.
 
 ## 5. АРХИВ (_ARCHIVE)
 Старые снимки кода, бэкапы и устаревшие версии.
@@ -127,11 +128,15 @@ https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/ui/stub.js
 
 Команда:
 ```bash
-cd ~/workspace && python3 tracker/scripts/save_session.py --date "ГГГГ-ММ-ДД" --start "ЧЧ:ММ" --end "ЧЧ:ММ" --project "ID_ПРОЕКТА" --note "Краткий итог сессии" --tasks "ФАЗА:ЗАДАЧА:СТАТУС" --subtasks "ФАЗА|ЗАДАЧА|ПОДЗАДАЧА|СТАТУС" --tags "#тег1" "#тег2" --errors 0
+cd ~/workspace && python3 tracker/scripts/save_session.py --date "ГГГГ-ММ-ДД" --start "ЧЧ:ММ" --end "ЧЧ:ММ" --project "ID_ПРОЕКТА" --note "Краткий итог сессии" --tasks "ФАЗА:ЗАДАЧА:СТАТУС:ВРЕМЯ" --subtasks "ФАЗА|ЗАДАЧА|ПОДЗАДАЧА|СТАТУС:ВРЕМЯ" --tags "#тег1" "#тег2" --errors 0
 ```
 
+**Новый формат:**
+- `--tasks` принимает 4-й параметр — время в минутах. Пример: `"1.1. База данных:Схема:done:30"`
+- `--subtasks` принимает 5-й параметр — время в минутах. Пример: `"1.1. База данных|Схема|Таблица сессий|done:15"`
+
 Обязательные поля:
-1. --tasks (Фаза:Задача:Статус)
+1. --tasks (Фаза:Задача:Статус:Время)
 2. --tags (#fix, #feat, #refactor, #ui, #db, #docs, #test, #infra)
 3. --note (итог сессии)
 
