@@ -128,8 +128,18 @@ def validate_tags(tags_list):
 
 def save_session(date, start, end, project, note, events, screens, tasks_list, subtasks_list, tags_list, errors_count=0, bugs_list=None):
     base_date_str = date.replace('-', '')
+    
+    # 1. Собираем ID из worklog_sessions
     existing = supabase.table('worklog_sessions').select('id').like('id', f's_{base_date_str}_%').execute()
-    existing_ids = [s['id'] for s in existing.data]
+    existing_ids = {s['id'] for s in existing.data}
+    
+    # 2. Собираем ID из worklog_task_history (на случай, если предыдущая запись упала на середине)
+    history = supabase.table('worklog_task_history').select('session_id').like('session_id', f's_{base_date_str}_%').execute()
+    for h in history.data:
+        if h.get('session_id'):
+            existing_ids.add(h['session_id'])
+            
+    # 3. Ищем первый свободный номер
     counter = 1
     while f"s_{base_date_str}_{counter}" in existing_ids: counter += 1
     session_id = f"s_{base_date_str}_{counter}"
