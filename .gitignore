@@ -1,46 +1,23 @@
-# Бэкапы
-*.bak_*
-*.bak2_*
-*.bak3_*
-*.bak4_*
-*.bak5_*
+# Реальные данные — НЕ публикуем
+worklog.json
+backups/
 *.bak
 
-# Разбивка больших файлов
-parts_rooms/
-parts/
-parts_commands/
-parts_spec/
-
-# Логи
-*.log
-
-# Временные
-tmp/
+# venv
+.venv/
 __pycache__/
 *.pyc
-venv/
 
-# Replit
-.replit
-replit.nix
-.upm/
+# OS
+.DS_Store
+Thumbs.db
 
-# Бэкапы БД
-backups/*.db
-project.zip
-part_*.txt
-.netrc
-*.db-shm
-*.db-wal
-worklog-app/
+# Сессия Х-1: наши бэкапы
+*.bak_*
 
-# Бэкапы-артефакты (сессия 19)
-*_pre_1_*
-*.before_*
-*.broken_*
-*.crashed_*
-*.v1
-backups/
-bo72.db
-1952/
+# Бэкапы docs
+docs/*.bak_*
+*.bak-*
+*.tar.gz
+b.id
+worklog.json.bak_*
