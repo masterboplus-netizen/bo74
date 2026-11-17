@@ -32,10 +32,16 @@ def find_or_create_task(phase_id, task_name, status):
     return res.data[0]['id'] if res.data else None
 
 def generate_tree(project_id):
+    """Генерирует дерево проекта (включая подзадачи) и сохраняет в файл."""
     phases = supabase.table('worklog_phases').select('id, name, order_num, parent_id, type').eq('project_id', project_id).eq('is_archived', False).order('order_num').execute().data
-    tasks = supabase.table('worklog_tasks').select('id, phase_id, name, status').execute().data
+    tasks = supabase.table('worklog_tasks').select('id, phase_id, name, status').eq('is_archived', False).execute().data
+    subtasks = supabase.table('worklog_subtasks').select('id, task_id, name, status').execute().data
+    
     tasks_by_phase = {}
     for t in tasks: tasks_by_phase.setdefault(t['phase_id'], []).append(t)
+    
+    subtasks_by_task = {}
+    for st in subtasks: subtasks_by_task.setdefault(st['task_id'], []).append(st)
     
     lines = [f"=== ИЕРАРХИЯ ПРОЕКТА: {project_id} ===\n"]
     for p in phases:
@@ -46,12 +52,18 @@ def generate_tree(project_id):
             for t in tasks_by_phase.get(p['id'], []):
                 status_icon = "✅" if t['status'] == 'done' else "🔄"
                 lines.append(f"   {status_icon} Задача: {t['name']}")
+                for st in subtasks_by_task.get(t['id'], []):
+                    sub_status = "✅" if st['status'] == 'done' else "🔄"
+                    lines.append(f"      {sub_status} Подзадача: {st['name']}")
         else:
             for e in epics:
                 lines.append(f"   📂 ЭПИК: {e['name']}")
                 for t in tasks_by_phase.get(e['id'], []):
                     status_icon = "✅" if t['status'] == 'done' else "🔄"
                     lines.append(f"      {status_icon} Задача: {t['name']}")
+                    for st in subtasks_by_task.get(t['id'], []):
+                        sub_status = "✅" if st['status'] == 'done' else "🔄"
+                        lines.append(f"         {sub_status} Подзадача: {st['name']}")
         lines.append("")
 
     os.makedirs(TREES_PATH, exist_ok=True)
@@ -59,7 +71,6 @@ def generate_tree(project_id):
     with open(path, 'w', encoding='utf-8') as f:
         f.write("\n".join(lines))
     print(f"✅ Дерево обновлено: {path}")
-
 
 def generate_incidents_dump():
     try:
@@ -122,7 +133,20 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
         parts = task_str.split(':')
         if len(parts) < 3: continue
         phase_name, task_name, status = parts[0], parts[1], parts[2]
+        
         task_time = int(parts[3]) if len(parts) > 3 else 0
+        
+        has_subtasks = False
+        for sub_str in subtasks_list:
+            sparts = sub_str.split('|')
+            if len(sparts) >= 3:
+                if sparts[0].strip() == phase_name.strip() and sparts[1].strip() == task_name.strip():
+                    has_subtasks = True
+                    break
+        
+        if has_subtasks:
+            task_time = 0
+        
         phase_id = find_or_create_phase(project, phase_name)
         if not phase_id: continue
         task_id = find_or_create_task(phase_id, task_name, status)
@@ -130,7 +154,6 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
         
         task_obj = {"phase": phase_name, "task": task_name, "status": status, "duration_min": task_time, "subtasks": []}
         
-        # Ищем подзадачи, которые относятся к этой фазе и задаче
         for sub_str in subtasks_list:
             sparts = sub_str.split('|')
             if len(sparts) >= 3:
@@ -165,10 +188,21 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
     }
 
     try:
+        # --- ШАГ 1: Сначала обновляем дерево (до записи), чтобы оно было свежим ---
+        generate_tree(project)
+        
+        # --- ШАГ 2: Записываем сессию ---
         res = supabase.rpc('save_worklog_session', {'payload': payload}).execute()
         print(f"✅ УСПЕХ: Сессия {session_id} записана: {res.data}")
+        
+        # --- ШАГ 3: Обновляем дерево ЕЩЁ РАЗ (после записи) ---
         generate_tree(project)
         generate_incidents_dump()
+        
+        # --- ШАГ 4: Выводим путь к дереву, чтобы ИИ мог его забрать ---
+        print(f"\n📄 ДЕРЕВО ПРОЕКТА ГОТОВО: {TREES_PATH}/worklog_tree_{project}.txt")
+        print("👉 Перешлите этот файл в следующий чат для записи сессии.")
+        
     except Exception as e:
         print(f"❌ ОШИБКА: {e}")
         sys.exit(1)
