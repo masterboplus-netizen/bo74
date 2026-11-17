@@ -88,7 +88,7 @@ def generate_incidents_dump():
     except Exception as e:
         print(f"⚠️ Ошибка при создании дампа инцидентов: {e}")
 
-def save_session(date, start, end, project, note, events, screens, tasks_list, subtasks_list, tags_list, errors_count=0):
+def save_session(date, start, end, project, note, events, screens, tasks_list, subtasks_list, tags_list, errors_count=0, bugs_list=None):
     base_date_str = date.replace('-', '')
     existing = supabase.table('worklog_sessions').select('id').like('id', f's_{base_date_str}_%').execute()
     existing_ids = [s['id'] for s in existing.data]
@@ -129,11 +129,26 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
         
         tasks_payload.append(task_obj)
 
+    bugs_payload = []
+    if bugs_list:
+        for bug_str in bugs_list:
+            bparts = bug_str.split('|')
+            if len(bparts) >= 5:
+                bugs_payload.append({
+                    "title": bparts[0].strip(),
+                    "description": bparts[1].strip(),
+                    "root_cause": bparts[2].strip(),
+                    "resolution": bparts[3].strip(),
+                    "status": bparts[4].strip(),
+                    "task_name": bparts[5].strip() if len(bparts) > 5 else None
+                })
+
     payload = {
         "session_id": session_id, "project_id": project, "date": date,
         "start_time": start, "end_time": end, "duration_min": None,
         "events": events, "screens": screens, "note": note,
-        "allow_create": False, "tasks": tasks_payload, "tags": tags_list, "errors_count": errors_count
+        "allow_create": False, "tasks": tasks_payload, "tags": tags_list, 
+        "errors_count": errors_count, "bugs": bugs_payload
     }
 
     try:
@@ -156,7 +171,8 @@ if __name__ == "__main__":
     parser.add_argument('--screens', type=int, default=0)
     parser.add_argument('--tasks', nargs='+', default=[])
     parser.add_argument('--subtasks', nargs='+', default=[])
+    parser.add_argument('--bugs', nargs='+', default=[], help="Ошибки: 'Title|Desc|Cause|Res|Status|TaskName'")
     parser.add_argument('--tags', nargs='+', default=[], help="Список тегов, например: #fix #ui")
     parser.add_argument('--errors', type=int, default=0, help="Количество инцидентов (ошибок) за сессию")
     args = parser.parse_args()
-    save_session(args.date, args.start, args.end, args.project, args.note, args.events, args.screens, args.tasks, args.subtasks, args.tags, args.errors)
+    save_session(args.date, args.start, args.end, args.project, args.note, args.events, args.screens, args.tasks, args.subtasks, args.tags, args.errors, args.bugs)
