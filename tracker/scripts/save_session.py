@@ -109,12 +109,13 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
         parts = task_str.split(':')
         if len(parts) < 3: continue
         phase_name, task_name, status = parts[0], parts[1], parts[2]
+        task_time = int(parts[3]) if len(parts) > 3 else 0
         phase_id = find_or_create_phase(project, phase_name)
         if not phase_id: continue
         task_id = find_or_create_task(phase_id, task_name, status)
         if not task_id: continue
         
-        task_obj = {"phase": phase_name, "task": task_name, "status": status, "subtasks": []}
+        task_obj = {"phase": phase_name, "task": task_name, "status": status, "duration_min": task_time, "subtasks": []}
         
         # Ищем подзадачи, которые относятся к этой фазе и задаче
         for sub_str in subtasks_list:
@@ -122,8 +123,9 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
             if len(sparts) >= 3:
                 s_phase, s_task, s_name = sparts[0], sparts[1], sparts[2]
                 s_status = sparts[3] if len(sparts) > 3 else 'done'
+                s_time = int(sparts[4]) if len(sparts) > 4 else 0
                 if s_phase.strip() == phase_name.strip() and s_task.strip() == task_name.strip():
-                    task_obj["subtasks"].append({"name": s_name.strip(), "status": s_status.strip()})
+                    task_obj["subtasks"].append({"name": s_name.strip(), "status": s_status.strip(), "duration_min": s_time})
         
         tasks_payload.append(task_obj)
 
