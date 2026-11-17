@@ -253,8 +253,6 @@ cd ~/workspace && python3 tracker/scripts/save_session.py --date "ГГГГ-ММ-
 
 **Конец карты документации.**
 
----
-
 ## 📤 КАК ПУШИТЬ ИЗМЕНЕНИЯ (ИНСТРУКЦИЯ ДЛЯ ИИ)
 
 У нас 3 активных локальных Git-репозитория:
@@ -283,11 +281,6 @@ cd ~/workspace && git status (должно быть "nothing to commit, working 
 
 11. **СБРОС СЧЕТЧИКА ПОСЛЕ ЗАПИСИ:** После успешной записи сессии (когда скрипт выдал `✅ УСПЕХ`), ИИ ОБЯЗАН в следующем ответе обнулить счетчик (сообщений — 1, экранов — 0) и убрать строку «⚠️ Есть незаписанная сессия».
 
-**05_KHERABORINA (Трекер) — Деревья проектов:**
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/worklog_tree_bo-web.txt
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/worklog_tree_kheraborina.txt
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/worklog_tree_bo-core.txt
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/worklog_tree_fclub1952.txt
 
 
 ## 14. ФОРМАТ ПОДПИСИ (ОБЯЗАТЕЛЬНО)
