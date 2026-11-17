@@ -1,3 +1,4 @@
+cd ~/workspace && cat > docs/README.md << 'EOF'
 # 📚 ГЛАВНЫЙ ДОКУМЕНТ ПРОЕКТА «БО»
 
 ## 🚨 АЛГОРИТМ ДЛЯ ИИ (ЧИТАТЬ ПЕРВЫМ)
@@ -8,10 +9,10 @@
 
 ### 2. Выдача ссылок
 - Как только проект назван, ИИ **обязан** выдать **ОДНИМ блоком кода** Raw-ссылки на:
-  - `docs/README.md` (этот файл).
-  - `tracker/file_trees/code_links_{project}.txt` (список всех файлов проекта).
+  - docs/README.md (этот файл).
+  - tracker/file_trees/code_links_{project}.txt (список всех файлов проекта).
   - Ключевые доки проекта (если есть).
-- Никаких `cat` или `curl`. Только один блок.
+- **Важно:** ИИ не читает файлы сам. Пользователь пересылает ему содержимое файлов. Если в файле code_links_{project}.txt есть ссылки, ИИ должен попросить пользователя переслать этот файл.
 
 ### 3. Фиксация сессии
 - Сразу после получения доков ИИ фиксирует время старта (дата, время).
@@ -19,10 +20,10 @@
 - Каждый ответ заканчивается подписью (см. ниже).
 
 ### 4. Запись сессии (по команде «Сохрани сессию»)
-1. ИИ запрашивает у пользователя актуальное **дерево проекта** (`tracker/trees/worklog_tree_{project}.txt`).
-2. Пользователь присылает файл.
+1. ИИ запрашивает у пользователя актуальное **дерево проекта** (tracker/trees/worklog_tree_{project}.txt).
+2. Пользователь пересылает текст файла.
 3. ИИ анализирует дерево (какие фазы, эпики, задачи, подзадачи уже есть).
-4. ИИ формирует команду `save_session.py` с правильными именами (без дублей).
+4. ИИ формирует команду save_session.py с правильными именами (без дублей).
 5. Запускает скрипт.
 6. Скрипт обновляет дерево и выводит путь.
 7. ИИ отправляет обновлённое дерево пользователю.
@@ -38,58 +39,51 @@
 ## 📌 КАРТА ПРОЕКТОВ И ССЫЛОК
 
 ### Хераборина (трекер времени)
-- **Репо:** `worklog` (https://github.com/masterboplus-netizen/worklog)
-- **Хостинг:** https://masterboplus-netizen.github.io/worklog/
-- **Локально:** `~/workspace/worklog-app/`
-- **Ссылки на код:** `tracker/file_trees/code_links_worklog.txt`
-- **Документация:** `docs/05_KHERABORINA/*`
+- Репо: worklog (https://github.com/masterboplus-netizen/worklog)
+- Хостинг: https://masterboplus-netizen.github.io/worklog/
+- Локально: ~/workspace/worklog-app/
+- Ссылки на код: tracker/file_trees/code_links_worklog.txt
+- Документация: docs/05_KHERABORINA/*
 
 ### Бо 8.1 (Ядро, Telegram, ФК)
-- **Репо:** `bo74` (https://github.com/masterboplus-netizen/bo74)
-- **Локально:** `~/workspace/`
-- **Ссылки на код:** `tracker/file_trees/code_links_bo74.txt`
-- **Документация:** `docs/01_BO_CORE/*`, `docs/02_BO_TELEGRAM/*`
+- Репо: bo74 (https://github.com/masterboplus-netizen/bo74)
+- Локально: ~/workspace/
+- Ссылки на код: tracker/file_trees/code_links_bo74.txt
+- Документация: docs/01_BO_CORE/*, docs/02_BO_TELEGRAM/*
 
 ### Веб (bo-web)
-- **Репо:** `bo-web` (https://github.com/masterboplus-netizen/bo-web)
-- **Локально:** `~/workspace/bo-web/`
-- **Ссылки на код:** `tracker/file_trees/code_links_bo-web.txt`
-- **Документация:** `docs/03_BO_WEB/*`
+- Репо: bo-web (https://github.com/masterboplus-netizen/bo-web)
+- Локально: ~/workspace/bo-web/
+- Ссылки на код: tracker/file_trees/code_links_bo-web.txt
+- Документация: docs/03_BO_WEB/*
 
 ---
 
 ## 🛠 ТЕХНИЧЕСКИЕ ПРАВИЛА
 
 ### 1. Как пушить (3 репозитория)
-- **Корень (bo74):** `cd ~/workspace && git add -A && git commit -m "..." && git push origin main`
-- **Трекер (worklog):** `cd ~/workspace/worklog-app && git add -A && git commit -m "..." && git push origin main`
-- **Веб (bo-web):** `cd ~/workspace/bo-web && git add -A && git commit -m "..." && git push origin main`
+- Корень (bo74): cd ~/workspace && git add -A && git commit -m "..." && git push origin main
+- Трекер (worklog): cd ~/workspace/worklog-app && git add -A && git commit -m "..." && git push origin main
+- Веб (bo-web): cd ~/workspace/bo-web && git add -A && git commit -m "..." && git push origin main
 
 ### 2. Грабли
-- **Cache-bust:** после правки `app.js`/`style.css` увеличить `?v=N` в `index.html`.
-- **PIN:** `201186` (не в git!).
-- **Кодировка:** `sed -i` на Android ломает UTF-8. Использовать `python3` для записи русских строк.
-- **Полночь:** сессии, переходящие через 00:00, разрезаются автоматически триггером `fix_session_midnight` в БД.
+- Cache-bust: после правки app.js/style.css увеличить ?v=N в index.html.
+- PIN: 201186 (не в git!).
+- Кодировка: sed -i на Android ломает UTF-8. Использовать python3 для записи русских строк.
+- Полночь: сессии, переходящие через 00:00, разрезаются автоматически триггером fix_session_midnight в БД.
 
-### 3. Флаги `save_session.py`
-- `--tasks` (Фаза:Задача:Статус:Время) — пример: `"1.1. База:Схема:done:30"`
-- `--subtasks` (Фаза|Задача|Подзадача|Статус:Время) — пример: `"1.1. База|Схема|Таблица|done:15"`
-- `--tags` (#fix, #feat, #ui, #db, #docs)
-- `--note` (итог сессии)
+### 3. Флаги save_session.py
+- --tasks (Фаза:Задача:Статус:Время) — пример: "1.1. База:Схема:done:30"
+- --subtasks (Фаза|Задача|Подзадача|Статус:Время) — пример: "1.1. База|Схема|Таблица|done:15"
+- --tags (#fix, #feat, #ui, #db, #docs)
+- --note (итог сессии)
 
 ### 4. Формат подписи (обязательно)
-
 Каждый ответ ИИ должен заканчиваться подписью. В ней обязательно должны быть:
 - Счётчик сообщений, экранов, задач.
 - Время старта и длительность.
 - Статус незаписанной сессии.
 - Список того, что в работе, что сделано, есть ли инциденты и ошибки.
+EOF
 
-Пример подписи:
-(Счётчик: сообщений — X, экранов — Y, задач — Z)
-(Старт: HH:MM | Последнее: HH:MM | Длительность: HH:MM)
-(Незаписанных сессий нет)
-(В работе: ...)
-(Сделано: ...)
-(Инцидент: ...)
-(Ошибки: N open)
+git add docs/README.md && git commit -m "docs: финальная версия README (алгоритм, ссылки, подпись)" && git push origin main
