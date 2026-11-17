@@ -72,6 +72,22 @@ def generate_tree(project_id):
         f.write("\n".join(lines))
     print(f"✅ Дерево обновлено: {path}")
 
+
+def generate_tags_tree():
+    """Генерирует дерево тегов и сохраняет в файл."""
+    tags = supabase.table('worklog_tags').select('name, category, color').order('name').execute().data
+    lines = ["=== СПРАВОЧНИК ТЕГОВ ===\n"]
+    for t in tags:
+        cat = t.get('category', 'без категории')
+        lines.append(f"🏷️ {t['name']} (категория: {cat})")
+    
+    os.makedirs(TREES_PATH, exist_ok=True)
+    path = os.path.join(TREES_PATH, "tags_tree.txt")
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write("\n".join(lines))
+    print(f"✅ Дерево тегов обновлено: {path}")
+
+
 def generate_incidents_dump():
     try:
         incidents = supabase.table('worklog_incidents').select('*').order('id').execute().data
@@ -190,6 +206,7 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
     try:
         # --- ШАГ 1: Сначала обновляем дерево (до записи), чтобы оно было свежим ---
         generate_tree(project)
+        generate_tags_tree()
         
         # --- ШАГ 2: Записываем сессию ---
         res = supabase.rpc('save_worklog_session', {'payload': payload}).execute()
@@ -197,6 +214,7 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
         
         # --- ШАГ 3: Обновляем дерево ЕЩЁ РАЗ (после записи) ---
         generate_tree(project)
+        generate_tags_tree()
         generate_incidents_dump()
         
         # --- ШАГ 4: Выводим путь к дереву, чтобы ИИ мог его забрать ---
