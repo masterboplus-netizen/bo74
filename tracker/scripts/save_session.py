@@ -205,9 +205,28 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
                     "task_name": bparts[5].strip() if len(bparts) > 5 else None
                 })
 
+    # --- НОВАЯ ЛОГИКА: Считаем время по задачам ---
+    total_task_time = 0
+    for t in tasks_payload:
+        total_task_time += t.get('duration_min', 0)
+        for st in t.get('subtasks', []):
+            total_task_time += st.get('duration_min', 0)
+
+    start_h, start_m = map(int, start.split(':'))
+    end_h, end_m = map(int, end.split(':'))
+    if end_h < start_h:
+        time_diff = (24 * 60 - (start_h * 60 + start_m)) + (end_h * 60 + end_m)
+    else:
+        time_diff = (end_h * 60 + end_m) - (start_h * 60 + start_m)
+
+    if total_task_time != time_diff:
+        print(f"❌ ОШИБКА: Сумма времени задач ({total_task_time} мин) не совпадает с разницей времени сессии ({time_diff} мин).")
+        print("Пожалуйста, скорректируйте время задач или начало/конец сессии, чтобы они совпадали.")
+        sys.exit(1)
+
     payload = {
         "session_id": session_id, "project_id": project, "date": date,
-        "start_time": start, "end_time": end, "duration_min": None,
+        "start_time": start, "end_time": end, "duration_min": total_task_time,
         "events": events, "screens": screens, "note": note,
         "allow_create": False, "tasks": tasks_payload, "tags": tags_list, 
         "errors_count": errors_count, "bugs": bugs_payload
