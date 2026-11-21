@@ -69,29 +69,29 @@
 ### ⚠️ ВАЖНО: Где что лежит (Актуальные пути)
 - **Все скрипты** (`save_session.py`, `save_incident.py`, `update_links.py`) лежат в корневом репозитории `bo74` по пути `tracker/scripts/`.
 - **Все деревья** (`worklog_tree_*.txt`, `tags_tree.txt`) лежат в корневом репозитории `bo74` по пути `tracker/trees/`.
-- **Карты ссылок** (`code_links_*.txt`) лежат в корневом репозитории `bo74` по пути `tracker/trees/`.
+- **Карты ссылок** (`code_links_*.txt`) лежат в корневом репозитории `bo74` по пути **`tracker/file_trees/`** (а не trees).
 - Не путать с репозиторием `worklog` (там только сам фронтенд трекера).
 
 ### Хераборина (трекер времени)
 - Репо: worklog (https://github.com/masterboplus-netizen/worklog) — *только фронтенд*
 - Хостинг: https://masterboplus-netizen.github.io/worklog/
 - Локально: ~/workspace/worklog-app/
-- Ссылки на код: `https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/code_links_worklog.txt`
+- Ссылки на код: `https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/file_trees/code_links_worklog.txt`
 - Дерево проекта: `https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/worklog_tree_kheraborina.txt`
-- ⚠️ В каждом проекте есть первая фаза «Обсуждение и проектирование» (order_num = 0). Любая работа (чтение кода, планерки, ресерч) должна записываться в эту фазу, чтобы не терять рабочее время.
+- ⚠️ В каждом проекте есть первая фаза «Обсуждение и проектирование» (order_num = 0). Любая работа (чтение кода, планёрки, ресерч) должна записываться в эту фазу, чтобы не терять рабочее время.
 - Документация: docs/05_KHERABORINA/*
 
 ### Бо 8.1 (Ядро, Telegram, ФК)
 - Репо: bo74 (https://github.com/masterboplus-netizen/bo74)
 - Локально: ~/workspace/
-- Ссылки на код: `https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/code_links_bo74.txt`
+- Ссылки на код: `https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/file_trees/code_links_bo74.txt`
 - Дерево проекта: `https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/worklog_tree_bo-core.txt`
 - Документация: docs/01_BO_CORE/*, docs/02_BO_TELEGRAM/*
 
 ### Веб (bo-web)
 - Репо: bo-web (https://github.com/masterboplus-netizen/bo-web)
 - Локально: ~/workspace/bo-web/
-- Ссылки на код: `https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/code_links_bo-web.txt`
+- Ссылки на код: `https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/file_trees/code_links_bo-web.txt`
 - Дерево проекта: `https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/worklog_tree_bo-web.txt`
 - Документация: docs/03_BO_WEB/*
 
@@ -117,7 +117,13 @@
 - `--tags` (#fix, #feat, #ui, #db, #docs) — ⚠️ Несколько тегов пишутся через пробел. Пример: `--tags "#fix" "#ui"`.
 - `--note` (итог сессии)
 
-### 4. Формат подписи (обязательно)
+### 4. Флаги save_session.py (Ошибки и Баги)
+- `--errors` (число) — общее количество ошибок за сессию (например, `--errors 2`).
+- `--bugs` (список строк) — названия конкретных ошибок. Пишутся через пробел в кавычках.
+- Пример: `--errors 2 --bugs "Ошибка первая" "Ошибка вторая"`
+- ⚠️ ВАЖНО: В базе данных ошибки хранятся в виде объектов (с полем `title`). Скрипт `save_session.py` автоматически преобразует переданные строки в нужный формат.
+
+### 5. Формат подписи (обязательно)
 
 Каждый ответ ИИ должен заканчиваться строго такой подписью:
 
