@@ -15,7 +15,7 @@ PROJECTS = {
     "bo74": {
         "local_path": "~/workspace",
         "repo_url": "https://raw.githubusercontent.com/masterboplus-netizen/bo74/main",
-        "extensions": [".py", ".md"]
+        "extensions": [".py", ".md", ".txt"]  # Добавили .txt, чтобы деревья тоже попадали в карту
     }
 }
 
@@ -36,8 +36,8 @@ def update_links():
 
         links = []
         for root, dirs, files in os.walk(local_path):
-            # Игнорируем лишние папки
-            dirs[:] = [d for d in dirs if d not in ['.git', 'node_modules', '__pycache__', '.venv', 'tracker']]
+            # Игнорируем лишние папки (включая .pythonlibs для bo74)
+            dirs[:] = [d for d in dirs if d not in ['.git', 'node_modules', '__pycache__', '.venv', '.pythonlibs']]
             
             for file in files:
                 if any(file.endswith(ext) for ext in extensions):
