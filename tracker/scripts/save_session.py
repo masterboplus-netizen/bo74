@@ -139,7 +139,6 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
                 if s_phase.strip() == phase_name.strip() and s_task.strip() == task_name.strip():
                     task_obj["subtasks"].append({"name": s_name.strip(), "status": s_status.strip(), "duration_min": s_time})
         
-        # ✅ ИСПРАВЛЕНО: append теперь ВНУТРИ цикла
         tasks_payload.append(task_obj)
 
     total_task_time = 0
@@ -175,6 +174,12 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
         generate_tree(project)
         generate_tags_tree()
         print(f"\n📄 ДЕРЕВО ПРОЕКТА ГОТОВО: {TREES_PATH}/worklog_tree_{project}.txt")
+        
+        # АВТО-ПУШ ДЕРЕВЬЕВ
+        print("⏳ Пуш деревьев в GitHub...")
+        os.system(f'git add tracker/trees/*.txt && git commit -m "auto: обновление деревьев (сессия {session_id})" && git pull origin main --rebase && git push origin main')
+        print("✅ Деревья запушены!")
+        
     except Exception as e:
         print(f"❌ ОШИБКА: {e}")
         sys.exit(1)
