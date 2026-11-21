@@ -107,7 +107,7 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
         if len(parts) < 3: continue
         phase_name, task_name, status = parts[0], parts[1], parts[2]
         task_time = int(parts[3]) if len(parts) > 3 else 0
-        
+
         has_subtasks = False
         for sub_str in subtasks_list:
             sparts = sub_str.split('|')
@@ -116,14 +116,14 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
                     has_subtasks = True
                     break
         if has_subtasks: task_time = 0
-        
+
         phase_id = find_or_create_phase(project, phase_name)
         if not phase_id: continue
         task_id = find_or_create_task(phase_id, task_name, status)
         if not task_id: continue
-        
+
         task_obj = {"phase": phase_name, "task": task_name, "status": status, "duration_min": task_time, "subtasks": []}
-        
+
         for sub_str in subtasks_list:
             sparts = sub_str.split('|')
             if len(sparts) >= 3:
@@ -135,11 +135,12 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
                 else:
                     s_status = status_time
                     s_time = 0
-                
+
                 if s_phase.strip() == phase_name.strip() and s_task.strip() == task_name.strip():
                     task_obj["subtasks"].append({"name": s_name.strip(), "status": s_status.strip(), "duration_min": s_time})
         
-    tasks_payload.append(task_obj)
+        # ✅ ИСПРАВЛЕНО: append теперь ВНУТРИ цикла
+        tasks_payload.append(task_obj)
 
     total_task_time = 0
     for t in tasks_payload:
