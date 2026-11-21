@@ -37,29 +37,62 @@
 
 ---
 
+## 🧠 ПРАВИЛА ЗАПИСИ СЕССИЙ (save_session.py)
+
+### 🚨 КРИТИЧЕСКИЕ ПРАВИЛА (чтобы задачи не улетали в фазы)
+1. **Строгое соответствие имен:** Имена Фаз (модулей/эпиков) и Задач в команде `--tasks` и `--subtasks` должны **до буквы** совпадать с тем, что написано в дереве проекта (`worklog_tree_{project}.txt`).
+2. **Никаких выдуманных фаз:** Если в дереве написано `📁 МОДУЛЬ: 5. График`, то в команде пишем именно `5. График`, а не просто `График`.
+3. **Куда писать время:** 
+   - Если у задачи **ЕСТЬ подзадачи**, время пишется **ТОЛЬКО в подзадачи** (`--subtasks`), а время самой задачи ставится `0`.
+   - Если у задачи **НЕТ подзадач**, время пишется **в саму задачу** (`--tasks`).
+4. **Железная сумма времени:** Сумма времени всех задач + всех подзадач должна **строго равняться** разнице между `--start` и `--end`. Если старт 10:00, конец 10:40, то сумма везде должна быть ровно 40 минут.
+
+### 📝 Примеры записи (без переносов)
+
+**Пример 1. Задача БЕЗ подзадач (время в задачу):**
+В терминал вставляется одной строкой:
+`python3 tracker/scripts/save_session.py --date 2026-11-21 --start 10:00 --end 10:30 --project kheraborina --tasks "Обсуждение и проектирование:Чтение кода:done:30" --tags "#research"`
+
+**Пример 2. Задача С подзадачами (время в подзадачи):**
+В терминал вставляется одной строкой:
+`python3 tracker/scripts/save_session.py --date 2026-11-21 --start 10:00 --end 10:40 --project kheraborina --tasks "Управление проектами:Система времени:in_progress:0" --subtasks "Управление проектами|Система времени|Подзадача 1|done:10" "Управление проектами|Система времени|Подзадача 2|done:15" "Управление проектами|Система времени|Подзадача 3|done:5" "Управление проектами|Система времени|Подзадача 4|done:10" --tags "#fix"`
+
+**Пример 3. Смешанная сессия (одна задача с подзадачами, другая без):**
+В терминал вставляется одной строкой:
+`python3 tracker/scripts/save_session.py --date 2026-11-21 --start 10:00 --end 11:00 --project kheraborina --tasks "Обсуждение и проектирование:Чтение кода:done:20" "Управление проектами:Система времени:in_progress:0" --subtasks "Управление проектами|Система времени|Подзадача 1|done:25" "Управление проектами|Система времени|Подзадача 2|done:15" --tags "#fix" "#research"`
+
+---
+
 ## 📌 КАРТА ПРОЕКТОВ И ССЫЛОК
 
+### ⚠️ ВАЖНО: Где что лежит (Актуальные пути)
+- **Все скрипты** (`save_session.py`, `save_incident.py`, `update_links.py`) лежат в корневом репозитории `bo74` по пути `tracker/scripts/`.
+- **Все деревья** (`worklog_tree_*.txt`, `tags_tree.txt`) лежат в корневом репозитории `bo74` по пути `tracker/trees/`.
+- **Карты ссылок** (`code_links_*.txt`) лежат в корневом репозитории `bo74` по пути `tracker/trees/`.
+- Не путать с репозиторием `worklog` (там только сам фронтенд трекера).
+
 ### Хераборина (трекер времени)
-- Репо: worklog (https://github.com/masterboplus-netizen/worklog)
+- Репо: worklog (https://github.com/masterboplus-netizen/worklog) — *только фронтенд*
 - Хостинг: https://masterboplus-netizen.github.io/worklog/
 - Локально: ~/workspace/worklog-app/
-- Ссылки на код: tracker/file_trees/code_links_worklog.txt
+- Ссылки на код: `https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/code_links_worklog.txt`
+- Дерево проекта: `https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/worklog_tree_kheraborina.txt`
 - ⚠️ В каждом проекте есть первая фаза «Обсуждение и проектирование» (order_num = 0). Любая работа (чтение кода, планерки, ресерч) должна записываться в эту фазу, чтобы не терять рабочее время.
 - Документация: docs/05_KHERABORINA/*
 
 ### Бо 8.1 (Ядро, Telegram, ФК)
 - Репо: bo74 (https://github.com/masterboplus-netizen/bo74)
 - Локально: ~/workspace/
-- Ссылки на код: tracker/file_trees/code_links_bo74.txt
+- Ссылки на код: `https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/code_links_bo74.txt`
+- Дерево проекта: `https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/worklog_tree_bo-core.txt`
 - Документация: docs/01_BO_CORE/*, docs/02_BO_TELEGRAM/*
 
 ### Веб (bo-web)
 - Репо: bo-web (https://github.com/masterboplus-netizen/bo-web)
 - Локально: ~/workspace/bo-web/
-- Ссылки на код: tracker/file_trees/code_links_bo-web.txt
+- Ссылки на код: `https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/code_links_bo-web.txt`
+- Дерево проекта: `https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/tracker/trees/worklog_tree_bo-web.txt`
 - Документация: docs/03_BO_WEB/*
-
----
 
 ## 🛠 ТЕХНИЧЕСКИЕ ПРАВИЛА
 
@@ -71,23 +104,27 @@
 ### 2. Грабли
 - Cache-bust: после правки app.js/style.css увеличить ?v=N в index.html.
 - PIN: 201186 (не в git!).
-- Кодировка: sed -i на Android ломает UTF-8. Использовать python3 для записи русских строк.
+- Кодировка: sed -i на Android ломает UTF-8. Использовать python3 или cat << 'EOF' для записи русских строк.
 - Полночь: триггер fix_session_midnight ОТКЛЮЧЕН. Склейка и учет переходов через полночь теперь делаются в новой таблице worklog_session_days (через SQL-функцию rebuild_session_days).
 - Время (duration_min): теперь это НЕ разница end-start, а СУММА времени всех задач и подзадач в сессии.
+- **Git Push**: Если пушишь после правок через веб-интерфейс GitHub, всегда делай `git pull origin main --rebase` перед пушем, чтобы избежать конфликтов.
 
-### 3. Флаги save_session.py
-- --tasks (Фаза:Задача:Статус:Время) — пример: "1.1. База:Схема:done:30"
-- ⚠️ ВАЖНО: Сумма времени в --tasks и --subtasks должна СТРОГО совпадать с разницей между --start и --end. Иначе скрипт выдаст ошибку и не запишет сессию.
-- --subtasks (Фаза|Задача|Подзадача|Статус:Время) — пример: "1.1. База|Схема|Таблица|done:15"
-- --tags (#fix, #feat, #ui, #db, #docs)
-- --note (итог сессии)
+### 3. Флаги save_session.py (Теги и Время)
+- `--tasks` (Фаза:Задача:Статус:Время) — пример: "1.1. База:Схема:done:30"
+- ⚠️ ВАЖНО: Сумма времени в `--tasks` и `--subtasks` должна СТРОГО совпадать с разницей между `--start` и `--end`. Иначе скрипт выдаст ошибку и не запишет сессию.
+- `--subtasks` (Фаза|Задача|Подзадача|Статус:Время) — пример: "1.1. База|Схема|Таблица|done:15"
+- `--tags` (#fix, #feat, #ui, #db, #docs) — ⚠️ Несколько тегов пишутся через пробел. Пример: `--tags "#fix" "#ui"`.
+- `--note` (итог сессии)
 
 ### 4. Формат подписи (обязательно)
 
 Каждый ответ ИИ должен заканчиваться строго такой подписью:
 
 ⏱ Счётчик (kheraborina): сообщений — X, экранов — Y, задач — Z (закрыто: A, в работе: B).
-🕒 Старт: HH:MM | Последнее: HH:MM | Длительность: HH:MM.
+🕒 Старт: HH:MM | Конец: HH:MM | Длительность: HH:MM.
+📊 **Разбивка по задачам:**
+- [Фаза] -> [Задача]: [Время] мин (Подзадачи: [Имя] - [Время] мин, [Имя] - [Время] мин)
+- [Фаза] -> [Задача]: [Время] мин
 ✅ Незаписанных сессий нет (или ⚠️ Есть незаписанная сессия).
 
 📋 Работа:
