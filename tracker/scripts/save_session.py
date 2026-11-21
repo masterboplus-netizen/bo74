@@ -163,7 +163,8 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
         "start_time": start, "end_time": end, "duration_min": total_task_time,
         "events": events, "screens": screens, "note": note,
         "allow_create": False, "tasks": tasks_payload, "tags": tags_list, 
-        "errors_count": errors_count, "bugs": bugs_list if bugs_list else []
+        "errors_count": errors_count, 
+        "bugs": [{"title": b} for b in bugs_list] if bugs_list else []
     }
 
     try:
