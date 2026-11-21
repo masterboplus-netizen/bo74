@@ -1,13 +1,23 @@
 === ССЫЛКИ НА КОД: bo-web ===
-Всего файлов: 49
+Всего файлов: 68
 ========================================
 
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/chat.html
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/css/style.css
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/index.html
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/api/albums_folders.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/api/objects.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/api/photos.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/api/supabase.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/brain/engine/action.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/brain/engine/reasoning.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/brain/engine/understanding.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/brain/index.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/brain/nlu/groq.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/brain/nlu/normalize.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/brain/nlu/rules.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/brain_engine.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/brain_tools.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/main.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/add_menu.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/audio_modal.js
@@ -27,6 +37,7 @@ https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/modals/tas
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/albums.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/calendar.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/cashflow.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/chat.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/diary.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/finance.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/folders.js
@@ -42,6 +53,10 @@ https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/ta
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/task_detail_parts.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/task_gallery.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/screens/tasks.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/social/api.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/social/index.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/social/mic.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/social/ui.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/ui/calendar_modal.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/ui/calendar_widget.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/ui/confirm.js
@@ -50,4 +65,8 @@ https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/ui/debug.j
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/ui/floating_menu.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/js/ui/stub.js
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/manifest.json
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/package-lock.json
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/package.json
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/supabase/.temp/linked-project.json
 https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/sw.js
+https://raw.githubusercontent.com/masterboplus-netizen/bo-web/main/test_brain.html

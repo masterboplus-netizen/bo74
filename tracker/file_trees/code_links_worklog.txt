@@ -1,5 +1,5 @@
 === ССЫЛКИ НА КОД: worklog ===
-Всего файлов: 34
+Всего файлов: 36
 ========================================
 
 https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/crypto.js
@@ -16,13 +16,15 @@ https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/css/projects
 https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/css/safe.css
 https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/data.encrypted.json
 https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/index.html
-https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/js/activity.js
 https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/js/activity_dummy.js
+https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/js/activity_logic.js
+https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/js/activity_ui.js
 https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/js/app.js
 https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/js/auth.js
 https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/js/bottom_panel.js
 https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/js/calendar.js
-https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/js/chart.js
+https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/js/chart_logic.js
+https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/js/chart_ui.js
 https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/js/dashboard.js
 https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/js/menu.js
 https://raw.githubusercontent.com/masterboplus-netizen/worklog/main/js/projects.js

@@ -1,5 +1,5 @@
 === ССЫЛКИ НА КОД: bo74 ===
-Всего файлов: 812
+Всего файлов: 811
 ========================================
 
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/.agents/memory/MEMORY.md
@@ -568,7 +568,6 @@ https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/.pythonlibs/lib
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/.pythonlibs/lib/python3.11/site-packages/yarl/_quoting.py
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/.pythonlibs/lib/python3.11/site-packages/yarl/_quoting_py.py
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/.pythonlibs/lib/python3.11/site-packages/yarl/_url.py
-https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/README.md
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/apply_migrations.py
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/bo-web/fix_menu_final.py
 https://raw.githubusercontent.com/masterboplus-netizen/bo74/main/bot.py
