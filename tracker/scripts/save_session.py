@@ -30,12 +30,10 @@ def generate_tree(project_id):
     phases = supabase.table('worklog_phases').select('id, name, order_num, parent_id, type').eq('project_id', project_id).eq('is_archived', False).order('order_num').execute().data
     tasks = supabase.table('worklog_tasks').select('id, phase_id, name, status').eq('is_archived', False).execute().data
     subtasks = supabase.table('worklog_subtasks').select('id, task_id, name, status').execute().data
-    
     tasks_by_phase = {}
     for t in tasks: tasks_by_phase.setdefault(t['phase_id'], []).append(t)
     subtasks_by_task = {}
     for st in subtasks: subtasks_by_task.setdefault(st['task_id'], []).append(st)
-    
     lines = [f"=== ИЕРАРХИЯ ПРОЕКТА: {project_id} ===\n"]
     for p in phases:
         if p['parent_id'] is not None: continue
@@ -80,7 +78,7 @@ def validate_tags(tags_list):
     allowed_names = {t['name'] for t in allowed_tags}
     for tag in tags_list:
         if tag not in allowed_names:
-            print(f"❌ ОШИБКА: Тег '{tag}' не найден в справочнике.")
+            print(f"❌ ОШИБКА: Тег '{tag}' не найден.")
             print(f"Доступные теги: {', '.join(sorted(allowed_names))}")
             sys.exit(1)
 
@@ -140,7 +138,8 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
                 
                 if s_phase.strip() == phase_name.strip() and s_task.strip() == task_name.strip():
                     task_obj["subtasks"].append({"name": s_name.strip(), "status": s_status.strip(), "duration_min": s_time})
-                tasks_payload.append(task_obj)
+        
+        tasks_payload.append(task_obj)
 
     total_task_time = 0
     for t in tasks_payload:
