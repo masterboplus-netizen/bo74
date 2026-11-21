@@ -139,7 +139,7 @@ def save_session(date, start, end, project, note, events, screens, tasks_list, s
                 if s_phase.strip() == phase_name.strip() and s_task.strip() == task_name.strip():
                     task_obj["subtasks"].append({"name": s_name.strip(), "status": s_status.strip(), "duration_min": s_time})
         
-    tasks_payload.append(task_obj)
+        tasks_payload.append(task_obj)
 
     total_task_time = 0
     for t in tasks_payload:
